@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OC 原創人物設定與關係管理系統</title>
+  
+  <!-- Web Favicon -->
+  <link rel="icon" type="image/png" href="https://file.garden/aWe99vhwaGcNwkok/_icon/item_2%20(7).png">
+  <link rel="shortcut icon" href="https://file.garden/aWe99vhwaGcNwkok/_icon/item_2%20(7).png">
+
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- html2pdf.js for PDF Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo-badge" style="background:none; box-shadow:none;">
+        <img src="https://file.garden/aWe99vhwaGcNwkok/_icon/item_2%20(7).png" style="width:36px; height:36px; object-fit:contain;" alt="Icon">
+      </div>
+      <div>
+        <h1 class="app-title">OC 人設卡工坊</h1>
+        <p class="app-subtitle">Original Character Architect</p>
+      </div>
+    </div>
+    
+    <div class="header-actions">
+      <!-- Theme Switcher Button -->
+      <button class="btn btn-outline" id="themeToggleBtn" onclick="toggleThemeMode()">
+        <i class="fa-solid fa-moon"></i> 模式切換
+      </button>
+
+      <!-- Reset Default Characters -->
+      <button class="btn btn-outline" onclick="resetDefaultCharacters()" title="恢復預設PDF角色">
+        <i class="fa-solid fa-rotate-left"></i> <span class="desktop-only">重置角色</span>
+      </button>
+
+      <!-- Cloud Sync & Backup Buttons -->
+      <button class="btn btn-outline" onclick="openCloudSyncModal()" title="線上與跨裝置同步">
+        <i class="fa-solid fa-cloud-arrow-up"></i> <span class="desktop-only">雲端快照</span>
+      </button>
+
+      <button class="btn btn-outline" onclick="exportDataJson()" title="備份 JSON">
+        <i class="fa-solid fa-download"></i> <span class="desktop-only">備份</span>
+      </button>
+
+      <button class="btn btn-outline" onclick="triggerImportJson()" title="匯入備份">
+        <i class="fa-solid fa-upload"></i> <span class="desktop-only">匯入</span>
+      </button>
+      <input type="file" id="jsonFileInput" accept=".json" style="display:none" onchange="handleImportJson(event)">
+      
+      <button class="btn btn-primary" onclick="openCharacterModal()">
+        <i class="fa-solid fa-plus"></i> 新建角色
+      </button>
+    </div>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="app-nav">
+    <button class="nav-tab active" data-tab="tab-cards" onclick="switchTab('tab-cards')">
+      <i class="fa-solid fa-address-card"></i> 人物卡庫 <span class="badge" id="activeCharBadge">0</span>
+    </button>
+    <button class="nav-tab" data-tab="tab-couples" onclick="switchTab('tab-couples')">
+      <i class="fa-solid fa-heart"></i> CP 卡庫 <span class="badge" id="coupleBadge">0</span>
+    </button>
+    <button class="nav-tab" data-tab="tab-hidden" onclick="switchTab('tab-hidden')">
+      <i class="fa-solid fa-eye-slash"></i> 草稿區 <span class="badge badge-muted" id="hiddenCharBadge">0</span>
+    </button>
+    <button class="nav-tab" data-tab="tab-relationships" onclick="switchTab('tab-relationships')">
+      <i class="fa-solid fa-diagram-project"></i> 關係與稱呼
+    </button>
+    <button class="nav-tab" data-tab="tab-rankings" onclick="switchTab('tab-rankings')">
+      <i class="fa-solid fa-trophy"></i> 評分與排名
+    </button>
+    <button class="nav-tab" data-tab="tab-paros" onclick="switchTab('tab-paros')">
+      <i class="fa-solid fa-hat-wizard"></i> Paro 世界
+    </button>
+    <button class="nav-tab" data-tab="tab-factions" onclick="switchTab('tab-factions')">
+      <i class="fa-solid fa-tags"></i> 陣營與世界觀
+    </button>
+    <button class="nav-tab" data-tab="tab-export" onclick="switchTab('tab-export')">
+      <i class="fa-solid fa-file-export"></i> 資料輸出
+    </button>
+  </nav>
+
+  <!-- Main Content Container -->
+  <main class="app-main">
+
+    <!-- TAB 1: 人物卡片庫 -->
+    <section id="tab-cards" class="tab-content active">
+      <div class="filter-toolbar">
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="searchInput" placeholder="搜尋角色姓名、身分、性格或關鍵字..." oninput="renderCharacterCards()">
+        </div>
+        
+        <div class="filter-group">
+          <label><i class="fa-solid fa-tag"></i> 標籤：</label>
+          <select id="tagFilter" onchange="renderCharacterCards()">
+            <option value="">全部標籤</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Character Grid -->
+      <div class="character-grid" id="characterGrid">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- CP 關係卡庫（歸屬人物卡庫） -->
+    <section id="tab-couples" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-heart"></i> CP 關係卡庫</h2>
+          <p>可關聯兩位或更多角色，記錄每人的左右位、R18 狀況、關係感想，以及不限數量的長篇自訂設定。</p>
+        </div>
+        <button class="btn btn-primary" onclick="openCoupleModal()"><i class="fa-solid fa-plus"></i> 新建 CP</button>
+      </div>
+      <div class="couple-grid" id="coupleGrid"></div>
+    </section>
+
+    <!-- TAB 2: 隱藏 / 草稿角色 -->
+    <section id="tab-hidden" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-user-clock"></i> 草稿 / 隱藏角色管理板塊</h2>
+          <p>尚未填寫完成的角色在此集中管理。隱藏的角色不會出現在人物關係與 Paro 選單中。</p>
+        </div>
+      </div>
+      <div class="character-grid" id="hiddenCharacterGrid">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- TAB 3: 人物關係與稱呼板塊 (支援主角頭像與選擇加入目標) -->
+    <section id="tab-relationships" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-heart-circle-bolt"></i> 角色稱呼矩陣與互動關係圖網</h2>
+          <p>可選擇要加入稱呼表的對象，畫面上直觀展示視角角色的頭像。</p>
+        </div>
+      </div>
+
+      <!-- Relationship View Mode Switcher -->
+      <div class="rel-mode-bar" style="margin-bottom:1rem;">
+        <button class="btn btn-pill active" id="relModeMatrixBtn" onclick="switchRelView('matrix')">
+          <i class="fa-solid fa-table-cells"></i> 雙向稱呼矩陣
+        </button>
+        <button class="btn btn-pill" id="relModeGraphBtn" onclick="switchRelView('graph')">
+          <i class="fa-solid fa-circle-nodes"></i> 可拖拽圖像與縮放關係圖
+        </button>
+      </div>
+
+      <!-- View 1: Call Name Matrix Table with Perspective Avatar -->
+      <div id="relMatrixContainer" class="rel-view-pane">
+        <div class="perspective-header-card" id="perspectiveHeaderCard">
+          <!-- Rendered by app.js with Avatar -->
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <label>選擇視角角色：</label>
+            <select id="perspectiveCharSelect" onchange="renderCallNameMatrix()" style="padding:0.4rem 0.8rem;">
+              <!-- Options populated by app.js -->
+            </select>
+          </div>
+
+          <button class="btn btn-xs btn-outline" onclick="openAddCallNameTargetModal()">
+            <i class="fa-solid fa-user-plus"></i> 選擇要加入稱呼表的對象
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="custom-table" id="callNameTable">
+            <thead>
+              <tr>
+                <th>目標角色</th>
+                <th>我的稱呼</th>
+                <th>我的關係 / 看法</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="callNameTableBody">
+              <!-- Rendered by app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- View 2: Interactive SVG Graph -->
+      <div id="relGraphContainer" class="rel-view-pane" style="display:none;">
+        <div class="graph-filter-panel" style="margin-bottom:1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <label><i class="fa-solid fa-hand-pointer"></i> 勾選欲展示關聯的角色 (可點擊拖動任意頭像調整位置)：</label>
+            <div class="graph-zoom-controls">
+              <button class="btn btn-xs btn-outline" onclick="zoomGraph(1.2)"><i class="fa-solid fa-magnifying-glass-plus"></i> 放大</button>
+              <button class="btn btn-xs btn-outline" onclick="zoomGraph(0.8)"><i class="fa-solid fa-magnifying-glass-minus"></i> 縮小</button>
+              <button class="btn btn-xs btn-outline" onclick="resetGraphView()"><i class="fa-solid fa-rotate-left"></i> 重置位置與視角</button>
+            </div>
+          </div>
+          <div class="checkbox-pill-group" id="graphCharCheckboxes" style="margin-top:0.5rem;">
+            <!-- Checkboxes populated by app.js -->
+          </div>
+        </div>
+
+        <div class="graph-canvas-box" id="graphCanvasContainer">
+          <svg id="relationshipSvg" width="100%" height="560"></svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: 評分與排名板塊 -->
+    <section id="tab-rankings" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-trophy"></i> 人物評分與排名排序板塊</h2>
+          <p>依主題 (如顏值、廚藝、成績等) 排列角色順序，自訂大小比較關係與等級切點標註。</p>
+        </div>
+        <button class="btn btn-primary" onclick="openRankingSubjectModal()">
+          <i class="fa-solid fa-plus"></i> 新增評分主題
+        </button>
+      </div>
+
+      <div class="ranking-workspace">
+        <div class="ranking-subject-bar" id="rankingSubjectBar">
+          <!-- Populated by app.js -->
+        </div>
+
+        <div class="ranking-card" id="rankingCard">
+          <!-- Populated by app.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: Paro 平行世界模組 (一頁一個 Paro + 自訂欄位與選項) -->
+    <section id="tab-paros" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-wand-magic-sparkles"></i> Paro 平行世界管理模組</h2>
+          <p>一個頁面管理一個 Paro。可自由添加多個下拉/文字欄位（如霍格華茲分院、網名、室友等），並為每位角色單獨填寫內容。</p>
+        </div>
+        <button class="btn btn-primary" onclick="openParoModal()">
+          <i class="fa-solid fa-plus"></i> 新建 Paro 世界觀
+        </button>
+      </div>
+
+      <div class="paro-workspace">
+        <!-- Paro Tabs Bar (One Paro per Page) -->
+        <div class="ranking-subject-bar" id="paroSubjectBar">
+          <!-- Populated by app.js -->
+        </div>
+
+        <!-- Single Paro Card Detail & Character Values Editor -->
+        <div class="ranking-card" id="paroSingleCard">
+          <!-- Populated by app.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: 世界觀與陣營標籤 -->
+    <section id="tab-factions" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-sitemap"></i> 陣營、世界觀與子標籤</h2>
+          <p>建立陣營與子分類簡介，編入的角色與名稱會自動同步至全站標籤選單中。</p>
+        </div>
+        <button class="btn btn-primary" onclick="openFactionModal()">
+          <i class="fa-solid fa-plus"></i> 新建陣營 / 世界觀
+        </button>
+      </div>
+
+      <div class="faction-list" id="factionList">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- TAB 7: 資料輸出與 AI 潤飾 -->
+    <section id="tab-export" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-file-signature"></i> 資料導出與同人 Prompt 工坊</h2>
+          <p>可選擇導出全角色、僅導出評分排名、或僅導出世界觀與陣營。</p>
+        </div>
+      </div>
+
+      <div class="export-workspace">
+        <div class="export-config-card">
+          <h3><i class="fa-solid fa-sliders"></i> 輸出設定</h3>
+          
+          <div class="form-group">
+            <label>1. 選擇導出模式：</label>
+            <select id="exportModeSelect" onchange="toggleExportMode(this.value)">
+              <option value="full">完整人設集 (全選/勾選角色)</option>
+              <option value="rankings_only">獨立導出：僅評分與排名板塊</option>
+              <option value="factions_only">獨立導出：僅世界觀與陣營簡介</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="exportCharSelectGroup">
+            <label>2. 選擇包含角色：</label>
+            <div class="select-all-box">
+              <button class="btn btn-xs btn-outline" onclick="selectAllExportChars(true)">全選</button>
+              <button class="btn btn-xs btn-outline" onclick="selectAllExportChars(false)">取消全選</button>
+            </div>
+            <div class="export-char-list" id="exportCharList">
+              <!-- Rendered by app.js -->
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>3. 附加選項：</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncThemeColor" checked> 包含人物主題色</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncRelationships" checked> 包含人物關係與稱呼表</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncRankings" checked> 包含評分與排名結果</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncParos" checked> 包含 Paro 自訂欄位內容</label>
+          </div>
+
+          <div class="form-group">
+            <label>4. DeepSeek AI 極簡潤飾：</label>
+            <label class="checkbox-label"><input type="checkbox" id="expUseAiPolish"> 啟用 AI 極簡同人寫作 Prompt 潤飾</label>
+          </div>
+
+          <div class="export-action-btns">
+            <button class="btn btn-primary btn-block" onclick="generateExportText()">
+              <i class="fa-solid fa-eye"></i> 預覽輸出內容
+            </button>
+            <button class="btn btn-success btn-block" onclick="downloadExportTxt()">
+              <i class="fa-solid fa-file-arrow-down"></i> 下載 TXT 檔案
+            </button>
+            <button class="btn btn-danger btn-block" onclick="downloadExportPdf()">
+              <i class="fa-solid fa-file-pdf"></i> 下載 PDF 報告
+            </button>
+          </div>
+        </div>
+
+        <div class="export-preview-card">
+          <div class="preview-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.8rem;">
+            <h3><i class="fa-solid fa-code"></i> 輸出預覽面板</h3>
+            <button class="btn btn-xs btn-outline" onclick="copyExportText()"><i class="fa-solid fa-copy"></i> 複製內文</button>
+          </div>
+          <div class="preview-body" id="pdfExportBody">
+            <textarea id="exportPreviewArea" placeholder="點擊「預覽輸出內容」生成 Markdown / TXT 排版內文..."></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Mobile Bottom Navigation Bar (卡庫可展開選單, 陣營, 新建, Paro, 導出) -->
+  <div class="mobile-bottom-bar">
+    <button onclick="toggleMobileCardSubmenu()"><i class="fa-solid fa-address-card"></i><br>卡庫 <i class="fa-solid fa-angle-up" style="font-size:0.65rem;"></i></button>
+    <button onclick="switchTab('tab-factions')"><i class="fa-solid fa-sitemap"></i><br>陣營</button>
+    <button onclick="openCharacterModal()"><i class="fa-solid fa-plus-circle" style="color:var(--accent-gold); font-size:1.4rem;"></i><br>新建</button>
+    <button onclick="switchTab('tab-paros')"><i class="fa-solid fa-hat-wizard"></i><br>Paro</button>
+    <button onclick="switchTab('tab-export')"><i class="fa-solid fa-file-export"></i><br>導出</button>
+  </div>
+
+  <!-- Mobile Submenu Drawer for 卡庫 -->
+  <div class="mobile-submenu-drawer" id="mobileCardSubmenu">
+    <button onclick="switchTab('tab-cards'); hideMobileCardSubmenu();"><i class="fa-solid fa-address-card"></i> 人物卡庫</button>
+    <button onclick="switchTab('tab-couples'); hideMobileCardSubmenu();"><i class="fa-solid fa-heart"></i> CP 卡庫</button>
+    <button onclick="switchTab('tab-hidden'); hideMobileCardSubmenu();"><i class="fa-solid fa-eye-slash"></i> 草稿區</button>
+    <button onclick="switchTab('tab-relationships'); hideMobileCardSubmenu();"><i class="fa-solid fa-diagram-project"></i> 稱呼表</button>
+    <button onclick="switchTab('tab-rankings'); hideMobileCardSubmenu();"><i class="fa-solid fa-trophy"></i> 評分排名</button>
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- Modal 1: Character Edit/Create Modal -->
+  <div class="modal-backdrop" id="characterModal">
+    <div class="modal-box modal-lg">
+      <div class="modal-header">
+        <h3 id="charModalTitle"><i class="fa-solid fa-user-pen"></i> 編輯角色人設卡</h3>
+        <button class="close-btn" onclick="closeModal('characterModal')">&times;</button>
+      </div>
+      
+      <div class="modal-body">
+        <form id="characterForm">
+          <input type="hidden" id="charId">
+
+          <!-- Avatar & Basic Info -->
+          <div class="form-row-grid">
+            <div class="avatar-selector-box">
+              <label>角色頭像 (自主上傳或網址)</label>
+              <div class="avatar-preview-wrap" id="modalAvatarPreviewWrap">
+                <img id="modalAvatarPreview" src="https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png" alt="Avatar">
+              </div>
+              
+              <div style="display:flex; gap:0.4rem; width:100%;">
+                <input type="file" id="charAvatarFileInput" accept="image/*" style="display:none" onchange="handleCustomAvatarUpload(event)">
+                <button type="button" class="btn btn-xs btn-outline" style="flex:1" onclick="document.getElementById('charAvatarFileInput').click()">
+                  <i class="fa-solid fa-upload"></i> 相冊
+                </button>
+                <button type="button" class="btn btn-xs btn-outline" style="flex:1" onclick="openAvatarGalleryModal()">
+                  <i class="fa-solid fa-images"></i> 62預設
+                </button>
+              </div>
+
+              <input type="text" id="charAvatarUrl" class="mt-2" placeholder="file.garden / 圖片 URL" onchange="updateModalAvatarPreview(this.value)">
+            </div>
+
+            <div class="basic-fields-grid">
+              <div class="form-group">
+                <label>姓名 *</label>
+                <input type="text" id="charName" required placeholder="如：納希瑟斯">
+              </div>
+              <div class="form-group">
+                <label>英文名 / 綽號</label>
+                <input type="text" id="charEnglishName" placeholder="如：Narcissus">
+              </div>
+              <div class="form-group">
+                <label>性別</label>
+                <input type="text" id="charGender" placeholder="如：男 / 女">
+              </div>
+              <div class="form-group">
+                <label>身高</label>
+                <input type="text" id="charHeight" placeholder="如：182cm">
+              </div>
+              <div class="form-group">
+                <label>星座</label>
+                <input type="text" id="charZodiac" placeholder="如：天秤座">
+              </div>
+              <div class="form-group">
+                <label>左右位 (攻受/定位)</label>
+                <input type="text" id="charOrientation" placeholder="如：攻 / 受">
+              </div>
+              <div class="form-group">
+                <label>身分 / 職業</label>
+                <input type="text" id="charOccupation" placeholder="如：旅行者 / 國王">
+              </div>
+              <div class="form-group">
+                <label>固定 CP</label>
+                <input type="text" id="charFixedCp" placeholder="如：尼古拉斯．維納托">
+              </div>
+            </div>
+          </div>
+
+          <!-- Theme Color Config -->
+          <div class="theme-color-config-card mt-3" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:0.9rem; border-radius:8px;">
+            <label><i class="fa-solid fa-palette"></i> 角色主題色與漸層設定</label>
+            <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:0.4rem;">
+              <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem;">
+                <span>主要顏色：</span>
+                <input type="color" id="charPrimaryColor" value="#d97706" onchange="updateColorPreview()">
+              </div>
+              <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem;">
+                <span>次要漸層色：</span>
+                <input type="color" id="charSecondaryColor" value="#78350f" onchange="updateColorPreview()">
+              </div>
+              <div style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem;">
+                <span>模式：</span>
+                <select id="charColorMode" onchange="updateColorPreview()">
+                  <option value="gradient">兩色漸層 (Gradient)</option>
+                  <option value="single">單色 (Single)</option>
+                </select>
+              </div>
+            </div>
+            <div class="color-preview-bar mt-2" id="themeColorPreviewBar" style="height:26px; border-radius:4px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:0.75rem; font-weight:600;">主題色預覽</div>
+          </div>
+
+          <!-- Hidden State -->
+          <div class="form-group mt-3">
+            <label><i class="fa-solid fa-eye-slash"></i> 狀態設定</label>
+            <select id="charIsHidden">
+              <option value="false">顯示（啟用中）</option>
+              <option value="true">隱藏（移至草稿區）</option>
+            </select>
+          </div>
+
+          <!-- Appearance with DeepSeek AI Vision -->
+          <div class="form-group mt-3">
+            <div class="label-action-row" style="display:flex; justify-content:space-between; align-items:center;">
+              <label><i class="fa-solid fa-user-astronaut"></i> 外貌特徵描述</label>
+              <div>
+                <input type="file" id="aiOcrImageInput" accept="image/*" style="display:none" onchange="handleAiImageOcr(event)">
+                <button type="button" class="btn btn-xs btn-magic" onclick="document.getElementById('aiOcrImageInput').click()">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> 圖片辨識外貌
+                </button>
+              </div>
+            </div>
+            <textarea id="charAppearance" rows="3" placeholder="點擊按鈕上傳圖片讓 AI 提取外貌，或手動輸入..."></textarea>
+          </div>
+
+          <!-- Personality & Extra Notes -->
+          <div class="form-group">
+            <label><i class="fa-solid fa-brain"></i> 性格介紹</label>
+            <textarea id="charPersonality" rows="3" placeholder="性格特徵、對人態度..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label><i class="fa-solid fa-note-sticky"></i> 人設補充</label>
+            <textarea id="charExtraNotes" rows="3" placeholder="填寫更多背景補充..."></textarea>
+          </div>
+
+          <!-- Custom Tags Dropdown -->
+          <div class="form-group">
+            <label><i class="fa-solid fa-tags"></i> 自訂標籤 (下拉選擇或輸入新標籤，用逗號隔開)</label>
+            <div style="display:flex; gap:0.5rem;">
+              <select id="charTagSelect" onchange="addTagFromSelect(this.value)">
+                <option value="">+ 下拉選擇已建立標籤 / 陣營</option>
+              </select>
+              <input type="text" id="charTags" placeholder="自訂標籤 (用逗號隔開)">
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('characterModal')">取消</button>
+        <button type="button" class="btn btn-primary" onclick="saveCharacterForm()">儲存角色設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Avatar Gallery -->
+  <div class="modal-backdrop" id="avatarGalleryModal">
+    <div class="modal-box modal-md">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-images"></i> 選擇預設頭像 (62 張)</h3>
+        <button class="close-btn" onclick="closeModal('avatarGalleryModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="avatar-gallery-grid" id="avatarGalleryGrid">
+          <!-- Populated by app.js -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Relationship Edit Modal -->
+  <div class="modal-backdrop" id="relationshipModal">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-heart-circle-plus"></i> 編輯稱呼與關係</h3>
+        <button class="close-btn" onclick="closeModal('relationshipModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="relSourceCharId">
+        <div class="form-group">
+          <label>目標角色：</label>
+          <input type="text" id="relTargetCharName" readonly class="input-readonly">
+        </div>
+        <div class="form-group">
+          <label>稱呼：</label>
+          <input type="text" id="relCallName" placeholder="請輸入稱呼...">
+        </div>
+        <div class="form-group">
+          <label>關係 / 看法：</label>
+          <textarea id="relOpinion" rows="3" placeholder="請輸入關係看法..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('relationshipModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveRelationshipForm()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Paro Edit Modal with Dynamic Field Types & Custom Dropdown Options -->
+  <div class="modal-backdrop" id="paroModal">
+    <div class="modal-box modal-md">
+      <div class="modal-header">
+        <h3 id="paroModalTitle"><i class="fa-solid fa-wand-magic-sparkles"></i> 編輯 Paro 世界觀與自訂欄位</h3>
+        <button class="close-btn" onclick="closeModal('paroModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="paroId">
+        <div class="form-group">
+          <label>Paro 世界觀名稱 *</label>
+          <input type="text" id="paroName" placeholder="如：霍格華茲魔法學校 / 花吐症 / ABO">
+        </div>
+        <div class="form-group">
+          <label>Paro 簡介說明</label>
+          <textarea id="paroDescription" rows="2" placeholder="簡述這個 Paro 的世界觀..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>自訂欄位設計 (可新增多個文字輸入或下拉選單欄位)：</label>
+          <div id="paroFieldsContainer">
+            <!-- Dynamic field rows populated by app.js -->
+          </div>
+          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addParoFieldRow()">
+            <i class="fa-solid fa-plus"></i> 新增自訂欄位
+          </button>
+        </div>
+
+        <div class="form-group mt-3">
+          <label>參予角色選擇：</label>
+          <div class="checkbox-pill-group" id="paroCharCheckboxes">
+            <!-- Populated by app.js -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('paroModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveParoForm()">儲存 Paro 設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: Faction Edit Modal -->
+  <div class="modal-backdrop" id="factionModal">
+    <div class="modal-box modal-md">
+      <div class="modal-header">
+        <h3 id="factionModalTitle"><i class="fa-solid fa-sitemap"></i> 編輯陣營與子標籤</h3>
+        <button class="close-btn" onclick="closeModal('factionModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="factionId">
+        <div class="form-group">
+          <label>陣營 / 世界觀名稱 *</label>
+          <input type="text" id="factionName" placeholder="如：神聖天界與冥界陣營">
+        </div>
+        <div class="form-group">
+          <label>簡介說明</label>
+          <textarea id="factionDescription" rows="2" placeholder="簡單介紹陣營內容..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>子標籤管理</label>
+          <div id="subTagsContainer">
+            <!-- Populated dynamically -->
+          </div>
+          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addSubTagRow()">
+            <i class="fa-solid fa-plus"></i> 新增子標籤
+          </button>
+        </div>
+        <div class="form-group">
+          <label>大段自訂詞條（可不限數量新增）</label>
+          <div id="factionCustomSections"></div>
+          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addLongSectionRow('factionCustomSections')"><i class="fa-solid fa-plus"></i> 新增自訂詞條</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('factionModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveFactionForm()">儲存陣營設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CP Edit Modal -->
+  <div class="modal-backdrop" id="coupleModal">
+    <div class="modal-box modal-lg">
+      <div class="modal-header">
+        <h3 id="coupleModalTitle"><i class="fa-solid fa-heart"></i> 編輯 CP 關係</h3>
+        <button class="close-btn" onclick="closeModal('coupleModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="coupleId">
+        <div class="form-group"><label>CP 名稱 *</label><input id="coupleName" type="text" placeholder="例如：角色 A × 角色 B"></div>
+        <div class="form-group">
+          <label>關聯人物（可複選兩人以上）</label>
+          <div class="checkbox-pill-group" id="coupleCharacterChoices"></div>
+        </div>
+        <div id="coupleMemberDetails"></div>
+        <div class="form-group">
+          <label>關係詳細詞條（標題與內容皆可自訂，不限數量）</label>
+          <div id="coupleCustomSections"></div>
+          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addLongSectionRow('coupleCustomSections')"><i class="fa-solid fa-plus"></i> 新增自訂詞條</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('coupleModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCoupleForm()">儲存 CP 設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6: Ranking Subject Modal -->
+  <div class="modal-backdrop" id="rankingSubjectModal">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-trophy"></i> 新增評分主題</h3>
+        <button class="close-btn" onclick="closeModal('rankingSubjectModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>評分主題名稱 *：</label>
+          <input type="text" id="newRankingSubjectName" placeholder="如：成績 / 體力 / 戰鬥力">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('rankingSubjectModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveNewRankingSubject()">建立主題</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 7: Add Character To Ranking Modal -->
+  <div class="modal-backdrop" id="addRankingCharModal">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-user-plus"></i> 選擇要加入評分的角色</h3>
+        <button class="close-btn" onclick="closeModal('addRankingCharModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="targetRankingSubjectId">
+        <div class="form-group">
+          <label>選擇角色：</label>
+          <select id="rankingCharSelect">
+            <!-- Populated by app.js -->
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('addRankingCharModal')">取消</button>
+        <button class="btn btn-primary" onclick="confirmAddCharToRanking()">確認加入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 8: Add Target Character To Call Name Perspective Modal (選擇要加入稱呼表的對象) -->
+  <div class="modal-backdrop" id="addCallNameCharModal">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-user-plus"></i> 選擇要加入稱呼表的對象</h3>
+        <button class="close-btn" onclick="closeModal('addCallNameCharModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>選擇要編入該視角稱呼表的角色：</label>
+          <select id="callNameTargetCharSelect">
+            <!-- Populated by app.js -->
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('addCallNameCharModal')">取消</button>
+        <button class="btn btn-primary" onclick="confirmAddCallNameTarget()">確認加入稱呼表</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 9: DeepSeek API Key Modal -->
+  <div class="modal-backdrop" id="apiKeyModal">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-key"></i> DeepSeek AI API 設定</h3>
+        <button class="close-btn" onclick="closeModal('apiKeyModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>DeepSeek API Key：</label>
+          <input type="password" id="deepseekApiKey" value="sk-af4ffa206b844a3fb2a0b2575602fa23">
+        </div>
+        <div class="form-group">
+          <label>API Base URL：</label>
+          <input type="text" id="deepseekBaseUrl" value="https://api.deepseek.com">
+        </div>
+        <div class="form-group">
+          <label>AI 外貌辨識 Prompt：</label>
+          <textarea id="deepseekOcrPrompt" rows="3">請詳細分析這張原創人物圖片的外貌特徵，包括髮型髮色、眼睛特徵與眼神、服裝飾品、體型與氣質描述，輸出為繁體中文條列說明。</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('apiKeyModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveApiKeySettings()">儲存設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 10: Cloud Sync Modal -->
+  <div class="modal-backdrop" id="cloudSyncModal">
+    <div class="modal-box modal-md">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-cloud-arrow-up"></i> 線上快照同步與備份 (Cloud Sync)</h3>
+        <button class="close-btn" onclick="closeModal('cloudSyncModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+          產生快照同步碼，方便在手機與電腦間複製貼上同步最新版本！
+        </p>
+
+        <div class="form-group">
+          <label>1. 您的全站快照同步碼：</label>
+          <textarea id="cloudSyncStringArea" rows="4" readonly style="font-family:monospace; font-size:0.78rem;"></textarea>
+          <button class="btn btn-xs btn-outline mt-2" onclick="copyCloudSyncString()"><i class="fa-solid fa-copy"></i> 複製同步碼</button>
+        </div>
+
+        <div class="form-group mt-3">
+          <label>2. 貼上來自其他裝置的同步碼進行調用：</label>
+          <textarea id="importCloudSyncInput" rows="4" placeholder="在此貼上同步碼..."></textarea>
+          <button class="btn btn-primary btn-block mt-2" onclick="applyCloudSyncString()">
+            <i class="fa-solid fa-rotate"></i> 調用此快照數據
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Toast Overlay -->
+  <div class="toast-overlay" id="loadingToast" style="display:none">
+    <div class="toast-box">
+      <i class="fa-solid fa-spinner fa-spin fa-2x" style="color:var(--accent-gold);"></i>
+      <p id="toastMessage" style="margin-top:0.8rem; font-weight:500;">處理中...</p>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
