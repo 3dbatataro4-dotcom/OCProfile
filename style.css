@@ -230,6 +230,10 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .long-section-head input { flex:1; }
 .long-section textarea { width:100%; min-height:120px; resize:vertical; }
 .member-detail-editor { border-left:3px solid var(--accent-gold); }
+.faction-member-groups { margin:.75rem 0; display:flex; flex-direction:column; gap:.5rem; }
+.faction-member-row { background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:.55rem .7rem; }
+.faction-member-row strong { display:block; color:var(--accent-coffee); font-size:.8rem; margin-bottom:.4rem; }
+.faction-member-empty { color:var(--text-muted); font-size:.8rem; font-style:italic; }
 .char-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; transition: var(--transition); display: flex; flex-direction: column; position: relative; box-shadow: var(--box-shadow); }
 .char-card:hover { transform: translateY(-2px); border-color: var(--char-theme-primary, var(--accent-gold)); }
 
