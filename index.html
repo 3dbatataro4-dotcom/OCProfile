@@ -123,8 +123,8 @@
     <section id="tab-couples" class="tab-content">
       <div class="section-banner">
         <div>
-          <h2><i class="fa-solid fa-heart"></i> CP 關係卡庫</h2>
-          <p>可關聯兩位或更多角色，記錄每人的左右位、R18 狀況、關係感想，以及不限數量的長篇自訂設定。</p>
+          <h2><i class="fa-solid fa-heart"></i> CP 與其他關係卡庫</h2>
+          <p>可建立 CP，或朋友、家人等其他關係；支援兩位以上角色與不限數量的長篇自訂設定。</p>
         </div>
         <button class="btn btn-primary" onclick="openCoupleModal()"><i class="fa-solid fa-plus"></i> 新建 CP</button>
       </div>
@@ -659,7 +659,11 @@
       </div>
       <div class="modal-body">
         <input type="hidden" id="coupleId">
-        <div class="form-group"><label>CP 名稱 *</label><input id="coupleName" type="text" placeholder="例如：角色 A × 角色 B"></div>
+        <div class="basic-fields-grid">
+          <div class="form-group"><label>關係類型 *</label><select id="coupleType" onchange="toggleCoupleTypeFields()"><option value="cp">CP 關係</option><option value="other">其他關係</option></select></div>
+          <div class="form-group" id="otherRelationTypeGroup" style="display:none;"><label>其他關係名稱 *</label><input id="otherRelationType" type="text" placeholder="例如：朋友、家人、師生、宿敵"></div>
+        </div>
+        <div class="form-group"><label>關係卡名稱 *</label><input id="coupleName" type="text" placeholder="例如：角色 A × 角色 B／某某一家人"></div>
         <div class="form-group">
           <label>關聯人物（可複選兩人以上）</label>
           <div class="checkbox-pill-group" id="coupleCharacterChoices"></div>
