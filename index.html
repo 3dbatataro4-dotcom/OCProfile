@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- 加入手機主畫面後以全螢幕／獨立 App 模式開啟 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>OC 原創人物設定與關係管理系統</title>
   
   <!-- Web Favicon -->
@@ -325,6 +329,7 @@
             <label class="checkbox-label"><input type="checkbox" id="expIncRelationships" checked> 包含人物關係與稱呼表</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncRankings" checked> 包含評分與排名結果</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncParos" checked> 包含 Paro 自訂欄位內容</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncFactions"> 包含陣營／世界觀介紹</label>
           </div>
 
           <div class="form-group">
@@ -503,6 +508,12 @@
           <div class="form-group">
             <label><i class="fa-solid fa-note-sticky"></i> 人設補充</label>
             <textarea id="charExtraNotes" rows="3" placeholder="填寫更多背景補充..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label><i class="fa-solid fa-list"></i> 人物卡自訂欄位（可不限數量新增）</label>
+            <div id="characterCustomSections"></div>
+            <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addLongSectionRow('characterCustomSections')"><i class="fa-solid fa-plus"></i> 新增自訂標題與欄位</button>
           </div>
 
           <!-- Custom Tags Dropdown -->
