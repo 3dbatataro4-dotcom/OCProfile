@@ -1,0 +1,21 @@
+{
+  "name": "OC 原創人物設定與關係管理系統",
+  "short_name": "OC 人設卡工坊",
+  "description": "原創人物、關係、陣營與世界觀管理工具",
+  "lang": "zh-TW",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#17120f",
+  "theme_color": "#17120f",
+  "icons": [
+    {
+      "src": "my-image.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
