@@ -1340,10 +1340,10 @@ function renderCoupleList() {
   }
   container.innerHTML = couples.map(cp => `
     <article class="couple-card">
-      <h3><span><i class="fa-solid fa-heart"></i> ${cp.name}</span><span><button class="btn btn-xs btn-outline" onclick="openCoupleModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯</button> <button class="btn btn-xs btn-danger" onclick="deleteCouple('${cp.id}')"><i class="fa-solid fa-trash"></i></button></span></h3>
+      <h3><span><i class="fa-solid ${cp.type === 'other' ? 'fa-people-group' : 'fa-heart'}"></i> ${cp.name} <small class="tag-pill">${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}</small></span><span><button class="btn btn-xs btn-outline" onclick="openCoupleModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯</button> <button class="btn btn-xs btn-danger" onclick="deleteCouple('${cp.id}')"><i class="fa-solid fa-trash"></i></button></span></h3>
       ${(cp.members || []).map(member => {
         const char = characters.find(c => c.id === member.charId);
-        return `<div class="couple-member"><strong>${char ? char.name : '已移除角色'}</strong>${member.position ? ` · ${member.position}` : ''}${member.r18 ? `<div><small>R18：</small>${member.r18}</div>` : ''}${member.thoughts ? `<div><small>對關係的感想：</small>${member.thoughts}</div>` : ''}</div>`;
+        return `<div class="couple-member"><strong>${char ? char.name : '已移除角色'}</strong>${member.position ? ` · ${member.position}` : ''}${cp.type !== 'other' && member.r18 ? `<div><small>R18：</small>${member.r18}</div>` : ''}${member.thoughts ? `<div><small>對關係的感想：</small>${member.thoughts}</div>` : ''}</div>`;
       }).join('')}
       ${(cp.sections || []).map(section => `<div class="long-section"><strong>${section.title || '未命名詞條'}</strong><div style="white-space:pre-wrap; margin-top:.4rem; font-size:.84rem;">${section.content || '（尚無內容）'}</div></div>`).join('')}
     </article>`).join('');
@@ -1353,6 +1353,8 @@ function openCoupleModal(coupleId = null) {
   const cp = couples.find(item => item.id === coupleId);
   document.getElementById("coupleId").value = cp ? cp.id : "";
   document.getElementById("coupleName").value = cp ? cp.name : "";
+  document.getElementById("coupleType").value = cp?.type || "cp";
+  document.getElementById("otherRelationType").value = cp?.relationType || "";
   document.getElementById("coupleModalTitle").innerText = cp ? `編輯 CP：${cp.name}` : "新建 CP 關係";
   const selectedIds = new Set((cp?.members || []).map(member => member.charId));
   document.getElementById("coupleCharacterChoices").innerHTML = characters.filter(c => !c.isHidden).map(c => `<label class="checkbox-label"><input type="checkbox" class="couple-char-cb" value="${c.id}" ${selectedIds.has(c.id) ? 'checked' : ''} onchange="renderCoupleMemberEditors()"> ${c.name}</label>`).join('');
@@ -1361,31 +1363,42 @@ function openCoupleModal(coupleId = null) {
     { title: "相遇情況", content: "" }, { title: "交往過程", content: "" }, { title: "交往後相處模式", content: "" }
   ]).forEach(section => addLongSectionRow("coupleCustomSections", section.title, section.content));
   document.getElementById("coupleModal").dataset.editingMembers = JSON.stringify(cp?.members || []);
+  toggleCoupleTypeFields(false);
   renderCoupleMemberEditors();
   document.getElementById("coupleModal").classList.add("active");
+}
+
+function toggleCoupleTypeFields(rerender = true) {
+  const isOther = document.getElementById("coupleType").value === "other";
+  document.getElementById("otherRelationTypeGroup").style.display = isOther ? "flex" : "none";
+  if (rerender) renderCoupleMemberEditors();
 }
 
 function renderCoupleMemberEditors() {
   const box = document.getElementById("coupleMemberDetails");
   const oldMembers = (() => { try { return JSON.parse(document.getElementById("coupleModal").dataset.editingMembers || "[]"); } catch (e) { return []; } })();
   const live = {};
-  box.querySelectorAll(".member-detail-editor").forEach(row => { live[row.dataset.charId] = { position: row.querySelector(".member-position").value, r18: row.querySelector(".member-r18").value, thoughts: row.querySelector(".member-thoughts").value }; });
+  box.querySelectorAll(".member-detail-editor").forEach(row => { live[row.dataset.charId] = { position: row.querySelector(".member-position").value, r18: row.querySelector(".member-r18")?.value || "", thoughts: row.querySelector(".member-thoughts").value }; });
   const ids = Array.from(document.querySelectorAll(".couple-char-cb:checked")).map(cb => cb.value);
   box.innerHTML = ids.map(id => {
     const char = characters.find(c => c.id === id);
     const saved = live[id] || oldMembers.find(m => m.charId === id) || {};
-    return `<div class="long-section member-detail-editor" data-char-id="${id}"><strong>${char?.name || '角色'}</strong><div class="basic-fields-grid mt-2"><div class="form-group"><label>左右位／定位</label><input class="member-position" value="${saved.position || ''}" placeholder="如：左位、右位、可逆"></div><div class="form-group"><label>R18 相關狀況</label><textarea class="member-r18" rows="3"></textarea></div></div><div class="form-group"><label>本人對這段關係的感想</label><textarea class="member-thoughts" rows="3"></textarea></div></div>`;
+    const isOther = document.getElementById("coupleType").value === "other";
+    return `<div class="long-section member-detail-editor" data-char-id="${id}"><strong>${char?.name || '角色'}</strong><div class="basic-fields-grid mt-2"><div class="form-group"><label>${isOther ? '在關係中的身分／定位' : '左右位／定位'}</label><input class="member-position" value="${saved.position || ''}" placeholder="${isOther ? '如：姊姊、朋友、老師' : '如：左位、右位、可逆'}"></div>${isOther ? '' : '<div class="form-group"><label>R18 相關狀況</label><textarea class="member-r18" rows="3"></textarea></div>'}</div><div class="form-group"><label>本人對這段關係的感想</label><textarea class="member-thoughts" rows="3"></textarea></div></div>`;
   }).join('');
-  box.querySelectorAll(".member-detail-editor").forEach(row => { const saved = live[row.dataset.charId] || oldMembers.find(m => m.charId === row.dataset.charId) || {}; row.querySelector(".member-r18").value = saved.r18 || ""; row.querySelector(".member-thoughts").value = saved.thoughts || ""; });
+  box.querySelectorAll(".member-detail-editor").forEach(row => { const saved = live[row.dataset.charId] || oldMembers.find(m => m.charId === row.dataset.charId) || {}; const r18 = row.querySelector(".member-r18"); if (r18) r18.value = saved.r18 || ""; row.querySelector(".member-thoughts").value = saved.thoughts || ""; });
 }
 
 function saveCoupleForm() {
   const id = document.getElementById("coupleId").value;
   const name = document.getElementById("coupleName").value.trim();
-  const members = Array.from(document.querySelectorAll("#coupleMemberDetails .member-detail-editor")).map(row => ({ charId: row.dataset.charId, position: row.querySelector(".member-position").value.trim(), r18: row.querySelector(".member-r18").value.trim(), thoughts: row.querySelector(".member-thoughts").value.trim() }));
-  if (!name) return alert("請輸入 CP 名稱！");
-  if (members.length < 2) return alert("CP 關係請至少選擇兩位人物！");
-  const data = { id: id || `couple_${Date.now()}`, name, members, sections: readLongSections("coupleCustomSections") };
+  const type = document.getElementById("coupleType").value;
+  const relationType = type === "other" ? document.getElementById("otherRelationType").value.trim() : "";
+  const members = Array.from(document.querySelectorAll("#coupleMemberDetails .member-detail-editor")).map(row => ({ charId: row.dataset.charId, position: row.querySelector(".member-position").value.trim(), ...(type === "cp" ? { r18: (row.querySelector(".member-r18")?.value || "").trim() } : {}), thoughts: row.querySelector(".member-thoughts").value.trim() }));
+  if (!name) return alert("請輸入關係卡名稱！");
+  if (type === "other" && !relationType) return alert("請輸入其他關係名稱，例如朋友或家人！");
+  if (members.length < 2) return alert("關係卡請至少選擇兩位人物！");
+  const data = { id: id || `couple_${Date.now()}`, name, type, relationType, members, sections: readLongSections("coupleCustomSections") };
   const index = couples.findIndex(cp => cp.id === id);
   if (index >= 0) couples[index] = data; else couples.push(data);
   saveStateToLocalStorage(); updateBadges(); renderCoupleList(); closeModal("coupleModal");
@@ -1469,10 +1482,10 @@ async function generateExportText() {
     if (couples.length) {
       text += `## CP 關係設定\n\n`;
       couples.forEach(cp => {
-        text += `### ${cp.name}\n`;
+        text += `### ${cp.name}（${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}）\n`;
         (cp.members || []).forEach(member => {
           const char = characters.find(c => c.id === member.charId);
-          text += `- ${char?.name || '已移除角色'}｜左右位：${member.position || '未填'}｜R18：${member.r18 || '未填'}｜對關係的感想：${member.thoughts || '未填'}\n`;
+          text += `- ${char?.name || '已移除角色'}｜定位：${member.position || '未填'}${cp.type === 'other' ? '' : `｜R18：${member.r18 || '未填'}`}｜對關係的感想：${member.thoughts || '未填'}\n`;
         });
         (cp.sections || []).forEach(section => { text += `#### ${section.title || '未命名詞條'}\n${section.content || '（無內容）'}\n`; });
         text += `\n`;
