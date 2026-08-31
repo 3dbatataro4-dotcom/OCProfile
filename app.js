@@ -241,7 +241,8 @@ function renderCharacterCards() {
       c.name.toLowerCase().includes(searchKeyword) ||
       (c.englishName && c.englishName.toLowerCase().includes(searchKeyword)) ||
       (c.occupation && c.occupation.toLowerCase().includes(searchKeyword)) ||
-      (c.personality && c.personality.toLowerCase().includes(searchKeyword));
+      (c.personality && c.personality.toLowerCase().includes(searchKeyword)) ||
+      (c.customSections || []).some(section => `${section.title || ''} ${section.content || ''}`.toLowerCase().includes(searchKeyword));
     
     const matchTag = !selectedTag || (c.tags && c.tags.includes(selectedTag));
     return matchSearch && matchTag;
@@ -304,6 +305,13 @@ function createCharacterCardHtml(char) {
           </div>
         ` : ''}
 
+        ${(char.customSections || []).map(section => `
+          <div>
+            <div class="char-field-label"><i class="fa-solid fa-bookmark"></i> ${section.title || '未命名欄位'}</div>
+            <div class="char-text-box">${section.content || '（尚無內容）'}</div>
+          </div>
+        `).join('')}
+
         ${tagsHtml ? `<div class="tag-cloud">${tagsHtml}</div>` : ''}
       </div>
 
@@ -346,6 +354,7 @@ function openCharacterModal(charId = null) {
   const modal = document.getElementById("characterModal");
   const form = document.getElementById("characterForm");
   form.reset();
+  document.getElementById("characterCustomSections").innerHTML = "";
   syncGlobalTags();
 
   if (charId) {
@@ -368,6 +377,7 @@ function openCharacterModal(charId = null) {
       document.getElementById("charPersonality").value = char.personality || '';
       document.getElementById("charExtraNotes").value = char.extraNotes || '';
       document.getElementById("charTags").value = (char.tags || []).join(', ');
+      (char.customSections || []).forEach(section => addLongSectionRow("characterCustomSections", section.title, section.content));
 
       const theme = char.themeColor || { primary: "#d97706", secondary: "#78350f", mode: "gradient" };
       document.getElementById("charPrimaryColor").value = theme.primary;
@@ -438,6 +448,7 @@ function saveCharacterForm() {
     appearance: document.getElementById("charAppearance").value.trim(),
     personality: document.getElementById("charPersonality").value.trim(),
     extraNotes: document.getElementById("charExtraNotes").value.trim(),
+    customSections: readLongSections("characterCustomSections"),
     tags: document.getElementById("charTags").value.split(',').map(t => t.trim()).filter(Boolean),
     themeColor: {
       primary: document.getElementById("charPrimaryColor").value,
@@ -1236,13 +1247,23 @@ function saveParoForm() {
 // ========== 10. 陣營與世界觀 ==========
 function renderFactionList() {
   const container = document.getElementById("factionList");
-  container.innerHTML = factions.map(f => `
+  container.innerHTML = factions.map(f => {
+    const members = getFactionMemberGroups(f);
+    return `
     <div class="faction-card">
       <h3>
         <span><i class="fa-solid fa-sitemap"></i> ${f.name}</span>
         <button class="btn btn-xs btn-outline" onclick="openFactionModal('${f.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
       </h3>
       <p style="font-size:0.85rem; color:var(--text-muted);">${f.description || '暫無簡介'}</p>
+      <div class="faction-member-groups">
+        ${members.main.length ? `<div class="faction-member-row"><strong><i class="fa-solid fa-users"></i> 主陣營成員</strong><div class="tag-cloud">${members.main.map(c => `<span class="tag-pill">${c.name}</span>`).join('')}</div></div>` : ''}
+        ${(f.subTags || []).map(sub => {
+          const subMembers = members.subGroups[sub.name] || [];
+          return subMembers.length ? `<div class="faction-member-row"><strong><i class="fa-solid fa-user-group"></i> ${sub.name}</strong><div class="tag-cloud">${subMembers.map(c => `<span class="tag-pill">${c.name}</span>`).join('')}</div></div>` : '';
+        }).join('')}
+        ${!members.main.length && !Object.values(members.subGroups).some(group => group.length) ? '<div class="faction-member-empty">尚無人物加入此陣營</div>' : ''}
+      </div>
       <div style="display:flex; flex-direction:column; gap:0.3rem;">
         ${(f.subTags || []).map(sub => `
           <div style="background:var(--bg-secondary); padding:0.35rem 0.7rem; border-radius:6px; font-size:0.8rem; border-left:3px solid var(--accent-gold);">
@@ -1254,7 +1275,21 @@ function renderFactionList() {
         <div class="long-section"><strong>${section.title || '未命名詞條'}</strong><div style="white-space:pre-wrap; margin-top:.4rem; font-size:.84rem;">${section.content || '（尚無內容）'}</div></div>
       `).join('')}
     </div>
-  `).join('');
+  `; }).join('');
+}
+
+function getFactionMemberGroups(faction) {
+  const subGroups = {};
+  (faction.subTags || []).forEach(sub => { subGroups[sub.name] = []; });
+  const main = [];
+  characters.filter(c => !c.isHidden).forEach(char => {
+    const tags = char.tags || [];
+    const matchedSubs = (faction.subTags || []).filter(sub => tags.includes(sub.name));
+    matchedSubs.forEach(sub => subGroups[sub.name].push(char));
+    // 同時具有主陣營和子陣營標籤時，只列在子陣營；只有主標籤時才列於主陣營。
+    if (tags.includes(faction.name) && matchedSubs.length === 0) main.push(char);
+  });
+  return { main, subGroups };
 }
 
 function openFactionModal(factionId = null) {
@@ -1455,9 +1490,13 @@ async function generateExportText() {
     text = `# 【世界觀與陣營獨立簡介】\n生成時間：${new Date().toLocaleString()}\n\n`;
     factions.forEach(f => {
       text += `## 陣營: ${f.name}\n${f.description || '（無簡介）'}\n`;
+      const members = getFactionMemberGroups(f);
+      if (members.main.length) text += `- 主陣營成員：${members.main.map(c => c.name).join('、')}\n`;
       if ((f.subTags || []).length) {
         f.subTags.forEach(sub => {
           text += `- 子標籤【${sub.name}】：${sub.description || ''}\n`;
+          const subMembers = members.subGroups[sub.name] || [];
+          if (subMembers.length) text += `  - 成員：${subMembers.map(c => c.name).join('、')}\n`;
         });
       }
       (f.customSections || []).forEach(section => {
@@ -1477,8 +1516,26 @@ async function generateExportText() {
       if (c.appearance) text += `✦ 外貌：${c.appearance.replace(/\n/g, ' ')}\n`;
       if (c.personality) text += `✦ 性格：${c.personality.replace(/\n/g, ' ')}\n`;
       if (c.extraNotes) text += `✦ 補充：${c.extraNotes.replace(/\n/g, ' ')}\n`;
+      (c.customSections || []).forEach(section => {
+        text += `✦ ${section.title || '未命名欄位'}：${section.content || '（無內容）'}\n`;
+      });
       text += `\n`;
     });
+    if (document.getElementById("expIncFactions").checked && factions.length) {
+      text += `## 陣營／世界觀介紹\n\n`;
+      factions.forEach(f => {
+        text += `### ${f.name}\n${f.description || '（無簡介）'}\n`;
+        const members = getFactionMemberGroups(f);
+        if (members.main.length) text += `- 主陣營成員：${members.main.map(c => c.name).join('、')}\n`;
+        (f.subTags || []).forEach(sub => {
+          text += `- ${sub.name}：${sub.description || ''}\n`;
+          const subMembers = members.subGroups[sub.name] || [];
+          if (subMembers.length) text += `  - 成員：${subMembers.map(c => c.name).join('、')}\n`;
+        });
+        (f.customSections || []).forEach(section => { text += `#### ${section.title || '未命名詞條'}\n${section.content || '（無內容）'}\n`; });
+        text += `\n`;
+      });
+    }
     if (couples.length) {
       text += `## CP 關係設定\n\n`;
       couples.forEach(cp => {
