@@ -76,6 +76,9 @@ body {
   min-height: 100vh;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: -0.02em; }
@@ -284,7 +287,13 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .custom-table th { background: var(--bg-secondary); color: var(--text-muted); font-weight: 600; }
 
 /* SVG Graph Box */
-.graph-canvas-box { background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-color); overflow: hidden; position: relative; }
+.graph-canvas-box { background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-color); overflow: hidden; position: relative; width:100%; min-width:0; }
+#relationshipSvg { display:block; width:100%; max-width:100%; touch-action:none; user-select:none; -webkit-user-select:none; overscroll-behavior:contain; }
+#relationshipSvg .graph-node { touch-action:none; }
+.graph-zoom-controls { display:flex; flex-wrap:wrap; gap:.4rem; }
+.graph-perspective-control { display:flex; align-items:center; gap:.55rem; margin-bottom:.8rem; padding:.65rem .75rem; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); }
+.graph-perspective-control label { flex:0 0 auto; color:var(--text-muted); font-size:.84rem; font-weight:600; }
+.graph-perspective-control select { flex:1; min-width:0; background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:.45rem .65rem; }
 
 /* Ranking & Paro Module UI */
 .ranking-subject-bar { display: flex; gap: 0.5rem; overflow-x: auto; margin-bottom: 1rem; }
@@ -398,16 +407,66 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 }
 .mobile-submenu-drawer button:hover { background: var(--bg-secondary); }
 
-@media (max-width: 768px) {
-  .app-header { padding: 0.7rem 1rem; }
+/* 平板與手機：維持滿版、讓新增功能不會把頁首和內容撐出畫面。 */
+@media (max-width: 1024px) {
+  .app-header {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+  }
+  .header-left { flex: 1 1 auto; min-width: 190px; }
+  .app-title, .app-subtitle { white-space: nowrap; }
+  .header-actions {
+    flex: 1 0 100%;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+  }
+  .header-actions .btn { flex: 0 0 auto; }
+  .app-nav { width: 100%; max-width: 100%; padding-left: 0.8rem; padding-right: 0.8rem; }
   .desktop-only { display: none; }
-  .app-main { padding: 0.9rem; padding-bottom: 70px; }
+  .app-main { width: 100%; max-width: none; min-width: 0; margin: 0; padding: 0.9rem; padding-bottom: 70px; }
+  .tab-content, .section-banner, .faction-list, .faction-card,
+  .ranking-workspace, .paro-workspace, .export-workspace,
+  .relationship-workspace, .rel-view-pane {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+  .section-banner { align-items: flex-start; }
   .mobile-bottom-bar { display: flex; }
   .form-row-grid { grid-template-columns: 1fr; }
   .basic-fields-grid { grid-template-columns: 1fr; }
   .export-workspace { grid-template-columns: 1fr; }
   .character-grid { grid-template-columns: 1fr; }
   .cp-grid { grid-template-columns: 1fr; }
+  #relationshipSvg { height: min(62dvh, 560px); min-height:420px; }
+  .graph-zoom-controls { width:100%; }
+  .graph-zoom-controls .btn { flex:1 1 auto; justify-content:center; }
+  .graph-perspective-control { align-items:stretch; flex-direction:column; }
+}
+
+@media (max-width: 520px) {
+  .app-header { align-items: flex-start; }
+  .logo-badge { width: 34px; height: 34px; }
+  .app-title { font-size: 1.05rem; }
+  .app-subtitle { font-size: 0.68rem; }
+  .section-banner { padding: 0.9rem; }
+  .section-banner > .btn { width: 100%; justify-content: center; }
+  .modal-backdrop { padding: 0.45rem; }
+  .modal-body { padding: 0.9rem; }
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  body { min-height: 100dvh; padding-top: env(safe-area-inset-top); }
+  .mobile-bottom-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+    height: calc(56px + env(safe-area-inset-bottom));
+  }
+  .app-main { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
 }
 
 .toast-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; }
