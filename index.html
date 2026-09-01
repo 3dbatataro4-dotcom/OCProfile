@@ -55,10 +55,10 @@
         <i class="fa-solid fa-download"></i> <span class="desktop-only">備份</span>
       </button>
 
-      <button class="btn btn-outline" onclick="triggerImportJson()" title="匯入備份">
+      <button class="btn btn-outline" onclick="openImportOptionsModal()" title="匯入備份">
         <i class="fa-solid fa-upload"></i> <span class="desktop-only">匯入</span>
       </button>
-      <input type="file" id="jsonFileInput" accept=".json" style="display:none" onchange="handleImportJson(event)">
+      <input type="file" id="jsonFileInput" accept=".json,.jason,application/json" style="display:none" onchange="handleImportJson(event)">
       
       <button class="btn btn-primary" onclick="openCharacterModal()">
         <i class="fa-solid fa-plus"></i> 新建角色
@@ -393,6 +393,7 @@
             <label class="checkbox-label"><input type="checkbox" id="expIncThemeColor" checked> 包含人物主題色</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncRelationships" checked> 包含人物關係與稱呼表</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncCps" checked> 包含 CP 關係細節詞條</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncFactions"> 一併導出所選人物所在的陣營／世界觀介紹</label>
           </div>
 
           <!-- Specific Ranking Items Selector -->
@@ -884,6 +885,31 @@
     </div>
   </div>
 
+  <!-- Document Fullscreen Reading Modal -->
+  <div class="modal-backdrop doc-reader-backdrop" id="documentReaderModal">
+    <div class="doc-reader-shell">
+      <header class="doc-reader-header">
+        <div>
+          <h2 id="docReaderTitle">文檔閱讀</h2>
+          <div id="docReaderMeta" class="doc-reader-meta"></div>
+        </div>
+        <div class="doc-reader-actions">
+          <button class="btn btn-xs btn-outline" onclick="changeReaderFontSize(-1)" title="縮小字體">A−</button>
+          <button class="btn btn-xs btn-outline" onclick="changeReaderFontSize(1)" title="放大字體">A＋</button>
+          <button class="btn btn-xs btn-outline" onclick="openCurrentReaderDocumentEditor()"><i class="fa-solid fa-pen"></i> 編輯</button>
+          <button class="close-btn" onclick="closeModal('documentReaderModal')">&times;</button>
+        </div>
+      </header>
+      <main class="doc-reader-scroll">
+        <article id="docReaderContent" class="doc-reader-content"></article>
+      </main>
+      <footer class="doc-reader-footer">
+        <button class="btn btn-outline" id="docReaderPrevBtn" onclick="navigateDocumentReader(-1)"><i class="fa-solid fa-chevron-left"></i> 上一章</button>
+        <button class="btn btn-outline" id="docReaderNextBtn" onclick="navigateDocumentReader(1)">下一章 <i class="fa-solid fa-chevron-right"></i></button>
+      </footer>
+    </div>
+  </div>
+
   <!-- Modal 5.7: AI Document Summary Result Modal -->
   <div class="modal-backdrop" id="aiSummaryModal">
     <div class="modal-box modal-md">
@@ -1019,6 +1045,49 @@
             <i class="fa-solid fa-rotate"></i> 調用此快照數據
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JSON 匯入模式 -->
+  <div class="modal-backdrop" id="importOptionsModal">
+    <div class="modal-box modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-import"></i> JSON 匯入</h3>
+        <button class="close-btn" onclick="closeModal('importOptionsModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="import-mode-toggle">
+          <input type="checkbox" id="advancedImportModeToggle" onchange="updateImportModeDescription()">
+          <span class="import-toggle-track"><span></span></span>
+          <span><strong>挑選讀檔</strong><small>進階合併模式（預設關閉）</small></span>
+        </label>
+        <div class="import-mode-note" id="importModeDescription">
+          一般讀檔會用備份內容取代目前資料。
+        </div>
+        <p class="form-help">支援 <code>.json</code> 與誤拼副檔名 <code>.jason</code>。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('importOptionsModal')">取消</button>
+        <button class="btn btn-primary" onclick="triggerImportJson()"><i class="fa-solid fa-folder-open"></i> 選擇檔案</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 挑選讀檔衝突處理 -->
+  <div class="modal-backdrop" id="advancedImportModal">
+    <div class="modal-box modal-lg import-conflict-modal">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-code-compare"></i> 挑選讀檔</h3>
+        <button class="close-btn" onclick="cancelAdvancedImport()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="import-summary" id="advancedImportSummary"></div>
+        <div id="advancedImportConflicts"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="cancelAdvancedImport()">取消</button>
+        <button class="btn btn-primary" onclick="applyAdvancedImport()"><i class="fa-solid fa-check"></i> 套用挑選結果</button>
       </div>
     </div>
   </div>
