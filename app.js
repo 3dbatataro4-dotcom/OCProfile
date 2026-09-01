@@ -22,12 +22,15 @@ let deepseekSettings = {
 let currentTheme = 'dark';
 let currentRelViewMode = 'matrix';
 let selectedGraphCharIds = [];
+let currentGraphPerspectiveId = "";
 let perspectiveTargets = {};
 
 let customNodePositions = {};
 let graphZoomLevel = 1.0;
 let draggedNodeId = null;
 let dragNodeOffset = { x: 0, y: 0 };
+let activeGraphPointerId = null;
+let lastGraphCanvasSize = { width: 0, height: 0 };
 
 let currentRankingSubjectId = null;
 let currentParoId = null;
@@ -924,6 +927,7 @@ function saveRelationshipForm() {
 function renderRelationshipGraphCheckboxes() {
   const activeChars = characters.filter(c => !c.isHidden);
   const container = document.getElementById("graphCharCheckboxes");
+  const perspectiveSelect = document.getElementById("graphPerspectiveSelect");
 
   if (selectedGraphCharIds.length === 0 && activeChars.length) {
     selectedGraphCharIds = activeChars.slice(0, 6).map(c => c.id);
@@ -935,19 +939,96 @@ function renderRelationshipGraphCheckboxes() {
       <span>${c.name}</span>
     </label>
   `).join('');
+
+  if (perspectiveSelect) {
+    if (currentGraphPerspectiveId && !activeChars.some(c => c.id === currentGraphPerspectiveId)) currentGraphPerspectiveId = "";
+    perspectiveSelect.innerHTML = `<option value="">全部人物／完整關係</option>` + activeChars.map(c => `
+      <option value="${c.id}" ${c.id === currentGraphPerspectiveId ? 'selected' : ''}>${c.name} 的視角</option>
+    `).join('');
+  }
+}
+
+function handleGraphPerspectiveChange(charId) {
+  currentGraphPerspectiveId = charId || "";
+  if (currentGraphPerspectiveId && !selectedGraphCharIds.includes(currentGraphPerspectiveId)) {
+    selectedGraphCharIds.push(currentGraphPerspectiveId);
+    renderRelationshipGraphCheckboxes();
+  }
+  drawRelationshipSvg();
 }
 
 function handleGraphCharToggle(charId) {
   if (selectedGraphCharIds.includes(charId)) {
     selectedGraphCharIds = selectedGraphCharIds.filter(id => id !== charId);
+    if (currentGraphPerspectiveId === charId) {
+      currentGraphPerspectiveId = "";
+      const select = document.getElementById("graphPerspectiveSelect");
+      if (select) select.value = "";
+    }
   } else {
     selectedGraphCharIds.push(charId);
   }
   drawRelationshipSvg();
 }
 
-function zoomGraph(factor) { graphZoomLevel *= factor; drawRelationshipSvg(); }
+function zoomGraph(factor) {
+  const svg = document.getElementById("relationshipSvg");
+  const width = svg.viewBox.baseVal.width || svg.clientWidth || 850;
+  const height = svg.viewBox.baseVal.height || svg.clientHeight || 560;
+  const center = { x: width / 2, y: height / 2 };
+  const nextZoom = Math.min(2.2, Math.max(0.55, graphZoomLevel * factor));
+  const appliedFactor = nextZoom / graphZoomLevel;
+  Object.keys(customNodePositions).forEach(id => {
+    const pos = customNodePositions[id];
+    customNodePositions[id] = {
+      x: center.x + (pos.x - center.x) * appliedFactor,
+      y: center.y + (pos.y - center.y) * appliedFactor
+    };
+  });
+  graphZoomLevel = nextZoom;
+  drawRelationshipSvg();
+}
 function resetGraphView() { graphZoomLevel = 1.0; customNodePositions = {}; drawRelationshipSvg(); }
+
+function clientToGraphPoint(clientX, clientY) {
+  const svg = document.getElementById("relationshipSvg");
+  const point = svg.createSVGPoint();
+  point.x = clientX;
+  point.y = clientY;
+  const matrix = svg.getScreenCTM();
+  if (matrix) return point.matrixTransform(matrix.inverse());
+  const rect = svg.getBoundingClientRect();
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function clampGraphPosition(x, y) {
+  const svg = document.getElementById("relationshipSvg");
+  const width = svg.viewBox.baseVal.width || svg.clientWidth || 850;
+  const height = svg.viewBox.baseVal.height || svg.clientHeight || 560;
+  return { x: Math.max(34, Math.min(width - 34, x)), y: Math.max(34, Math.min(height - 54, y)) };
+}
+
+function updateDraggedGraphNode(charId, x, y) {
+  const svg = document.getElementById("relationshipSvg");
+  const node = svg.querySelector(`.graph-node[data-char-id="${CSS.escape(charId)}"]`);
+  if (node) {
+    node.querySelector("circle").setAttribute("cx", x);
+    node.querySelector("circle").setAttribute("cy", y);
+    node.querySelector("text").setAttribute("x", x);
+    node.querySelector("text").setAttribute("y", y + 44);
+  }
+  svg.querySelectorAll(`.graph-edge[data-source="${CSS.escape(charId)}"], .graph-edge[data-target="${CSS.escape(charId)}"]`).forEach(edge => {
+    const isSource = edge.dataset.source === charId;
+    edge.setAttribute(isSource ? "x1" : "x2", x);
+    edge.setAttribute(isSource ? "y1" : "y2", y);
+    const x1 = Number(edge.getAttribute("x1"));
+    const y1 = Number(edge.getAttribute("y1"));
+    const x2 = Number(edge.getAttribute("x2"));
+    const y2 = Number(edge.getAttribute("y2"));
+    const label = svg.querySelector(`.graph-edge-label[data-edge-id="${edge.dataset.edgeId}"]`);
+    if (label) { label.setAttribute("x", (x1 + x2) / 2); label.setAttribute("y", (y1 + y2) / 2); }
+  });
+}
 
 function drawRelationshipSvg() {
   const svg = document.getElementById("relationshipSvg");
@@ -959,8 +1040,18 @@ function drawRelationshipSvg() {
     return;
   }
 
-  const width = svg.clientWidth || 850;
-  const height = 560;
+  const width = Math.max(320, svg.clientWidth || 850);
+  const height = Math.max(420, svg.clientHeight || 560);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  if (lastGraphCanvasSize.width && lastGraphCanvasSize.height && (lastGraphCanvasSize.width !== width || lastGraphCanvasSize.height !== height)) {
+    const scaleX = width / lastGraphCanvasSize.width;
+    const scaleY = height / lastGraphCanvasSize.height;
+    Object.keys(customNodePositions).forEach(id => {
+      customNodePositions[id] = clampGraphPosition(customNodePositions[id].x * scaleX, customNodePositions[id].y * scaleY);
+    });
+  }
+  lastGraphCanvasSize = { width, height };
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = (Math.min(width, height) / 2 - 80) * graphZoomLevel;
@@ -985,7 +1076,9 @@ function drawRelationshipSvg() {
 
   const nodes = activeSelectedChars.map((char, index) => {
     if (customNodePositions[char.id]) {
-      return { char: char, x: customNodePositions[char.id].x, y: customNodePositions[char.id].y };
+      const pos = clampGraphPosition(customNodePositions[char.id].x, customNodePositions[char.id].y);
+      customNodePositions[char.id] = pos;
+      return { char: char, x: pos.x, y: pos.y };
     }
     const angle = (index / activeSelectedChars.length) * 2 * Math.PI - Math.PI / 2;
     const pos = {
@@ -1005,9 +1098,17 @@ function drawRelationshipSvg() {
       const rel1 = (source.char.relationships || []).find(r => r.targetName === target.char.name);
       const rel2 = (target.char.relationships || []).find(r => r.targetName === source.char.name);
       const isCp = source.char.fixedCp === target.char.name || target.char.fixedCp === source.char.name;
+      const perspectiveIsSource = currentGraphPerspectiveId === source.char.id;
+      const perspectiveIsTarget = currentGraphPerspectiveId === target.char.id;
+      if (currentGraphPerspectiveId && !perspectiveIsSource && !perspectiveIsTarget) continue;
 
       if (rel1 || rel2 || isCp) {
         const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        const edgeId = `edge_${i}_${j}`;
+        line.classList.add("graph-edge");
+        line.dataset.source = source.char.id;
+        line.dataset.target = target.char.id;
+        line.dataset.edgeId = edgeId;
         line.setAttribute("x1", source.x);
         line.setAttribute("y1", source.y);
         line.setAttribute("x2", target.x);
@@ -1019,9 +1120,12 @@ function drawRelationshipSvg() {
 
         const midX = (source.x + target.x) / 2;
         const midY = (source.y + target.y) / 2;
-        const labelText = isCp ? "💕 固定 CP" : (rel1 ? rel1.callName : rel2 ? rel2.callName : "關聯");
+        const perspectiveRel = perspectiveIsSource ? rel1 : perspectiveIsTarget ? rel2 : null;
+        const labelText = perspectiveRel?.callName || (isCp ? "💕 固定 CP" : (rel1 ? rel1.callName : rel2 ? rel2.callName : "關聯"));
 
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.classList.add("graph-edge-label");
+        text.dataset.edgeId = edgeId;
         text.setAttribute("x", midX);
         text.setAttribute("y", midY);
         text.setAttribute("fill", isCp ? "#d97706" : "var(--text-main)");
@@ -1035,6 +1139,8 @@ function drawRelationshipSvg() {
 
   nodes.forEach(node => {
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.classList.add("graph-node");
+    g.dataset.charId = node.char.id;
     g.setAttribute("cursor", "move");
     const themeColor = (node.char.themeColor && node.char.themeColor.primary) || "#d97706";
 
@@ -1057,43 +1163,70 @@ function drawRelationshipSvg() {
     text.textContent = node.char.name;
     g.appendChild(text);
 
-    const startNodeDrag = (clientX, clientY) => {
+    const startNodeDrag = (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const point = clientToGraphPoint(e.clientX, e.clientY);
       draggedNodeId = node.char.id;
-      dragNodeOffset = { x: clientX - node.x, y: clientY - node.y };
+      activeGraphPointerId = e.pointerId;
+      dragNodeOffset = { x: point.x - node.x, y: point.y - node.y };
+      g.setPointerCapture?.(e.pointerId);
+      g.setAttribute("cursor", "grabbing");
     };
-
-    g.addEventListener("mousedown", (e) => { e.stopPropagation(); startNodeDrag(e.clientX, e.clientY); });
-    g.addEventListener("touchstart", (e) => {
-      if (e.touches.length === 1) { e.stopPropagation(); startNodeDrag(e.touches[0].clientX, e.touches[0].clientY); }
-    }, { passive: true });
+    g.addEventListener("pointerdown", startNodeDrag);
 
     svg.appendChild(g);
   });
 }
 
-window.addEventListener("mousemove", (e) => {
-  if (draggedNodeId) {
-    const svg = document.getElementById("relationshipSvg");
-    const rect = svg.getBoundingClientRect();
-    const x = e.clientX - rect.left - dragNodeOffset.x;
-    const y = e.clientY - rect.top - dragNodeOffset.y;
-    customNodePositions[draggedNodeId] = { x, y };
-    drawRelationshipSvg();
-  }
-});
-window.addEventListener("mouseup", () => { draggedNodeId = null; });
+window.addEventListener("pointermove", (e) => {
+  if (!draggedNodeId || e.pointerId !== activeGraphPointerId) return;
+  e.preventDefault();
+  const point = clientToGraphPoint(e.clientX, e.clientY);
+  const pos = clampGraphPosition(point.x - dragNodeOffset.x, point.y - dragNodeOffset.y);
+  customNodePositions[draggedNodeId] = pos;
+  updateDraggedGraphNode(draggedNodeId, pos.x, pos.y);
+}, { passive: false });
 
-window.addEventListener("touchmove", (e) => {
-  if (draggedNodeId && e.touches.length === 1) {
-    const svg = document.getElementById("relationshipSvg");
-    const rect = svg.getBoundingClientRect();
-    const x = e.touches[0].clientX - rect.left - dragNodeOffset.x;
-    const y = e.touches[0].clientY - rect.top - dragNodeOffset.y;
-    customNodePositions[draggedNodeId] = { x, y };
-    drawRelationshipSvg();
-  }
-}, { passive: true });
-window.addEventListener("touchend", () => { draggedNodeId = null; });
+function endGraphDrag(e) {
+  if (activeGraphPointerId !== null && e.pointerId !== activeGraphPointerId) return;
+  draggedNodeId = null;
+  activeGraphPointerId = null;
+}
+window.addEventListener("pointerup", endGraphDrag);
+window.addEventListener("pointercancel", endGraphDrag);
+let graphResizeTimer = null;
+window.addEventListener("resize", () => {
+  if (currentRelViewMode !== "graph") return;
+  clearTimeout(graphResizeTimer);
+  graphResizeTimer = setTimeout(drawRelationshipSvg, 120);
+});
+
+async function downloadRelationshipGraph() {
+  const svg = document.getElementById("relationshipSvg");
+  if (selectedGraphCharIds.length < 2) return alert("請先選擇至少兩位角色再輸出關係圖！");
+  const clone = svg.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+  clone.setAttribute("width", svg.clientWidth || 850);
+  clone.setAttribute("height", svg.clientHeight || 560);
+  clone.setAttribute("viewBox", `0 0 ${svg.clientWidth || 850} ${svg.clientHeight || 560}`);
+  const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  background.setAttribute("width", "100%");
+  background.setAttribute("height", "100%");
+  background.setAttribute("fill", getComputedStyle(document.documentElement).getPropertyValue("--bg-secondary").trim() || "#292524");
+  clone.insertBefore(background, clone.firstChild);
+  const textColor = getComputedStyle(document.documentElement).getPropertyValue("--text-main").trim() || "#f5f5f4";
+  clone.querySelectorAll("text").forEach(text => { if ((text.getAttribute("fill") || "").includes("var(")) text.setAttribute("fill", textColor); });
+  const source = `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(clone)}`;
+  const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `OC_人物關係圖_${new Date().toISOString().slice(0, 10)}.svg`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
 
 // ========== 8. 評分與排名板塊 ==========
 function renderRankingModule() {
