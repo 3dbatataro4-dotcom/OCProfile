@@ -2,21 +2,12 @@
 <html lang="zh-TW" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <!-- 加入手機主畫面後以全螢幕／獨立 App 模式開啟 -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#17120f">
-  <meta name="application-name" content="OC 人設卡工坊">
-  <meta name="apple-mobile-web-app-title" content="OC 人設卡工坊">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="app-icon-180.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OC 原創人物設定與關係管理系統</title>
   
   <!-- Web Favicon -->
-  <link rel="shortcut icon" href="app-icon-192.png">
+  <link rel="icon" type="image/png" href="https://file.garden/aWe99vhwaGcNwkok/_icon/item_2%20(7).png">
+  <link rel="shortcut icon" href="https://file.garden/aWe99vhwaGcNwkok/_icon/item_2%20(7).png">
 
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -80,8 +71,8 @@
     <button class="nav-tab active" data-tab="tab-cards" onclick="switchTab('tab-cards')">
       <i class="fa-solid fa-address-card"></i> 人物卡庫 <span class="badge" id="activeCharBadge">0</span>
     </button>
-    <button class="nav-tab" data-tab="tab-couples" onclick="switchTab('tab-couples')">
-      <i class="fa-solid fa-heart"></i> CP 卡庫 <span class="badge" id="coupleBadge">0</span>
+    <button class="nav-tab" data-tab="tab-cps" onclick="switchTab('tab-cps')">
+      <i class="fa-solid fa-heart"></i> CP 關係細節
     </button>
     <button class="nav-tab" data-tab="tab-hidden" onclick="switchTab('tab-hidden')">
       <i class="fa-solid fa-eye-slash"></i> 草稿區 <span class="badge badge-muted" id="hiddenCharBadge">0</span>
@@ -96,7 +87,10 @@
       <i class="fa-solid fa-hat-wizard"></i> Paro 世界
     </button>
     <button class="nav-tab" data-tab="tab-factions" onclick="switchTab('tab-factions')">
-      <i class="fa-solid fa-tags"></i> 陣營與世界觀
+      <i class="fa-solid fa-tags"></i> 陣營與大事件
+    </button>
+    <button class="nav-tab" data-tab="tab-documents" onclick="switchTab('tab-documents')">
+      <i class="fa-solid fa-book-bookmark"></i> 同人文檔與書籍
     </button>
     <button class="nav-tab" data-tab="tab-export" onclick="switchTab('tab-export')">
       <i class="fa-solid fa-file-export"></i> 資料輸出
@@ -128,16 +122,21 @@
       </div>
     </section>
 
-    <!-- CP 關係卡庫（歸屬人物卡庫） -->
-    <section id="tab-couples" class="tab-content">
+    <!-- TAB 1.5: CP 關係細節板塊 -->
+    <section id="tab-cps" class="tab-content">
       <div class="section-banner">
         <div>
-          <h2><i class="fa-solid fa-heart"></i> CP 與其他關係卡庫</h2>
-          <p>可建立 CP，或朋友、家人等其他關係；支援兩位以上角色與不限數量的長篇自訂設定。</p>
+          <h2><i class="fa-solid fa-heart-pulse"></i> CP 關係細節與情感歷程</h2>
+          <p>專門記錄 CP 組合（支援雙人或多人組合），可自訂無限個相遇、交往與日常相處詞條。</p>
         </div>
-        <button class="btn btn-primary" onclick="openCoupleModal()"><i class="fa-solid fa-plus"></i> 新建 CP</button>
+        <button class="btn btn-primary" onclick="openCpModal()">
+          <i class="fa-solid fa-plus"></i> 新建 CP 組合
+        </button>
       </div>
-      <div class="couple-grid" id="coupleGrid"></div>
+
+      <div class="cp-grid" id="cpGrid">
+        <!-- Rendered by app.js -->
+      </div>
     </section>
 
     <!-- TAB 2: 隱藏 / 草稿角色 -->
@@ -153,7 +152,7 @@
       </div>
     </section>
 
-    <!-- TAB 3: 人物關係與稱呼板塊 (支援主角頭像與選擇加入目標) -->
+    <!-- TAB 3: 人物關係與稱呼板塊 -->
     <section id="tab-relationships" class="tab-content">
       <div class="section-banner">
         <div>
@@ -253,12 +252,12 @@
       </div>
     </section>
 
-    <!-- TAB 5: Paro 平行世界模組 (一頁一個 Paro + 自訂欄位與選項) -->
+    <!-- TAB 5: Paro 平行世界模組 -->
     <section id="tab-paros" class="tab-content">
       <div class="section-banner">
         <div>
           <h2><i class="fa-solid fa-wand-magic-sparkles"></i> Paro 平行世界管理模組</h2>
-          <p>一個頁面管理一個 Paro。可自由添加多個下拉/文字欄位（如霍格華茲分院、網名、室友等），並為每位角色單獨填寫內容。</p>
+          <p>一個頁面管理一個 Paro。可自由添加多個下拉/文字欄位，並為每位角色單獨填寫內容。</p>
         </div>
         <button class="btn btn-primary" onclick="openParoModal()">
           <i class="fa-solid fa-plus"></i> 新建 Paro 世界觀
@@ -266,12 +265,10 @@
       </div>
 
       <div class="paro-workspace">
-        <!-- Paro Tabs Bar (One Paro per Page) -->
         <div class="ranking-subject-bar" id="paroSubjectBar">
           <!-- Populated by app.js -->
         </div>
 
-        <!-- Single Paro Card Detail & Character Values Editor -->
         <div class="ranking-card" id="paroSingleCard">
           <!-- Populated by app.js -->
         </div>
@@ -282,8 +279,8 @@
     <section id="tab-factions" class="tab-content">
       <div class="section-banner">
         <div>
-          <h2><i class="fa-solid fa-sitemap"></i> 陣營、世界觀與子標籤</h2>
-          <p>建立陣營與子分類簡介，編入的角色與名稱會自動同步至全站標籤選單中。</p>
+          <h2><i class="fa-solid fa-sitemap"></i> 陣營、世界觀與大事件詞條</h2>
+          <p>建立陣營與自訂大段詞條（如重大事件、法則與設定補充），自動同步至全站標籤中。</p>
         </div>
         <button class="btn btn-primary" onclick="openFactionModal()">
           <i class="fa-solid fa-plus"></i> 新建陣營 / 世界觀
@@ -295,12 +292,66 @@
       </div>
     </section>
 
+    <!-- TAB 6.5: 同人文檔與書籍資料庫 -->
+    <section id="tab-documents" class="tab-content">
+      <div class="section-banner">
+        <div>
+          <h2><i class="fa-solid fa-book-bookmark"></i> 同人文檔與書籍資料庫</h2>
+          <p>支援書籍摺疊收納、自訂書籍 Icon 顏色，勾選書籍資料夾或特定文檔進行 AI 故事大綱總結！</p>
+        </div>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="openBookModal()">
+            <i class="fa-solid fa-folder-plus"></i> 新建書籍資料夾
+          </button>
+          <button class="btn btn-primary" onclick="openDocumentModal()">
+            <i class="fa-solid fa-plus"></i> 新建文檔章節
+          </button>
+          <button class="btn btn-magic" onclick="summarizeSelectedDocsWithAi()">
+            <i class="fa-solid fa-brain"></i> AI 總結故事大綱 (已勾選書籍/文檔)
+          </button>
+        </div>
+      </div>
+
+      <!-- Document Search & Filter Toolbar -->
+      <div class="filter-toolbar">
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="docSearchInput" placeholder="搜尋文檔標題、章節內文..." oninput="renderDocumentsModule()">
+        </div>
+        
+        <div class="filter-group">
+          <label><i class="fa-solid fa-user"></i> 關聯角色：</label>
+          <select id="docCharFilter" onchange="renderDocumentsModule()">
+            <option value="">全部角色</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label><i class="fa-solid fa-sitemap"></i> 關聯世界觀：</label>
+          <select id="docFactionFilter" onchange="renderDocumentsModule()">
+            <option value="">全部世界觀</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label><i class="fa-solid fa-tag"></i> 標籤：</label>
+          <select id="docTagFilter" onchange="renderDocumentsModule()">
+            <option value="">全部標籤</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="doc-workspace" id="docWorkspace">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
     <!-- TAB 7: 資料輸出與 AI 潤飾 -->
     <section id="tab-export" class="tab-content">
       <div class="section-banner">
         <div>
           <h2><i class="fa-solid fa-file-signature"></i> 資料導出與同人 Prompt 工坊</h2>
-          <p>可選擇導出全角色、僅導出評分排名、或僅導出世界觀與陣營。</p>
+          <p>精確過濾選擇的人物，僅導出相關的陣營、關係與排名切點，並可勾選特定 Ranking/Paro！</p>
         </div>
       </div>
 
@@ -311,14 +362,16 @@
           <div class="form-group">
             <label>1. 選擇導出模式：</label>
             <select id="exportModeSelect" onchange="toggleExportMode(this.value)">
-              <option value="full">完整人設集 (全選/勾選角色)</option>
+              <option value="full">完整人設集 (全選/勾選角色與關聯內容)</option>
+              <option value="cps_only">獨立導出：僅 CP 關係細節與詞條</option>
               <option value="rankings_only">獨立導出：僅評分與排名板塊</option>
+              <option value="paros_only">獨立導出：僅 Paro 平行世界設定</option>
               <option value="factions_only">獨立導出：僅世界觀與陣營簡介</option>
             </select>
           </div>
 
           <div class="form-group" id="exportCharSelectGroup">
-            <label>2. 選擇包含角色：</label>
+            <label>2. 選擇包含角色 (僅導出所選角色相關關係與屬性)：</label>
             <div class="select-all-box">
               <button class="btn btn-xs btn-outline" onclick="selectAllExportChars(true)">全選</button>
               <button class="btn btn-xs btn-outline" onclick="selectAllExportChars(false)">取消全選</button>
@@ -329,16 +382,30 @@
           </div>
 
           <div class="form-group">
-            <label>3. 附加選項：</label>
+            <label>3. 附加選項與單項選擇：</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncThemeColor" checked> 包含人物主題色</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncRelationships" checked> 包含人物關係與稱呼表</label>
-            <label class="checkbox-label"><input type="checkbox" id="expIncRankings" checked> 包含評分與排名結果</label>
-            <label class="checkbox-label"><input type="checkbox" id="expIncParos" checked> 包含 Paro 自訂欄位內容</label>
-            <label class="checkbox-label"><input type="checkbox" id="expIncFactions"> 包含陣營／世界觀介紹</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncCps" checked> 包含 CP 關係細節詞條</label>
+          </div>
+
+          <!-- Specific Ranking Items Selector -->
+          <div class="form-group">
+            <label>4. 勾選要導出的評分主題 (Rankings)：</label>
+            <div class="export-char-list" id="exportRankingList">
+              <!-- Rendered by app.js -->
+            </div>
+          </div>
+
+          <!-- Specific Paro Items Selector -->
+          <div class="form-group">
+            <label>5. 勾選要導出的 Paro 世界觀：</label>
+            <div class="export-char-list" id="exportParoList">
+              <!-- Rendered by app.js -->
+            </div>
           </div>
 
           <div class="form-group">
-            <label>4. DeepSeek AI 極簡潤飾：</label>
+            <label>6. DeepSeek AI 極簡潤飾：</label>
             <label class="checkbox-label"><input type="checkbox" id="expUseAiPolish"> 啟用 AI 極簡同人寫作 Prompt 潤飾</label>
           </div>
 
@@ -369,7 +436,7 @@
 
   </main>
 
-  <!-- Mobile Bottom Navigation Bar (卡庫可展開選單, 陣營, 新建, Paro, 導出) -->
+  <!-- Mobile Bottom Navigation Bar -->
   <div class="mobile-bottom-bar">
     <button onclick="toggleMobileCardSubmenu()"><i class="fa-solid fa-address-card"></i><br>卡庫 <i class="fa-solid fa-angle-up" style="font-size:0.65rem;"></i></button>
     <button onclick="switchTab('tab-factions')"><i class="fa-solid fa-sitemap"></i><br>陣營</button>
@@ -381,10 +448,11 @@
   <!-- Mobile Submenu Drawer for 卡庫 -->
   <div class="mobile-submenu-drawer" id="mobileCardSubmenu">
     <button onclick="switchTab('tab-cards'); hideMobileCardSubmenu();"><i class="fa-solid fa-address-card"></i> 人物卡庫</button>
-    <button onclick="switchTab('tab-couples'); hideMobileCardSubmenu();"><i class="fa-solid fa-heart"></i> CP 卡庫</button>
+    <button onclick="switchTab('tab-cps'); hideMobileCardSubmenu();"><i class="fa-solid fa-heart"></i> CP 關係細節</button>
     <button onclick="switchTab('tab-hidden'); hideMobileCardSubmenu();"><i class="fa-solid fa-eye-slash"></i> 草稿區</button>
     <button onclick="switchTab('tab-relationships'); hideMobileCardSubmenu();"><i class="fa-solid fa-diagram-project"></i> 稱呼表</button>
     <button onclick="switchTab('tab-rankings'); hideMobileCardSubmenu();"><i class="fa-solid fa-trophy"></i> 評分排名</button>
+    <button onclick="switchTab('tab-documents'); hideMobileCardSubmenu();"><i class="fa-solid fa-book-bookmark"></i> 同人文檔書籍</button>
   </div>
 
   <!-- ==================== MODALS ==================== -->
@@ -515,12 +583,6 @@
             <textarea id="charExtraNotes" rows="3" placeholder="填寫更多背景補充..."></textarea>
           </div>
 
-          <div class="form-group">
-            <label><i class="fa-solid fa-list"></i> 人物卡自訂欄位（可不限數量新增）</label>
-            <div id="characterCustomSections"></div>
-            <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addLongSectionRow('characterCustomSections')"><i class="fa-solid fa-plus"></i> 新增自訂標題與欄位</button>
-          </div>
-
           <!-- Custom Tags Dropdown -->
           <div class="form-group">
             <label><i class="fa-solid fa-tags"></i> 自訂標籤 (下拉選擇或輸入新標籤，用逗號隔開)</label>
@@ -537,6 +599,61 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal('characterModal')">取消</button>
         <button type="button" class="btn btn-primary" onclick="saveCharacterForm()">儲存角色設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1.5: CP Edit Modal -->
+  <div class="modal-backdrop" id="cpModal">
+    <div class="modal-box modal-lg">
+      <div class="modal-header">
+        <h3 id="cpModalTitle"><i class="fa-solid fa-heart"></i> 編輯 CP 組合細節與大段詞條</h3>
+        <button class="close-btn" onclick="closeModal('cpModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cpId">
+        <div class="form-group">
+          <label>CP 組合名稱 *</label>
+          <input type="text" id="cpName" placeholder="如：納希瑟斯 × 尼古拉斯．維納托">
+        </div>
+
+        <div class="form-group">
+          <label>關聯 CP 角色選擇 (支持多選 2人/3人或以上)：</label>
+          <div class="checkbox-pill-group" id="cpCharCheckboxes">
+            <!-- Populated by app.js -->
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>每位角色的左右位 / 定位設定：</label>
+          <div id="cpPositionsContainer">
+            <!-- Populated dynamically per checked char -->
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>關係狀況補充：</label>
+          <textarea id="cpR18Notes" rows="2" placeholder="填寫互動風格與細節..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>對關係的總體感想：</label>
+          <textarea id="cpThoughts" rows="2" placeholder="填寫對這個 CP 關係的感想..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>自訂大段標題詞條 (預設相遇情況、交往過程、交往後相處模式，可無限新增)：</label>
+          <div id="cpCustomSectionsContainer">
+            <!-- Dynamic CP Section rows -->
+          </div>
+          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addCpSectionRow()">
+            <i class="fa-solid fa-plus"></i> 新增自訂大段詞條
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('cpModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCpForm()">儲存 CP 組合</button>
       </div>
     </div>
   </div>
@@ -585,7 +702,7 @@
     </div>
   </div>
 
-  <!-- Modal 4: Paro Edit Modal with Dynamic Field Types & Custom Dropdown Options -->
+  <!-- Modal 4: Paro Edit Modal -->
   <div class="modal-backdrop" id="paroModal">
     <div class="modal-box modal-md">
       <div class="modal-header">
@@ -629,9 +746,9 @@
 
   <!-- Modal 5: Faction Edit Modal -->
   <div class="modal-backdrop" id="factionModal">
-    <div class="modal-box modal-md">
+    <div class="modal-box modal-lg">
       <div class="modal-header">
-        <h3 id="factionModalTitle"><i class="fa-solid fa-sitemap"></i> 編輯陣營與子標籤</h3>
+        <h3 id="factionModalTitle"><i class="fa-solid fa-sitemap"></i> 編輯陣營與大事件詞條</h3>
         <button class="close-btn" onclick="closeModal('factionModal')">&times;</button>
       </div>
       <div class="modal-body">
@@ -653,10 +770,15 @@
             <i class="fa-solid fa-plus"></i> 新增子標籤
           </button>
         </div>
-        <div class="form-group">
-          <label>大段自訂詞條（可不限數量新增）</label>
-          <div id="factionCustomSections"></div>
-          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addLongSectionRow('factionCustomSections')"><i class="fa-solid fa-plus"></i> 新增自訂詞條</button>
+
+        <div class="form-group mt-3">
+          <label>自訂大事件與大段設定詞條 (不限數量)：</label>
+          <div id="factionCustomSectionsContainer">
+            <!-- Dynamic Faction Custom Sections -->
+          </div>
+          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addFactionSectionRow()">
+            <i class="fa-solid fa-plus"></i> 新增大事件 / 詞條
+          </button>
         </div>
       </div>
       <div class="modal-footer">
@@ -666,34 +788,109 @@
     </div>
   </div>
 
-  <!-- CP Edit Modal -->
-  <div class="modal-backdrop" id="coupleModal">
-    <div class="modal-box modal-lg">
+  <!-- Modal 5.5: Book Edit Modal (支援自訂書籍 Icon 顏色) -->
+  <div class="modal-backdrop" id="bookModal">
+    <div class="modal-box modal-md">
       <div class="modal-header">
-        <h3 id="coupleModalTitle"><i class="fa-solid fa-heart"></i> 編輯 CP 關係</h3>
-        <button class="close-btn" onclick="closeModal('coupleModal')">&times;</button>
+        <h3 id="bookModalTitle"><i class="fa-solid fa-book"></i> 編輯書籍資料夾</h3>
+        <button class="close-btn" onclick="closeModal('bookModal')">&times;</button>
       </div>
       <div class="modal-body">
-        <input type="hidden" id="coupleId">
-        <div class="basic-fields-grid">
-          <div class="form-group"><label>關係類型 *</label><select id="coupleType" onchange="toggleCoupleTypeFields()"><option value="cp">CP 關係</option><option value="other">其他關係</option></select></div>
-          <div class="form-group" id="otherRelationTypeGroup" style="display:none;"><label>其他關係名稱 *</label><input id="otherRelationType" type="text" placeholder="例如：朋友、家人、師生、宿敵"></div>
-        </div>
-        <div class="form-group"><label>關係卡名稱 *</label><input id="coupleName" type="text" placeholder="例如：角色 A × 角色 B／某某一家人"></div>
+        <input type="hidden" id="bookId">
         <div class="form-group">
-          <label>關聯人物（可複選兩人以上）</label>
-          <div class="checkbox-pill-group" id="coupleCharacterChoices"></div>
+          <label>書籍標題 *</label>
+          <input type="text" id="bookTitle" placeholder="如：【主線同人集】時間與金線之歌">
         </div>
-        <div id="coupleMemberDetails"></div>
+
         <div class="form-group">
-          <label>關係詳細詞條（標題與內容皆可自訂，不限數量）</label>
-          <div id="coupleCustomSections"></div>
-          <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addLongSectionRow('coupleCustomSections')"><i class="fa-solid fa-plus"></i> 新增自訂詞條</button>
+          <label><i class="fa-solid fa-palette"></i> 指定書籍 Icon 顏色：</label>
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <input type="color" id="bookIconColor" value="#f59e0b">
+            <span style="font-size:0.82rem; color:var(--text-muted);">選擇此書籍資料夾在列表中顯示的圖示顏色</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>書籍簡介</label>
+          <textarea id="bookDescription" rows="2" placeholder="簡單介紹這本書籍的主題..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>關聯角色選擇 (多選)：</label>
+          <div class="checkbox-pill-group" id="bookCharCheckboxes"></div>
+        </div>
+        <div class="form-group">
+          <label>關聯世界觀/陣營選擇 (多選)：</label>
+          <div class="checkbox-pill-group" id="bookFactionCheckboxes"></div>
+        </div>
+        <div class="form-group">
+          <label>標籤 (用逗號隔開)：</label>
+          <input type="text" id="bookTags" placeholder="如: 長篇, 奇幻, 甜文">
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeModal('coupleModal')">取消</button>
-        <button class="btn btn-primary" onclick="saveCoupleForm()">儲存 CP 設定</button>
+        <button class="btn btn-outline" onclick="closeModal('bookModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveBookForm()">儲存書籍</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5.6: Document Edit Modal -->
+  <div class="modal-backdrop" id="documentModal">
+    <div class="modal-box modal-lg">
+      <div class="modal-header">
+        <h3 id="docModalTitle"><i class="fa-solid fa-file-pen"></i> 編輯同人文檔章節</h3>
+        <button class="close-btn" onclick="closeModal('documentModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="docId">
+        <div class="form-group">
+          <label>文檔章節標題 *</label>
+          <input type="text" id="docTitle" placeholder="如：第一章：黃昏與占卜城堡的初相遇">
+        </div>
+
+        <div class="form-group">
+          <label>所屬書籍資料夾 (可選)：</label>
+          <select id="docBelongingBookId">
+            <option value="">(獨立文檔，不屬於書籍)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>關聯角色選擇 (多選)：</label>
+          <div class="checkbox-pill-group" id="docCharCheckboxes"></div>
+        </div>
+        <div class="form-group">
+          <label>關聯世界觀/陣營選擇 (多選)：</label>
+          <div class="checkbox-pill-group" id="docFactionCheckboxes"></div>
+        </div>
+        <div class="form-group">
+          <label>標籤 (用逗號隔開)：</label>
+          <input type="text" id="docTags" placeholder="如: 初遇, 甜文">
+        </div>
+        <div class="form-group">
+          <label>同人文檔正文內容 (不參與預設導出，可供 AI 總結大綱)：</label>
+          <textarea id="docContent" rows="8" placeholder="在此撰寫或貼上同人文檔內容..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('documentModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveDocumentForm()">儲存文檔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5.7: AI Document Summary Result Modal -->
+  <div class="modal-backdrop" id="aiSummaryModal">
+    <div class="modal-box modal-md">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-brain"></i> AI 總結故事大綱成果</h3>
+        <button class="close-btn" onclick="closeModal('aiSummaryModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="aiSummaryResultArea" rows="12" readonly style="width:100%; font-family:inherit; font-size:0.86rem; padding:0.8rem; border-radius:6px; background:var(--bg-secondary); color:var(--text-main); border:1px solid var(--border-color);"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="copyAiSummaryText()"><i class="fa-solid fa-copy"></i> 複製大綱</button>
+        <button class="btn btn-primary" onclick="closeModal('aiSummaryModal')">關閉</button>
       </div>
     </div>
   </div>
@@ -741,7 +938,7 @@
     </div>
   </div>
 
-  <!-- Modal 8: Add Target Character To Call Name Perspective Modal (選擇要加入稱呼表的對象) -->
+  <!-- Modal 8: Add Target Character To Call Name Perspective Modal -->
   <div class="modal-backdrop" id="addCallNameCharModal">
     <div class="modal-box modal-sm">
       <div class="modal-header">
