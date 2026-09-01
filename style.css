@@ -1,5 +1,5 @@
 /* ==========================================================================
-   OC 原創人物設定與關係管理系統 - 第五階段 柔和色調與 Paro 一頁一世界
+   OC 原創人物設定與關係管理系統 - 第六階段 CP細節、大事件詞條與書籍文檔資料庫
    ========================================================================== */
 
 :root, [data-theme="dark"] {
@@ -76,16 +76,6 @@ body {
   min-height: 100vh;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
-/* 從手機主畫面以 standalone / fullscreen 模式啟動時，內容延伸至安全區。 */
-@media (display-mode: standalone), (display-mode: fullscreen) {
-  body { min-height: 100dvh; padding-top: env(safe-area-inset-top); }
-  .mobile-bottom-bar { padding-bottom: env(safe-area-inset-bottom); height: calc(56px + env(safe-area-inset-bottom)); }
-  .app-main { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
 
 h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: -0.02em; }
@@ -231,19 +221,6 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 
 /* Character Cards Grid */
 .character-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 1.2rem; }
-.couple-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.2rem; }
-.couple-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.1rem; box-shadow: var(--box-shadow); }
-.couple-card h3, .faction-card h3 { display:flex; justify-content:space-between; align-items:center; gap:.7rem; margin-bottom:.7rem; }
-.couple-member { background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:.7rem; margin:.5rem 0; }
-.long-section { border:1px solid var(--border-color); background:var(--bg-secondary); border-radius:var(--radius-sm); padding:.7rem; margin-bottom:.65rem; }
-.long-section-head { display:flex; gap:.5rem; align-items:center; margin-bottom:.45rem; }
-.long-section-head input { flex:1; }
-.long-section textarea { width:100%; min-height:120px; resize:vertical; }
-.member-detail-editor { border-left:3px solid var(--accent-gold); }
-.faction-member-groups { margin:.75rem 0; display:flex; flex-direction:column; gap:.5rem; }
-.faction-member-row { background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:.55rem .7rem; }
-.faction-member-row strong { display:block; color:var(--accent-coffee); font-size:.8rem; margin-bottom:.4rem; }
-.faction-member-empty { color:var(--text-muted); font-size:.8rem; font-style:italic; }
 .char-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; transition: var(--transition); display: flex; flex-direction: column; position: relative; box-shadow: var(--box-shadow); }
 .char-card:hover { transform: translateY(-2px); border-color: var(--char-theme-primary, var(--accent-gold)); }
 
@@ -262,7 +239,24 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .tag-pill { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: var(--radius-pill); background: rgba(217, 119, 6, 0.12); color: var(--accent-coffee); border: 1px solid rgba(217, 119, 6, 0.2); }
 .char-card-footer { padding: 0.7rem 1rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; background: rgba(0, 0, 0, 0.02); }
 
-/* Call Name Perspective Header Card */
+/* CP Cards Grid */
+.cp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1.2rem; }
+.cp-card { background: var(--bg-card); border: 1px solid var(--border-glow); border-radius: var(--radius-md); padding: 1.2rem; box-shadow: var(--box-shadow); display: flex; flex-direction: column; gap: 0.8rem; }
+.cp-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.6rem; }
+.cp-avatars-row { display: flex; align-items: center; gap: -0.4rem; }
+.cp-avatar-img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-gold); margin-right: -8px; }
+.cp-section-box { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 0.6rem 0.8rem; border-left: 3px solid var(--accent-gold); font-size: 0.82rem; }
+
+/* Factions List & Custom Sections */
+.faction-list { display: flex; flex-direction: column; gap: 1.2rem; }
+.faction-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.2rem; box-shadow: var(--box-shadow); }
+
+/* Documents & Book Workspace */
+.doc-workspace { display: flex; flex-direction: column; gap: 1.2rem; }
+.book-folder-card { background: var(--bg-card); border: 1px solid var(--border-glow); border-radius: var(--radius-md); padding: 1.2rem; box-shadow: var(--box-shadow); }
+.doc-item-row { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.8rem 1rem; display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; }
+
+/* Perspective Avatar Header Card */
 .perspective-header-card {
   display: flex;
   align-items: center;
@@ -404,33 +398,16 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 }
 .mobile-submenu-drawer button:hover { background: var(--bg-secondary); }
 
-@media (max-width: 1024px) {
-  .app-header { padding: 0.7rem 1rem; flex-wrap:wrap; align-items:center; gap:.65rem; width:100%; }
-  .header-left { flex:1 1 auto; min-width:190px; }
-  .app-title { white-space:nowrap; }
-  .app-subtitle { white-space:nowrap; }
-  .header-actions { flex:1 0 100%; width:100%; overflow-x:auto; padding-bottom:.15rem; }
-  .header-actions .btn { flex:0 0 auto; }
-  .app-nav { width:100%; padding-left:.8rem; padding-right:.8rem; }
+@media (max-width: 768px) {
+  .app-header { padding: 0.7rem 1rem; }
   .desktop-only { display: none; }
-  .app-main { width:100%; max-width:none; margin:0; padding:0.9rem; padding-bottom:70px; }
-  .tab-content, .section-banner, .faction-list, .faction-card { width:100%; max-width:none; min-width:0; }
-  .section-banner { align-items:flex-start; }
+  .app-main { padding: 0.9rem; padding-bottom: 70px; }
   .mobile-bottom-bar { display: flex; }
   .form-row-grid { grid-template-columns: 1fr; }
   .basic-fields-grid { grid-template-columns: 1fr; }
   .export-workspace { grid-template-columns: 1fr; }
   .character-grid { grid-template-columns: 1fr; }
-  .couple-grid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 520px) {
-  .app-header { align-items:flex-start; }
-  .logo-badge { width:34px; height:34px; }
-  .app-title { font-size:1.05rem; }
-  .app-subtitle { font-size:.68rem; }
-  .section-banner { padding:.9rem; }
-  .section-banner > .btn { width:100%; justify-content:center; }
+  .cp-grid { grid-template-columns: 1fr; }
 }
 
 .toast-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; }
