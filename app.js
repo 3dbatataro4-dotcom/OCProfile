@@ -34,6 +34,10 @@ let lastGraphCanvasSize = { width: 0, height: 0 };
 
 let currentRankingSubjectId = null;
 let currentParoId = null;
+let currentReadingDocId = null;
+let documentReaderFontSize = 1.05;
+let pendingAdvancedImport = null;
+let pendingImportConflicts = [];
 
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
@@ -1347,6 +1351,11 @@ function renderRankingModule() {
               <option value="≤" ${item.operator === '≤' ? 'selected' : ''}>≤</option>
             </select>
 
+            <div class="ranking-move-controls">
+              <button class="btn btn-xs btn-outline" onclick="moveRankingItem('${currentRanking.id}', ${idx}, -1)" ${idx === 0 ? 'disabled' : ''} title="向上移動"><i class="fa-solid fa-arrow-up"></i> 上移</button>
+              <button class="btn btn-xs btn-outline" onclick="moveRankingItem('${currentRanking.id}', ${idx}, 1)" ${idx === currentRanking.items.length - 1 ? 'disabled' : ''} title="向下移動"><i class="fa-solid fa-arrow-down"></i> 下移</button>
+            </div>
+
             <button class="btn btn-xs btn-outline" onclick="toggleRankingCutoff('${currentRanking.id}', '${char.id}')">
               <i class="fa-solid fa-bookmark"></i> ${cutoff ? '修改切點' : '切點'}
             </button>
@@ -1414,6 +1423,19 @@ function confirmAddCharToRanking() {
 function updateRankingOperator(rankId, index, op) {
   const rank = rankings.find(r => r.id === rankId);
   if (rank && rank.items[index]) { rank.items[index].operator = op; saveStateToLocalStorage(); renderRankingModule(); }
+}
+
+function moveRankingItem(rankId, index, direction) {
+  const rank = rankings.find(r => r.id === rankId);
+  if (!rank || !rank.items?.[index]) return;
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= rank.items.length) return;
+  // 比較符號屬於排名位置，移動時只交換人物，避免 >、= 等關係跟著人物跑位。
+  const currentCharId = rank.items[index].charId;
+  rank.items[index].charId = rank.items[targetIndex].charId;
+  rank.items[targetIndex].charId = currentCharId;
+  saveStateToLocalStorage();
+  renderRankingModule();
 }
 
 function toggleRankingCutoff(rankId, charId) {
@@ -1658,11 +1680,45 @@ function saveParoForm() {
 }
 
 // ========== 10. 陣營與大事件詞條 (【Bug修復】：保留已有 SubTag/Section ID) ==========
+function getFactionMemberGroups(faction) {
+  const subGroups = {};
+  (faction.subTags || []).forEach(sub => { subGroups[sub.name] = []; });
+  const main = [];
+  characters.filter(c => !c.isHidden).forEach(char => {
+    const tags = char.tags || [];
+    const matchedSubs = (faction.subTags || []).filter(sub => tags.includes(sub.name));
+    matchedSubs.forEach(sub => subGroups[sub.name].push(char));
+    // 同時標記主陣營與子陣營時，只列在更精確的子陣營。
+    if (tags.includes(faction.name) && matchedSubs.length === 0) main.push(char);
+  });
+  return { main, subGroups };
+}
+
+function characterBelongsToFaction(char, faction) {
+  const tags = char.tags || [];
+  return tags.includes(faction.name) || (faction.subTags || []).some(sub => tags.includes(sub.name));
+}
+
+function appendFactionExportText(text, faction, headingLevel = 2) {
+  const mark = "#".repeat(headingLevel);
+  const members = getFactionMemberGroups(faction);
+  text += `${mark} 陣營／世界觀：${faction.name}\n${faction.description || '（無簡介）'}\n`;
+  text += `- 主陣營成員：${members.main.length ? members.main.map(c => c.name).join('、') : '（無）'}\n`;
+  (faction.subTags || []).forEach(sub => {
+    const subMembers = members.subGroups[sub.name] || [];
+    text += `- 子陣營【${sub.name}】：${sub.description || '（無簡介）'}\n`;
+    text += `  - 成員：${subMembers.length ? subMembers.map(c => c.name).join('、') : '（無）'}\n`;
+  });
+  (faction.customSections || []).forEach(sec => { text += `\n${mark}# ${sec.title}\n${sec.content || '（無內容）'}\n`; });
+  return text + `\n`;
+}
+
 function renderFactionList() {
   const container = document.getElementById("factionList");
   if (!container) return;
 
   container.innerHTML = factions.map(f => {
+    const memberGroups = getFactionMemberGroups(f);
     const subTagsHtml = (f.subTags || []).map(sub => `
       <div style="background:var(--bg-secondary); padding:0.35rem 0.7rem; border-radius:6px; font-size:0.8rem; border-left:3px solid var(--accent-gold);">
         <strong>${sub.name}</strong>: ${sub.description || ''}
@@ -1686,6 +1742,10 @@ function renderFactionList() {
           </div>
         </h3>
         <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.6rem;">${f.description || '暫無簡介'}</p>
+        <div class="faction-member-groups">
+          <div class="faction-member-row"><strong><i class="fa-solid fa-users"></i> 主陣營成員</strong><div class="tag-cloud">${memberGroups.main.length ? memberGroups.main.map(c => `<span class="tag-pill">${c.name}</span>`).join('') : '<span class="faction-member-empty">無</span>'}</div></div>
+          ${(f.subTags || []).map(sub => `<div class="faction-member-row"><strong><i class="fa-solid fa-user-group"></i> ${sub.name}</strong><div class="tag-cloud">${(memberGroups.subGroups[sub.name] || []).length ? memberGroups.subGroups[sub.name].map(c => `<span class="tag-pill">${c.name}</span>`).join('') : '<span class="faction-member-empty">無</span>'}</div></div>`).join('')}
+        </div>
         
         <div style="display:flex; flex-direction:column; gap:0.3rem;">${subTagsHtml}</div>
         ${customSectionsHtml}
@@ -1917,7 +1977,8 @@ function renderSingleDocItemHtml(doc) {
         </div>
       </div>
       <div>
-        <button class="btn btn-xs btn-outline" onclick="openDocumentModal('${doc.id}')"><i class="fa-solid fa-pen"></i> 閱讀/編輯</button>
+        <button class="btn btn-xs btn-primary" onclick="openDocumentReader('${doc.id}')"><i class="fa-solid fa-book-open-reader"></i> 閱讀</button>
+        <button class="btn btn-xs btn-outline" onclick="openDocumentModal('${doc.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
         <button class="btn btn-xs btn-danger" onclick="deleteDocument('${doc.id}')">&times;</button>
       </div>
     </div>
@@ -2061,6 +2122,52 @@ function openDocumentModal(docId = null) {
   }
 
   modal.classList.add("active");
+}
+
+function getReaderSequence(doc) {
+  if (!doc) return [];
+  if (doc.bookId) return documents.filter(item => item.bookId === doc.bookId);
+  return documents.filter(item => !item.bookId);
+}
+
+function openDocumentReader(docId) {
+  const doc = documents.find(item => item.id === docId);
+  if (!doc) return;
+  currentReadingDocId = doc.id;
+  const book = books.find(item => item.id === doc.bookId);
+  const docChars = (doc.charIds || []).map(id => characters.find(c => c.id === id)?.name).filter(Boolean);
+  const docFactions = (doc.factionIds || []).map(id => factions.find(f => f.id === id)?.name).filter(Boolean);
+  document.getElementById("docReaderTitle").textContent = doc.title;
+  document.getElementById("docReaderMeta").textContent = [book?.title, docChars.length ? `角色：${docChars.join('、')}` : "", docFactions.length ? `世界觀：${docFactions.join('、')}` : "", (doc.tags || []).length ? `標籤：${doc.tags.join('、')}` : ""].filter(Boolean).join(" ｜ ");
+  const content = document.getElementById("docReaderContent");
+  content.textContent = doc.content || "（此文檔尚無正文內容。）";
+  content.style.fontSize = `${documentReaderFontSize}rem`;
+  document.querySelector("#documentReaderModal .doc-reader-scroll").scrollTop = 0;
+  const sequence = getReaderSequence(doc);
+  const index = sequence.findIndex(item => item.id === doc.id);
+  document.getElementById("docReaderPrevBtn").disabled = index <= 0;
+  document.getElementById("docReaderNextBtn").disabled = index < 0 || index >= sequence.length - 1;
+  document.getElementById("documentReaderModal").classList.add("active");
+}
+
+function navigateDocumentReader(direction) {
+  const current = documents.find(item => item.id === currentReadingDocId);
+  const sequence = getReaderSequence(current);
+  const index = sequence.findIndex(item => item.id === currentReadingDocId);
+  const next = sequence[index + direction];
+  if (next) openDocumentReader(next.id);
+}
+
+function changeReaderFontSize(delta) {
+  documentReaderFontSize = Math.min(1.6, Math.max(0.82, documentReaderFontSize + delta * 0.1));
+  const content = document.getElementById("docReaderContent");
+  if (content) content.style.fontSize = `${documentReaderFontSize}rem`;
+}
+
+function openCurrentReaderDocumentEditor() {
+  if (!currentReadingDocId) return;
+  closeModal("documentReaderModal");
+  openDocumentModal(currentReadingDocId);
 }
 
 function saveDocumentForm() {
@@ -2250,6 +2357,7 @@ async function generateExportText() {
   const incTheme = document.getElementById("expIncThemeColor").checked;
   const incRel = document.getElementById("expIncRelationships").checked;
   const incCp = document.getElementById("expIncCps").checked;
+  const incFactions = document.getElementById("expIncFactions")?.checked || false;
 
   if (mode === 'cps_only') {
     text = `# 【CP 關係細節獨立報告】\n生成時間：${new Date().toLocaleString()}\n\n`;
@@ -2301,17 +2409,7 @@ async function generateExportText() {
   } else if (mode === 'factions_only') {
     text = `# 【世界觀與陣營獨立簡介】\n生成時間：${new Date().toLocaleString()}\n\n`;
     factions.forEach(f => {
-      text += `## 陣營: ${f.name}\n${f.description || '（無簡介）'}\n`;
-      if ((f.subTags || []).length) {
-        f.subTags.forEach(sub => {
-          text += `- 子標籤【${sub.name}】：${sub.description || ''}\n`;
-        });
-      }
-      if ((f.customSections || []).length) {
-        f.customSections.forEach(sec => {
-          text += `\n✦ 大事件【${sec.title}】:\n${sec.content}\n`;
-        });
-      }
+      text = appendFactionExportText(text, f, 2);
       text += `\n-----------------------------------\n\n`;
     });
   } else {
@@ -2339,6 +2437,17 @@ async function generateExportText() {
       }
       text += `\n`;
     });
+
+    if (incFactions) {
+      const relatedFactions = factions.filter(faction => targetChars.some(char => characterBelongsToFaction(char, faction)));
+      text += `\n===================================\n`;
+      text += `## 【所選人物相關的陣營／世界觀】\n\n`;
+      if (relatedFactions.length) {
+        relatedFactions.forEach(faction => { text = appendFactionExportText(text, faction, 3); });
+      } else {
+        text += `（所選人物尚未標註任何已建立的主陣營或子陣營。）\n\n`;
+      }
+    }
 
     if (incCp) {
       text += `\n===================================\n`;
@@ -2534,6 +2643,21 @@ function exportDataJson() {
   a.click();
 }
 
+function openImportOptionsModal() {
+  const toggle = document.getElementById("advancedImportModeToggle");
+  toggle.checked = false;
+  document.getElementById("jsonFileInput").value = "";
+  updateImportModeDescription();
+  document.getElementById("importOptionsModal").classList.add("active");
+}
+
+function updateImportModeDescription() {
+  const enabled = document.getElementById("advancedImportModeToggle").checked;
+  document.getElementById("importModeDescription").textContent = enabled
+    ? "挑選讀檔會保留現有資料、加入備份中沒有的人物與陣營；同名但內容不同時，再逐一選擇保留版本。"
+    : "一般讀檔會用備份內容取代目前資料。";
+}
+
 function triggerImportJson() { document.getElementById("jsonFileInput").click(); }
 
 function handleImportJson(event) {
@@ -2543,6 +2667,10 @@ function handleImportJson(event) {
   reader.onload = (e) => {
     try {
       const data = JSON.parse(e.target.result);
+      if (document.getElementById("advancedImportModeToggle").checked) {
+        prepareAdvancedImport(data, file.name);
+        return;
+      }
       if (data.characters) characters = data.characters;
       if (data.paros) paros = data.paros;
       if (data.factions) factions = data.factions;
@@ -2552,10 +2680,248 @@ function handleImportJson(event) {
       if (data.documents) documents = data.documents;
       if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
       saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
+      closeModal("importOptionsModal");
       alert("JSON 資料匯入成功！");
     } catch (err) { alert("匯入失敗：" + err.message); }
+    finally { event.target.value = ""; }
   };
   reader.readAsText(file);
+}
+
+function normalizedImportName(value) {
+  return String(value || "").trim().toLocaleLowerCase();
+}
+
+function comparableImportRecord(value) {
+  if (Array.isArray(value)) return value.map(comparableImportRecord);
+  if (value && typeof value === "object") {
+    return Object.keys(value).filter(key => key !== "id").sort().reduce((result, key) => {
+      result[key] = comparableImportRecord(value[key]);
+      return result;
+    }, {});
+  }
+  return value ?? null;
+}
+
+function importRecordsDiffer(a, b) {
+  return JSON.stringify(comparableImportRecord(a)) !== JSON.stringify(comparableImportRecord(b));
+}
+
+const importFieldLabels = {
+  name: "名稱", englishName: "英文名", avatar: "頭像", gender: "性別", height: "身高",
+  zodiac: "星座", occupation: "身分／職業", orientation: "左右位", fixedCp: "固定 CP",
+  personality: "性格", appearance: "外貌", extraNotes: "補充設定", tags: "標籤",
+  themeColor: "主題色", primary: "主色", secondary: "副色", mode: "配色模式",
+  hogwartsHouse: "學院", isHidden: "草稿／隱藏狀態", relationships: "人物關係",
+  targetName: "對象", callName: "稱呼", opinion: "看法", customSections: "自訂詞條",
+  sections: "自訂詞條", title: "標題", content: "內容", description: "介紹",
+  subgroups: "子陣營", members: "成員", position: "左右位／定位", r18: "R18 狀況",
+  thoughts: "對關係的看法", paroValues: "Paro 資料"
+};
+
+function importValuesEqual(a, b) {
+  return JSON.stringify(comparableImportRecord(a)) === JSON.stringify(comparableImportRecord(b));
+}
+
+function collectImportDifferences(current, imported, path = []) {
+  if (importValuesEqual(current, imported)) return [];
+  const currentIsObject = current && typeof current === "object";
+  const importedIsObject = imported && typeof imported === "object";
+  if (!currentIsObject || !importedIsObject || Array.isArray(current) !== Array.isArray(imported)) {
+    return [{ path, current, imported }];
+  }
+  if (Array.isArray(current)) {
+    const containsObjects = [...current, ...imported].some(value => value && typeof value === "object");
+    if (!containsObjects) return [{ path, current, imported }];
+    const length = Math.max(current.length, imported.length);
+    return Array.from({ length }, (_, index) => collectImportDifferences(current[index], imported[index], [...path, index])).flat();
+  }
+  const keys = [...new Set([...Object.keys(current), ...Object.keys(imported)])]
+    .filter(key => key !== "id").sort();
+  return keys.flatMap(key => collectImportDifferences(current[key], imported[key], [...path, key]));
+}
+
+function formatImportDiffPath(path) {
+  return path.map(part => typeof part === "number" ? `第 ${part + 1} 項` : (importFieldLabels[part] || part)).join(" › ") || "整筆資料";
+}
+
+function formatImportDiffValue(value) {
+  if (value === undefined) return "（此版本沒有此欄位）";
+  if (value === null || value === "") return "（空白）";
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (Array.isArray(value)) {
+    if (!value.length) return "（空陣列）";
+    return value.every(item => typeof item !== "object") ? value.join("、") : JSON.stringify(comparableImportRecord(value), null, 2);
+  }
+  if (typeof value === "object") return JSON.stringify(comparableImportRecord(value), null, 2);
+  return String(value);
+}
+
+function prepareAdvancedImport(data, fileName) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("檔案不是有效的備份格式");
+  const importedCharacters = Array.isArray(data.characters) ? data.characters : [];
+  const importedFactions = Array.isArray(data.factions) ? data.factions : [];
+  pendingAdvancedImport = data;
+  pendingImportConflicts = [];
+
+  [["character", importedCharacters, characters], ["faction", importedFactions, factions]].forEach(([type, incoming, current]) => {
+    incoming.forEach((record, importedIndex) => {
+      const recordName = normalizedImportName(record.name);
+      const currentIndex = recordName ? current.findIndex(item => normalizedImportName(item.name) === recordName) : -1;
+      if (currentIndex >= 0 && importRecordsDiffer(current[currentIndex], record)) {
+        pendingImportConflicts.push({
+          key: `${type}_${importedIndex}`, type, name: record.name || "（未命名）",
+          importedIndex, currentIndex, current: current[currentIndex], imported: record
+        });
+      }
+    });
+  });
+
+  renderAdvancedImportConflicts(fileName, importedCharacters, importedFactions);
+  closeModal("importOptionsModal");
+  document.getElementById("advancedImportModal").classList.add("active");
+}
+
+function renderAdvancedImportConflicts(fileName, importedCharacters, importedFactions) {
+  const missingChars = importedCharacters.filter(record => !normalizedImportName(record.name) || !characters.some(item => normalizedImportName(item.name) === normalizedImportName(record.name))).length;
+  const missingFactions = importedFactions.filter(record => !normalizedImportName(record.name) || !factions.some(item => normalizedImportName(item.name) === normalizedImportName(record.name))).length;
+  document.getElementById("advancedImportSummary").textContent =
+    `${fileName}：將新增 ${missingChars} 張人物卡、${missingFactions} 個陣營；有 ${pendingImportConflicts.length} 筆同名差異需要確認。`;
+  const container = document.getElementById("advancedImportConflicts");
+  container.replaceChildren();
+  if (!pendingImportConflicts.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state compact";
+    empty.textContent = "沒有同名衝突，可直接套用。";
+    container.appendChild(empty);
+    return;
+  }
+  pendingImportConflicts.forEach(conflict => {
+    const differences = collectImportDifferences(conflict.current, conflict.imported);
+    const card = document.createElement("section");
+    card.className = "import-conflict-card";
+    const title = document.createElement("h4");
+    title.textContent = `${conflict.type === "character" ? "人物" : "陣營"}：${conflict.name}`;
+    card.appendChild(title);
+    const differenceSummary = document.createElement("div");
+    differenceSummary.className = "import-difference-summary";
+    const count = document.createElement("strong");
+    count.textContent = `共 ${differences.length} 處差異：`;
+    differenceSummary.appendChild(count);
+    differences.forEach(difference => {
+      const badge = document.createElement("span");
+      badge.textContent = formatImportDiffPath(difference.path);
+      differenceSummary.appendChild(badge);
+    });
+    card.appendChild(differenceSummary);
+    const grid = document.createElement("div");
+    grid.className = "import-version-grid";
+    [["current", "保留目前版本"], ["imported", "使用讀檔版本"]].forEach(([value, label]) => {
+      const option = document.createElement("label");
+      option.className = "import-version-option";
+      const radio = document.createElement("input");
+      radio.type = "radio"; radio.name = `import_choice_${conflict.key}`; radio.value = value; radio.checked = value === "current";
+      const heading = document.createElement("strong"); heading.textContent = label;
+      const preview = document.createElement("div"); preview.className = "import-diff-list";
+      differences.forEach(difference => {
+        const row = document.createElement("div"); row.className = "import-diff-row";
+        const field = document.createElement("small"); field.textContent = formatImportDiffPath(difference.path);
+        const content = document.createElement("pre");
+        content.textContent = formatImportDiffValue(value === "current" ? difference.current : difference.imported);
+        row.append(field, content); preview.appendChild(row);
+      });
+      option.append(radio, heading, preview); grid.appendChild(option);
+    });
+    card.appendChild(grid); container.appendChild(card);
+  });
+}
+
+function makeUniqueImportId(preferred, prefix, usedIds) {
+  let id = preferred && !usedIds.has(String(preferred)) ? preferred : "";
+  if (!id) do { id = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; } while (usedIds.has(String(id)));
+  usedIds.add(String(id));
+  return id;
+}
+
+function mergeImportedNamedRecords(current, incoming, type, idMap, transform = value => value) {
+  const result = current.map(item => ({ ...item }));
+  const usedIds = new Set(result.map(item => String(item.id)));
+  (Array.isArray(incoming) ? incoming : []).forEach((raw, importedIndex) => {
+    const record = transform(raw);
+    const identity = normalizedImportName(record.name || record.title || record.subject);
+    const sameIndex = identity ? result.findIndex(item => normalizedImportName(item.name || item.title || item.subject) === identity) : -1;
+    const oldId = raw.id;
+    if (sameIndex >= 0) {
+      const conflict = pendingImportConflicts.find(item => item.type === type && item.importedIndex === importedIndex);
+      const choice = conflict ? document.querySelector(`input[name="import_choice_${conflict.key}"]:checked`)?.value : "current";
+      if (choice === "imported") result[sameIndex] = { ...record, id: result[sameIndex].id };
+      if (oldId != null) idMap.set(String(oldId), result[sameIndex].id);
+    } else {
+      const id = makeUniqueImportId(record.id, type, usedIds);
+      result.push({ ...record, id });
+      if (oldId != null) idMap.set(String(oldId), id);
+    }
+  });
+  return result;
+}
+
+function remapImportIds(ids, idMap) {
+  return (Array.isArray(ids) ? ids : []).map(id => idMap.get(String(id)) ?? id);
+}
+
+function applyAdvancedImport() {
+  if (!pendingAdvancedImport) return;
+  const data = pendingAdvancedImport;
+  const charIdMap = new Map(), factionIdMap = new Map(), paroIdMap = new Map(), bookIdMap = new Map();
+
+  characters = mergeImportedNamedRecords(characters, data.characters, "character", charIdMap);
+  factions = mergeImportedNamedRecords(factions, data.factions, "faction", factionIdMap);
+  paros = mergeImportedNamedRecords(paros, data.paros, "paro", paroIdMap, record => ({ ...record, members: remapImportIds(record.members, charIdMap) }));
+  (Array.isArray(data.characters) ? data.characters : []).forEach((importedChar, importedIndex) => {
+    const mappedId = charIdMap.get(String(importedChar.id));
+    const target = characters.find(char => char.id === mappedId);
+    if (!target || !importedChar.paroValues) return;
+    const conflict = pendingImportConflicts.find(item => item.type === "character" && item.importedIndex === importedIndex);
+    const selectedImported = !conflict || document.querySelector(`input[name="import_choice_${conflict.key}"]:checked`)?.value === "imported";
+    if (!selectedImported) return;
+    target.paroValues = Object.entries(importedChar.paroValues).reduce((result, [oldParoId, values]) => {
+      result[paroIdMap.get(String(oldParoId)) ?? oldParoId] = values;
+      return result;
+    }, {});
+  });
+  books = mergeImportedNamedRecords(books, data.books, "book", bookIdMap, record => ({
+    ...record, charIds: remapImportIds(record.charIds, charIdMap), factionIds: remapImportIds(record.factionIds, factionIdMap)
+  }));
+
+  const unusedMap = new Map();
+  rankings = mergeImportedNamedRecords(rankings, data.rankings, "ranking", unusedMap, record => ({
+    ...record,
+    items: (record.items || []).map(item => ({ ...item, charId: charIdMap.get(String(item.charId)) ?? item.charId })),
+    cutoffs: (record.cutoffs || []).map(item => ({ ...item, charId: charIdMap.get(String(item.charId)) ?? item.charId }))
+  }));
+  cps = mergeImportedNamedRecords(cps, normalizeCpCollection(data.cps || data.couples || []), "cp", new Map(), record => ({
+    ...record, members: (record.members || []).map(member => ({ ...member, charId: charIdMap.get(String(member.charId)) ?? member.charId }))
+  }));
+  documents = mergeImportedNamedRecords(documents, data.documents, "document", new Map(), record => ({
+    ...record,
+    bookId: bookIdMap.get(String(record.bookId)) ?? record.bookId,
+    charIds: remapImportIds(record.charIds, charIdMap),
+    factionIds: remapImportIds(record.factionIds, factionIdMap)
+  }));
+  collapsedBooks = { ...collapsedBooks, ...(data.collapsedBooks || {}) };
+
+  saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
+  const addedCount = [data.characters, data.factions].reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+  cancelAdvancedImport();
+  alert(`挑選讀檔完成！已檢查並合併 ${addedCount} 筆人物與陣營資料。`);
+}
+
+function cancelAdvancedImport() {
+  closeModal("advancedImportModal");
+  pendingAdvancedImport = null;
+  pendingImportConflicts = [];
+  const input = document.getElementById("jsonFileInput");
+  if (input) input.value = "";
 }
 
 function openApiKeyModal() { document.getElementById("apiKeyModal").classList.add("active"); }
