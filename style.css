@@ -249,6 +249,10 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .cp-avatars-row { display: flex; align-items: center; gap: -0.4rem; }
 .cp-avatar-img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-gold); margin-right: -8px; }
 .cp-section-box { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 0.6rem 0.8rem; border-left: 3px solid var(--accent-gold); font-size: 0.82rem; }
+.cp-member-card { background:var(--bg-secondary); border:1px solid var(--border-color); border-left:3px solid var(--accent-gold); border-radius:var(--radius-sm); padding:.8rem; margin-bottom:.65rem; }
+.cp-member-card > strong { display:block; margin-bottom:.55rem; color:var(--text-main); }
+.cp-member-card textarea { min-height:78px; resize:vertical; }
+.cp-type-badge { font-size:.68rem; padding:.12rem .45rem; border-radius:999px; background:rgba(217,119,6,.12); color:var(--accent-coffee); border:1px solid rgba(217,119,6,.2); }
 
 /* Factions List & Custom Sections */
 .faction-list { display: flex; flex-direction: column; gap: 1.2rem; }
