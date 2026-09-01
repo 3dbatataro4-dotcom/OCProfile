@@ -90,6 +90,7 @@ function loadStateFromLocalStorage() {
       if (!Array.isArray(cps) || cps.length === 0) cps = [...PRESET_CPS];
     } catch (e) { cps = [...PRESET_CPS]; }
   } else { cps = [...PRESET_CPS]; }
+  cps = normalizeCpCollection(cps);
 
   const savedBooks = localStorage.getItem("oc_books");
   if (savedBooks) {
@@ -373,6 +374,51 @@ function deleteCharacter(charId) {
 }
 
 // ========== 4.5. CP 關係細節模組 ==========
+function normalizeCpRecord(cp) {
+  if (!cp || typeof cp !== "object") return null;
+  // 2026-08-31 舊版 couples 格式：保留每位成員各自的定位、R18 與感想。
+  if (Array.isArray(cp.members)) {
+    return {
+      id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: cp.name || "未命名關係",
+      type: cp.type === "other" ? "other" : "cp",
+      relationType: cp.relationType || "",
+      members: cp.members.map(member => ({
+        charId: member.charId,
+        position: member.position ?? member.role ?? "",
+        r18: member.r18 || "",
+        thoughts: member.thoughts || member.opinion || ""
+      })).filter(member => member.charId),
+      sections: (cp.sections || cp.customSections || []).map(section => ({
+        id: section.id || `cpsec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        title: section.title || "",
+        content: section.content || ""
+      }))
+    };
+  }
+
+  // 現行扁平 cps 格式：轉回逐人成員格式，原本的全體欄位轉成自訂詞條避免遺失。
+  const positions = cp.positions || [];
+  const sections = [...(cp.customSections || cp.sections || [])];
+  if (cp.relationshipThoughts && !sections.some(s => s.title === "關係總體感想")) sections.push({ title: "關係總體感想", content: cp.relationshipThoughts });
+  if (cp.r18Notes && !sections.some(s => s.title === "關係狀況補充")) sections.push({ title: "關係狀況補充", content: cp.r18Notes });
+  return {
+    id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    name: cp.name || "未命名關係",
+    type: cp.type === "other" ? "other" : "cp",
+    relationType: cp.relationType || "",
+    members: (cp.memberIds || []).map(charId => {
+      const pos = positions.find(item => item.charId === charId);
+      return { charId, position: pos?.role || pos?.position || "", r18: "", thoughts: "" };
+    }),
+    sections: sections.map(section => ({ id: section.id || `cpsec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: section.title || "", content: section.content || "" }))
+  };
+}
+
+function normalizeCpCollection(records) {
+  return (Array.isArray(records) ? records : []).map(normalizeCpRecord).filter(Boolean);
+}
+
 function renderCpModule() {
   const grid = document.getElementById("cpGrid");
   if (!grid) return;
@@ -382,18 +428,25 @@ function renderCpModule() {
     return;
   }
 
-  grid.innerHTML = cps.map(cp => {
-    const memberChars = (cp.memberIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
+  grid.innerHTML = cps.map(rawCp => {
+    const cp = normalizeCpRecord(rawCp);
+    const memberChars = (cp.members || []).map(member => characters.find(c => c.id === member.charId)).filter(Boolean);
     const avatarsHtml = memberChars.map(c => `
       <img class="cp-avatar-img" src="${c.avatar}" title="${c.name}" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
     `).join('');
 
-    const positionsHtml = (cp.positions || []).map(p => {
-      const char = memberChars.find(c => c.id === p.charId);
-      return char ? `<span class="badge" style="background:var(--bg-secondary); border:1px solid var(--accent-gold); color:var(--accent-coffee);">${char.name}: ${p.role || '未定'}</span>` : '';
+    const positionsHtml = (cp.members || []).map(member => {
+      const char = memberChars.find(c => c.id === member.charId);
+      return char ? `<span class="badge" style="background:var(--bg-secondary); border:1px solid var(--accent-gold); color:var(--accent-coffee);">${char.name}: ${member.position || '未定'}</span>` : '';
     }).join(' ');
 
-    const sectionsHtml = (cp.customSections || []).map(sec => `
+    const memberDetailsHtml = (cp.members || []).map(member => {
+      const char = characters.find(c => c.id === member.charId);
+      if (!char) return '';
+      return `<div class="cp-member-card"><strong>${char.name}</strong>${cp.type !== 'other' && member.r18 ? `<div><small>R18／互動狀況：</small><span style="white-space:pre-line;">${member.r18}</span></div>` : ''}${member.thoughts ? `<div><small>對關係／其他成員的看法：</small><span style="white-space:pre-line;">${member.thoughts}</span></div>` : ''}</div>`;
+    }).join('');
+
+    const sectionsHtml = (cp.sections || []).map(sec => `
       <div class="cp-section-box mt-2">
         <strong style="color:var(--accent-coffee);"><i class="fa-solid fa-bookmark"></i> ${sec.title}</strong>
         <p style="white-space:pre-line; color:var(--text-main); margin-top:0.2rem;">${sec.content}</p>
@@ -406,7 +459,7 @@ function renderCpModule() {
           <div style="display:flex; align-items:center; gap:0.8rem;">
             <div class="cp-avatars-row">${avatarsHtml}</div>
             <div>
-              <h3 style="font-size:1.05rem;">${cp.name}</h3>
+              <h3 style="font-size:1.05rem;">${cp.name} <span class="cp-type-badge">${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}</span></h3>
               <div style="margin-top:0.2rem;">${positionsHtml}</div>
             </div>
           </div>
@@ -416,18 +469,7 @@ function renderCpModule() {
           </div>
         </div>
 
-        ${cp.relationshipThoughts ? `
-          <div style="font-size:0.84rem; color:var(--text-muted); font-style:italic;">
-            <i class="fa-solid fa-quote-left"></i> ${cp.relationshipThoughts}
-          </div>
-        ` : ''}
-
-        ${cp.r18Notes ? `
-          <div style="font-size:0.82rem; background:var(--bg-secondary); padding:0.5rem 0.8rem; border-radius:6px; border-left:3px solid var(--accent-gold);">
-            <strong><i class="fa-solid fa-heart"></i> 關係細節：</strong> ${cp.r18Notes}
-          </div>
-        ` : ''}
-
+        ${memberDetailsHtml}
         ${sectionsHtml}
       </div>
     `;
@@ -438,37 +480,36 @@ function openCpModal(cpId = null) {
   const modal = document.getElementById("cpModal");
   const activeChars = characters.filter(c => !c.isHidden);
   const cbContainer = document.getElementById("cpCharCheckboxes");
-  const posContainer = document.getElementById("cpPositionsContainer");
   const secContainer = document.getElementById("cpCustomSectionsContainer");
 
   secContainer.innerHTML = '';
 
   if (cpId) {
-    const cp = cps.find(item => item.id === cpId);
+    const cp = normalizeCpRecord(cps.find(item => item.id === cpId));
     document.getElementById("cpModalTitle").innerText = `編輯 CP：${cp.name}`;
     document.getElementById("cpId").value = cp.id;
     document.getElementById("cpName").value = cp.name;
-    document.getElementById("cpR18Notes").value = cp.r18Notes || "";
-    document.getElementById("cpThoughts").value = cp.relationshipThoughts || "";
+    document.getElementById("cpType").value = cp.type || "cp";
+    document.getElementById("cpRelationType").value = cp.relationType || "";
 
     cbContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
-        <input type="checkbox" value="${c.id}" ${ (cp.memberIds || []).includes(c.id) ? 'checked' : '' } onchange="renderCpPositionsInputs()">
+        <input type="checkbox" value="${c.id}" ${ (cp.members || []).some(member => member.charId === c.id) ? 'checked' : '' } onchange="renderCpMemberInputs()">
         <span>${c.name}</span>
       </label>
     `).join('');
 
-    (cp.customSections || []).forEach(sec => addCpSectionRow(sec.title, sec.content));
+    (cp.sections || []).forEach(sec => addCpSectionRow(sec.title, sec.content));
   } else {
     document.getElementById("cpModalTitle").innerText = "新建 CP 組合";
     document.getElementById("cpId").value = "";
     document.getElementById("cpName").value = "";
-    document.getElementById("cpR18Notes").value = "";
-    document.getElementById("cpThoughts").value = "";
+    document.getElementById("cpType").value = "cp";
+    document.getElementById("cpRelationType").value = "";
 
     cbContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
-        <input type="checkbox" value="${c.id}" ${ (activeChars.slice(0, 2).map(x=>x.id)).includes(c.id) ? 'checked' : '' } onchange="renderCpPositionsInputs()">
+        <input type="checkbox" value="${c.id}" ${ (activeChars.slice(0, 2).map(x=>x.id)).includes(c.id) ? 'checked' : '' } onchange="renderCpMemberInputs()">
         <span>${c.name}</span>
       </label>
     `).join('');
@@ -478,28 +519,52 @@ function openCpModal(cpId = null) {
     addCpSectionRow("交往後相處模式", "日常相處氛圍與默契細節...");
   }
 
-  renderCpPositionsInputs(cpId);
+  modal.dataset.editingMembers = JSON.stringify(cpId ? normalizeCpRecord(cps.find(item => item.id === cpId)).members : []);
+  toggleCpTypeFields(false);
+  renderCpMemberInputs();
   modal.classList.add("active");
 }
 
-function renderCpPositionsInputs(cpId = null) {
-  const container = document.getElementById("cpPositionsContainer");
+function toggleCpTypeFields(rerender = true) {
+  const isOther = document.getElementById("cpType").value === "other";
+  document.getElementById("cpOtherTypeGroup").style.display = isOther ? "flex" : "none";
+  if (rerender) renderCpMemberInputs();
+}
+
+function renderCpMemberInputs() {
+  const container = document.getElementById("cpMemberDetailsContainer");
   const checkedBoxes = Array.from(document.querySelectorAll("#cpCharCheckboxes input:checked"));
-  const existingCp = cpId ? cps.find(c => c.id === cpId) : null;
+  let savedMembers = [];
+  try { savedMembers = JSON.parse(document.getElementById("cpModal").dataset.editingMembers || "[]"); } catch (e) {}
+  const liveMembers = {};
+  container.querySelectorAll(".cp-member-editor").forEach(row => {
+    liveMembers[row.dataset.charId] = { position: row.querySelector(".cp-member-position").value, r18: row.querySelector(".cp-member-r18")?.value || "", thoughts: row.querySelector(".cp-member-thoughts").value };
+  });
+  savedMembers = savedMembers.map(member => liveMembers[member.charId] ? { ...member, ...liveMembers[member.charId], r18: liveMembers[member.charId].r18 || member.r18 || "" } : member);
+  Object.entries(liveMembers).forEach(([charId, member]) => { if (!savedMembers.some(item => item.charId === charId)) savedMembers.push({ charId, ...member }); });
+  document.getElementById("cpModal").dataset.editingMembers = JSON.stringify(savedMembers);
+  const isOther = document.getElementById("cpType").value === "other";
 
   container.innerHTML = checkedBoxes.map(cb => {
     const char = characters.find(c => c.id === cb.value);
     if (!char) return '';
-    const existingPos = existingCp ? (existingCp.positions || []).find(p => p.charId === char.id) : null;
-    const roleVal = existingPos ? existingPos.role : (char.orientation || '攻');
+    const member = liveMembers[char.id] || savedMembers.find(item => item.charId === char.id) || {};
 
     return `
-      <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.4rem;">
-        <span style="width:110px; font-size:0.85rem; font-weight:600;">${char.name}：</span>
-        <input type="text" class="cp-pos-role" data-charid="${char.id}" placeholder="定位 / 左右位 (如: 攻/受/主攻)" value="${roleVal}" style="flex:1;">
+      <div class="cp-member-card cp-member-editor" data-char-id="${char.id}">
+        <strong>${char.name}</strong>
+        <div class="form-group"><label>${isOther ? '在關係中的身分／定位' : '左右位／定位'}</label><input type="text" class="cp-member-position" value="${member.position || char.orientation || ''}" placeholder="${isOther ? '如：姊姊、朋友、老師' : '如：攻、受、可逆'}"></div>
+        ${isOther ? '' : '<div class="form-group"><label>R18／互動相關狀況</label><textarea class="cp-member-r18" rows="3"></textarea></div>'}
+        <div class="form-group"><label>本人對這段關係／其他成員的看法</label><textarea class="cp-member-thoughts" rows="3"></textarea></div>
       </div>
     `;
   }).join('');
+  container.querySelectorAll(".cp-member-editor").forEach(row => {
+    const member = liveMembers[row.dataset.charId] || savedMembers.find(item => item.charId === row.dataset.charId) || {};
+    const r18 = row.querySelector(".cp-member-r18");
+    if (r18) r18.value = member.r18 || "";
+    row.querySelector(".cp-member-thoughts").value = member.thoughts || "";
+  });
 }
 
 function addCpSectionRow(title = "", content = "") {
@@ -520,14 +585,18 @@ function addCpSectionRow(title = "", content = "") {
 function saveCpForm() {
   const id = document.getElementById("cpId").value;
   const name = document.getElementById("cpName").value.trim();
-  if (!name) { alert("請輸入 CP 組合名稱！"); return; }
+  if (!name) { alert("請輸入關係卡名稱！"); return; }
 
-  const checkedMemberIds = Array.from(document.querySelectorAll("#cpCharCheckboxes input:checked")).map(cb => cb.value);
-  const positionInputs = document.querySelectorAll("#cpPositionsContainer .cp-pos-role");
-  const positions = Array.from(positionInputs).map(input => ({
-    charId: input.getAttribute("data-charid"),
-    role: input.value.trim()
+  const type = document.getElementById("cpType").value;
+  const relationType = type === "other" ? document.getElementById("cpRelationType").value.trim() : "";
+  if (type === "other" && !relationType) { alert("請輸入其他關係名稱！"); return; }
+  const members = Array.from(document.querySelectorAll("#cpMemberDetailsContainer .cp-member-editor")).map(row => ({
+    charId: row.dataset.charId,
+    position: row.querySelector(".cp-member-position").value.trim(),
+    ...(type === "cp" ? { r18: (row.querySelector(".cp-member-r18")?.value || "").trim() } : {}),
+    thoughts: row.querySelector(".cp-member-thoughts").value.trim()
   }));
+  if (members.length < 2) { alert("關係卡請至少選擇兩位人物！"); return; }
 
   const secRows = document.querySelectorAll("#cpCustomSectionsContainer .cp-sec-row");
   const customSections = Array.from(secRows).map(row => ({
@@ -539,11 +608,10 @@ function saveCpForm() {
   const cpData = {
     id: id || `cp_${Date.now()}`,
     name,
-    memberIds: checkedMemberIds,
-    positions,
-    r18Notes: document.getElementById("cpR18Notes").value.trim(),
-    relationshipThoughts: document.getElementById("cpThoughts").value.trim(),
-    customSections
+    type,
+    relationType,
+    members,
+    sections: customSections
   };
 
   if (id) {
@@ -2185,17 +2253,16 @@ async function generateExportText() {
 
   if (mode === 'cps_only') {
     text = `# 【CP 關係細節獨立報告】\n生成時間：${new Date().toLocaleString()}\n\n`;
-    cps.forEach(cp => {
-      text += `## CP 組合: ${cp.name}\n`;
-      if ((cp.positions || []).length) {
-        text += `- 定位/左右位: ${cp.positions.map(p => {
-          const char = characters.find(c => c.id === p.charId);
-          return char ? `${char.name}(${p.role})` : '';
-        }).join(' / ')}\n`;
-      }
-      if (cp.relationshipThoughts) text += `- 感想: ${cp.relationshipThoughts}\n`;
-      if (cp.r18Notes) text += `- 關係細節: ${cp.r18Notes}\n`;
-      (cp.customSections || []).forEach(sec => {
+    cps.forEach(rawCp => {
+      const cp = normalizeCpRecord(rawCp);
+      text += `## ${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}: ${cp.name}\n`;
+      (cp.members || []).forEach(member => {
+        const char = characters.find(c => c.id === member.charId);
+        text += `- ${char?.name || '已移除角色'}｜定位：${member.position || '未填'}`;
+        if (cp.type !== 'other') text += `｜R18／互動：${member.r18 || '未填'}`;
+        text += `｜對關係／其他成員的看法：${member.thoughts || '未填'}\n`;
+      });
+      (cp.sections || []).forEach(sec => {
         text += `\n✦ 【${sec.title}】\n${sec.content}\n`;
       });
       text += `\n-----------------------------------\n\n`;
@@ -2276,14 +2343,19 @@ async function generateExportText() {
     if (incCp) {
       text += `\n===================================\n`;
       text += `## 【CP 關係細節 (僅所選角色相關)】\n\n`;
-      cps.forEach(cp => {
-        const hasSelectedChar = (cp.memberIds || []).some(id => selectedCharIds.includes(id));
+      cps.forEach(rawCp => {
+        const cp = normalizeCpRecord(rawCp);
+        const hasSelectedChar = (cp.members || []).some(member => selectedCharIds.includes(member.charId));
         if (hasSelectedChar) {
-          text += `### CP 組合: ${cp.name}\n`;
-          if (cp.relationshipThoughts) text += `- 感想: ${cp.relationshipThoughts}\n`;
-          if (cp.r18Notes) text += `- 關係細節: ${cp.r18Notes}\n`;
-          (cp.customSections || []).forEach(sec => {
-            text += `✦ 【${sec.title}】: ${sec.content}\n`;
+          text += `### ${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}: ${cp.name}\n`;
+          (cp.members || []).forEach(member => {
+            const char = characters.find(c => c.id === member.charId);
+            text += `- ${char?.name || '已移除角色'}｜定位：${member.position || '未填'}`;
+            if (cp.type !== 'other') text += `｜R18／互動：${member.r18 || '未填'}`;
+            text += `｜看法：${member.thoughts || '未填'}\n`;
+          });
+          (cp.sections || []).forEach(sec => {
+            text += `✦ 【${sec.title}】:\n${sec.content}\n`;
           });
           text += `\n`;
         }
@@ -2403,7 +2475,7 @@ function downloadExportPdf() {
 
 // ========== 12. 線上快照同步 ==========
 function openCloudSyncModal() {
-  const exportData = { characters, paros, factions, rankings, cps, books, documents, collapsedBooks, exportedAt: new Date().toISOString() };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, collapsedBooks, exportedAt: new Date().toISOString() };
   const jsonStr = JSON.stringify(exportData);
   const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
   document.getElementById("cloudSyncStringArea").value = encoded;
@@ -2427,7 +2499,7 @@ function applyCloudSyncString() {
     if (data.paros) paros = data.paros;
     if (data.factions) factions = data.factions;
     if (data.rankings) rankings = data.rankings;
-    if (data.cps) cps = data.cps;
+    if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
     if (data.books) books = data.books;
     if (data.documents) documents = data.documents;
     if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
@@ -2454,7 +2526,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = { characters, paros, factions, rankings, cps, books, documents, collapsedBooks, deepseekSettings };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, collapsedBooks, deepseekSettings };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -2475,7 +2547,7 @@ function handleImportJson(event) {
       if (data.paros) paros = data.paros;
       if (data.factions) factions = data.factions;
       if (data.rankings) rankings = data.rankings;
-      if (data.cps) cps = data.cps;
+      if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
       if (data.books) books = data.books;
       if (data.documents) documents = data.documents;
       if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
