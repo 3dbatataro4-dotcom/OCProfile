@@ -1,5 +1,5 @@
 // ==========================================================================
-// OC 原創人物設定與關係管理系統 - 核心邏輯 (app.js Phase 8 重構)
+// OC 原創人物設定與關係管理系統 - 核心邏輯 (app.js Bug Fix Phase 9)
 // ==========================================================================
 
 // 全域狀態
@@ -1236,7 +1236,7 @@ function removeRankingItem(rankId, index) {
   if (rank) { rank.items.splice(index, 1); saveStateToLocalStorage(); renderRankingModule(); }
 }
 
-// ========== 9. Paro 平行世界 ==========
+// ========== 9. Paro 平行世界模組 (【Bug修復】：保留已有 Field ID) ==========
 function renderParoList() {
   const bar = document.getElementById("paroSubjectBar");
   const card = document.getElementById("paroSingleCard");
@@ -1349,7 +1349,8 @@ function openParoModal(paroId = null) {
     document.getElementById("paroName").value = paro.name;
     document.getElementById("paroDescription").value = paro.description || "";
 
-    (paro.fields || []).forEach(f => addParoFieldRow(f.name, f.type, (f.options || []).join(','), f.description));
+    // 關鍵修復：傳入舊有的 f.id，避免重新生 ID 導致舊有填寫紀錄消失！
+    (paro.fields || []).forEach(f => addParoFieldRow(f.name, f.type, (f.options || []).join(','), f.description, f.id));
 
     checkboxContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
@@ -1377,11 +1378,14 @@ function openParoModal(paroId = null) {
   modal.classList.add("active");
 }
 
-function addParoFieldRow(name = "", type = "text", options = "", desc = "") {
+function addParoFieldRow(name = "", type = "text", options = "", desc = "", existingFieldId = null) {
   const container = document.getElementById("paroFieldsContainer");
   if (!container) return;
+
+  const fieldId = existingFieldId || `field_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
   const row = document.createElement("div");
   row.className = "paro-field-row";
+  row.setAttribute("data-fieldid", fieldId);
   row.style.cssText = "display:flex; flex-direction:column; gap:0.3rem; background:var(--bg-secondary); padding:0.6rem; border-radius:6px; margin-bottom:0.5rem;";
   row.innerHTML = `
     <div style="display:flex; gap:0.4rem;">
@@ -1412,6 +1416,7 @@ function saveParoForm() {
 
   const fieldRows = document.querySelectorAll("#paroFieldsContainer .paro-field-row");
   const fields = Array.from(fieldRows).map(row => {
+    const fId = row.getAttribute("data-fieldid") || `field_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
     const fName = row.querySelector(".field-name").value.trim();
     const fType = row.querySelector(".field-type").value;
     const fOptsStr = row.querySelector(".field-options").value.trim();
@@ -1420,7 +1425,7 @@ function saveParoForm() {
     const optionsArr = fType === 'select' ? fOptsStr.split(',').map(o => o.trim()).filter(Boolean) : null;
 
     return {
-      id: `field_${Date.now()}_${Math.random().toString(36).substr(2,4)}`,
+      id: fId,
       name: fName,
       type: fType,
       options: optionsArr,
@@ -1451,7 +1456,7 @@ function saveParoForm() {
   closeModal("paroModal");
 }
 
-// ========== 10. 陣營與大事件詞條 ==========
+// ========== 10. 陣營與大事件詞條 (【Bug修復】：保留已有 SubTag/Section ID) ==========
 function renderFactionList() {
   const container = document.getElementById("factionList");
   if (!container) return;
@@ -1504,7 +1509,7 @@ function openFactionModal(factionId = null) {
     document.getElementById("factionDescription").value = f.description || "";
 
     (f.subTags || []).forEach(sub => addSubTagRow(sub.name, sub.description));
-    (f.customSections || []).forEach(sec => addFactionSectionRow(sec.title, sec.content));
+    (f.customSections || []).forEach(sec => addFactionSectionRow(sec.title, sec.content, sec.id));
   } else {
     document.getElementById("factionModalTitle").innerText = "新建陣營與世界觀";
     document.getElementById("factionId").value = "";
@@ -1530,10 +1535,12 @@ function addSubTagRow(name = "", desc = "") {
   container.appendChild(row);
 }
 
-function addFactionSectionRow(title = "", content = "") {
+function addFactionSectionRow(title = "", content = "", existingSecId = null) {
   const container = document.getElementById("factionCustomSectionsContainer");
+  const secId = existingSecId || `fsec_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
   const row = document.createElement("div");
   row.className = "faction-sec-row";
+  row.setAttribute("data-secid", secId);
   row.style.cssText = "background:var(--bg-secondary); padding:0.6rem; border-radius:6px; margin-bottom:0.5rem; display:flex; flex-direction:column; gap:0.3rem;";
   row.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1557,11 +1564,14 @@ function saveFactionForm() {
   })).filter(s => s.name);
 
   const secRows = document.querySelectorAll("#factionCustomSectionsContainer .faction-sec-row");
-  const customSections = Array.from(secRows).map(row => ({
-    id: `fsec_${Date.now()}_${Math.random().toString(36).substr(2,4)}`,
-    title: row.querySelector(".faction-sec-title").value.trim(),
-    content: row.querySelector(".faction-sec-content").value.trim()
-  })).filter(s => s.title);
+  const customSections = Array.from(secRows).map(row => {
+    const secId = row.getAttribute("data-secid") || `fsec_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
+    return {
+      id: secId,
+      title: row.querySelector(".faction-sec-title").value.trim(),
+      content: row.querySelector(".faction-sec-content").value.trim()
+    };
+  }).filter(s => s.title);
 
   const factionData = {
     id: id || `faction_${Date.now()}`,
@@ -1593,7 +1603,7 @@ function deleteFaction(factionId) {
   }
 }
 
-// ========== 10.5. 同人文檔與書籍資料庫 (書籍勾選總結、自訂書籍Icon顏色、摺疊) ==========
+// ========== 10.5. 同人文檔與書籍資料庫 ==========
 function toggleBookCollapse(bookId) {
   collapsedBooks[bookId] = !collapsedBooks[bookId];
   saveStateToLocalStorage();
@@ -1902,14 +1912,12 @@ async function summarizeSelectedDocsWithAi() {
 
   let docSet = new Set();
 
-  // Add all docs from checked books
   checkedBookCbs.forEach(cb => {
     const bookId = cb.value;
     const bookDocs = documents.filter(d => d.bookId === bookId);
     bookDocs.forEach(d => docSet.add(d));
   });
 
-  // Add individually checked docs
   checkedDocCbs.forEach(cb => {
     const doc = documents.find(d => d.id === cb.value);
     if (doc) docSet.add(doc);
