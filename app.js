@@ -1,5 +1,5 @@
 // ==========================================================================
-// OC 原創人物設定與關係管理系統 - 核心邏輯 (app.js Phase 5 重構)
+// OC 原創人物設定與關係管理系統 - 核心邏輯 (app.js Phase 8 重構)
 // ==========================================================================
 
 // 全域狀態
@@ -7,7 +7,10 @@ let characters = [];
 let paros = [];
 let factions = [];
 let rankings = [];
-let couples = [];
+let cps = [];
+let books = [];
+let documents = [];
+let collapsedBooks = {};
 let globalTags = new Set();
 
 let deepseekSettings = {
@@ -19,7 +22,7 @@ let deepseekSettings = {
 let currentTheme = 'dark';
 let currentRelViewMode = 'matrix';
 let selectedGraphCharIds = [];
-let perspectiveTargets = {}; // { sourceCharId: [targetName1, targetName2] }
+let perspectiveTargets = {};
 
 let customNodePositions = {};
 let graphZoomLevel = 1.0;
@@ -27,7 +30,7 @@ let draggedNodeId = null;
 let dragNodeOffset = { x: 0, y: 0 };
 
 let currentRankingSubjectId = null;
-let currentParoId = null; // Paro 一頁一世界
+let currentParoId = null;
 
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
@@ -51,9 +54,7 @@ function loadStateFromLocalStorage() {
       characters = JSON.parse(savedChars);
       if (!Array.isArray(characters) || characters.length === 0) characters = [...INITIAL_CHARACTERS];
     } catch (e) { characters = [...INITIAL_CHARACTERS]; }
-  } else {
-    characters = [...INITIAL_CHARACTERS];
-  }
+  } else { characters = [...INITIAL_CHARACTERS]; }
 
   const savedParos = localStorage.getItem("oc_paros");
   if (savedParos) {
@@ -61,9 +62,7 @@ function loadStateFromLocalStorage() {
       paros = JSON.parse(savedParos);
       if (!Array.isArray(paros) || paros.length === 0) paros = [...PRESET_PAROS];
     } catch (e) { paros = [...PRESET_PAROS]; }
-  } else {
-    paros = [...PRESET_PAROS];
-  }
+  } else { paros = [...PRESET_PAROS]; }
 
   const savedFactions = localStorage.getItem("oc_factions");
   if (savedFactions) {
@@ -71,9 +70,7 @@ function loadStateFromLocalStorage() {
       factions = JSON.parse(savedFactions);
       if (!Array.isArray(factions) || factions.length === 0) factions = [...PRESET_FACTIONS];
     } catch (e) { factions = [...PRESET_FACTIONS]; }
-  } else {
-    factions = [...PRESET_FACTIONS];
-  }
+  } else { factions = [...PRESET_FACTIONS]; }
 
   const savedRankings = localStorage.getItem("oc_rankings");
   if (savedRankings) {
@@ -81,22 +78,40 @@ function loadStateFromLocalStorage() {
       rankings = JSON.parse(savedRankings);
       if (!Array.isArray(rankings) || rankings.length === 0) rankings = [...PRESET_RANKINGS];
     } catch (e) { rankings = [...PRESET_RANKINGS]; }
-  } else {
-    rankings = [...PRESET_RANKINGS];
-  }
+  } else { rankings = [...PRESET_RANKINGS]; }
 
-  try { couples = JSON.parse(localStorage.getItem("oc_couples") || "[]"); } catch (e) { couples = []; }
-  if (!Array.isArray(couples)) couples = [];
+  const savedCps = localStorage.getItem("oc_cps");
+  if (savedCps) {
+    try {
+      cps = JSON.parse(savedCps);
+      if (!Array.isArray(cps) || cps.length === 0) cps = [...PRESET_CPS];
+    } catch (e) { cps = [...PRESET_CPS]; }
+  } else { cps = [...PRESET_CPS]; }
+
+  const savedBooks = localStorage.getItem("oc_books");
+  if (savedBooks) {
+    try {
+      books = JSON.parse(savedBooks);
+      if (!Array.isArray(books) || books.length === 0) books = [...PRESET_BOOKS];
+    } catch (e) { books = [...PRESET_BOOKS]; }
+  } else { books = [...PRESET_BOOKS]; }
+
+  const savedDocs = localStorage.getItem("oc_documents");
+  if (savedDocs) {
+    try {
+      documents = JSON.parse(savedDocs);
+      if (!Array.isArray(documents) || documents.length === 0) documents = [...PRESET_DOCUMENTS];
+    } catch (e) { documents = [...PRESET_DOCUMENTS]; }
+  } else { documents = [...PRESET_DOCUMENTS]; }
+
+  const savedCollapsed = localStorage.getItem("oc_collapsed_books");
+  if (savedCollapsed) { try { collapsedBooks = JSON.parse(savedCollapsed); } catch (e) {} }
 
   const savedTargets = localStorage.getItem("oc_perspective_targets");
-  if (savedTargets) {
-    try { perspectiveTargets = JSON.parse(savedTargets); } catch (e) {}
-  }
+  if (savedTargets) { try { perspectiveTargets = JSON.parse(savedTargets); } catch (e) {} }
 
   const savedSettings = localStorage.getItem("oc_deepseek_settings");
-  if (savedSettings) {
-    try { deepseekSettings = { ...deepseekSettings, ...JSON.parse(savedSettings) }; } catch (e) {}
-  }
+  if (savedSettings) { try { deepseekSettings = { ...deepseekSettings, ...JSON.parse(savedSettings) }; } catch (e) {} }
 
   document.getElementById("deepseekApiKey").value = deepseekSettings.apiKey;
   document.getElementById("deepseekBaseUrl").value = deepseekSettings.baseUrl;
@@ -112,22 +127,28 @@ function saveStateToLocalStorage() {
   localStorage.setItem("oc_paros", JSON.stringify(paros));
   localStorage.setItem("oc_factions", JSON.stringify(factions));
   localStorage.setItem("oc_rankings", JSON.stringify(rankings));
-  localStorage.setItem("oc_couples", JSON.stringify(couples));
+  localStorage.setItem("oc_cps", JSON.stringify(cps));
+  localStorage.setItem("oc_books", JSON.stringify(books));
+  localStorage.setItem("oc_documents", JSON.stringify(documents));
+  localStorage.setItem("oc_collapsed_books", JSON.stringify(collapsedBooks));
   localStorage.setItem("oc_perspective_targets", JSON.stringify(perspectiveTargets));
   localStorage.setItem("oc_deepseek_settings", JSON.stringify(deepseekSettings));
 }
 
 function resetDefaultCharacters() {
-  if (confirm("確定要恢復預設角色資料嗎？")) {
+  if (confirm("確定要恢復預設角色與設定資料嗎？")) {
     characters = [...INITIAL_CHARACTERS];
     paros = [...PRESET_PAROS];
     factions = [...PRESET_FACTIONS];
     rankings = [...PRESET_RANKINGS];
-    couples = [];
+    cps = [...PRESET_CPS];
+    books = [...PRESET_BOOKS];
+    documents = [...PRESET_DOCUMENTS];
+    collapsedBooks = {};
     saveStateToLocalStorage();
     syncGlobalTags();
     renderAllViews();
-    alert("已成功恢復所有預設角色與設定！");
+    alert("已成功恢復所有預設資料！");
   }
 }
 
@@ -156,16 +177,21 @@ function syncGlobalTags() {
     if (f.name) globalTags.add(f.name);
     (f.subTags || []).forEach(sub => { if (sub.name) globalTags.add(sub.name); });
   });
+  books.forEach(b => (b.tags || []).forEach(t => globalTags.add(t)));
+  documents.forEach(d => (d.tags || []).forEach(t => globalTags.add(t)));
 
   const filterSelect = document.getElementById("tagFilter");
   const modalSelect = document.getElementById("charTagSelect");
+  const docTagSelect = document.getElementById("docTagFilter");
 
-  filterSelect.innerHTML = `<option value="">全部標籤</option>`;
-  modalSelect.innerHTML = `<option value="">+ 下拉選擇已建立標籤 / 陣營</option>`;
+  if (filterSelect) filterSelect.innerHTML = `<option value="">全部標籤</option>`;
+  if (modalSelect) modalSelect.innerHTML = `<option value="">+ 下拉選擇已建立標籤 / 陣營</option>`;
+  if (docTagSelect) docTagSelect.innerHTML = `<option value="">全部標籤</option>`;
 
   globalTags.forEach(tag => {
-    filterSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
-    modalSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
+    if (filterSelect) filterSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
+    if (modalSelect) modalSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
+    if (docTagSelect) docTagSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
   });
 }
 
@@ -184,13 +210,14 @@ function addTagFromSelect(tag) {
 function renderAllViews() {
   updateBadges();
   renderCharacterCards();
+  renderCpModule();
   renderCallNameMatrix();
   renderRelationshipGraphCheckboxes();
   renderParoList();
   renderFactionList();
   renderRankingModule();
+  renderDocumentsModule();
   renderExportCharList();
-  renderCoupleList();
 }
 
 function updateBadges() {
@@ -198,7 +225,6 @@ function updateBadges() {
   const hiddenCount = characters.filter(c => c.isHidden).length;
   document.getElementById("activeCharBadge").innerText = activeCount;
   document.getElementById("hiddenCharBadge").innerText = hiddenCount;
-  document.getElementById("coupleBadge").innerText = couples.length;
 }
 
 function switchTab(tabId) {
@@ -218,14 +244,16 @@ function switchTab(tabId) {
     renderRankingModule();
   } else if (tabId === 'tab-paros') {
     renderParoList();
+  } else if (tabId === 'tab-cps') {
+    renderCpModule();
+  } else if (tabId === 'tab-documents') {
+    renderDocumentsModule();
   } else if (tabId === 'tab-export') {
     renderExportCharList();
-  } else if (tabId === 'tab-couples') {
-    renderCoupleList();
   }
 }
 
-// ========== 4. 人物卡片與柔和主題色 ==========
+// ========== 4. 人物卡片 ==========
 function renderCharacterCards() {
   const activeGrid = document.getElementById("characterGrid");
   const hiddenGrid = document.getElementById("hiddenCharacterGrid");
@@ -241,8 +269,7 @@ function renderCharacterCards() {
       c.name.toLowerCase().includes(searchKeyword) ||
       (c.englishName && c.englishName.toLowerCase().includes(searchKeyword)) ||
       (c.occupation && c.occupation.toLowerCase().includes(searchKeyword)) ||
-      (c.personality && c.personality.toLowerCase().includes(searchKeyword)) ||
-      (c.customSections || []).some(section => `${section.title || ''} ${section.content || ''}`.toLowerCase().includes(searchKeyword));
+      (c.personality && c.personality.toLowerCase().includes(searchKeyword));
     
     const matchTag = !selectedTag || (c.tags && c.tags.includes(selectedTag));
     return matchSearch && matchTag;
@@ -305,13 +332,6 @@ function createCharacterCardHtml(char) {
           </div>
         ` : ''}
 
-        ${(char.customSections || []).map(section => `
-          <div>
-            <div class="char-field-label"><i class="fa-solid fa-bookmark"></i> ${section.title || '未命名欄位'}</div>
-            <div class="char-text-box">${section.content || '（尚無內容）'}</div>
-          </div>
-        `).join('')}
-
         ${tagsHtml ? `<div class="tag-cloud">${tagsHtml}</div>` : ''}
       </div>
 
@@ -349,12 +369,205 @@ function deleteCharacter(charId) {
   }
 }
 
+// ========== 4.5. CP 關係細節模組 ==========
+function renderCpModule() {
+  const grid = document.getElementById("cpGrid");
+  if (!grid) return;
+
+  if (!cps.length) {
+    grid.innerHTML = `<div class="empty-state"><p>目前尚無 CP 組合。點擊右上角「新建 CP 組合」建立第一對 CP 關係！</p></div>`;
+    return;
+  }
+
+  grid.innerHTML = cps.map(cp => {
+    const memberChars = (cp.memberIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
+    const avatarsHtml = memberChars.map(c => `
+      <img class="cp-avatar-img" src="${c.avatar}" title="${c.name}" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
+    `).join('');
+
+    const positionsHtml = (cp.positions || []).map(p => {
+      const char = memberChars.find(c => c.id === p.charId);
+      return char ? `<span class="badge" style="background:var(--bg-secondary); border:1px solid var(--accent-gold); color:var(--accent-coffee);">${char.name}: ${p.role || '未定'}</span>` : '';
+    }).join(' ');
+
+    const sectionsHtml = (cp.customSections || []).map(sec => `
+      <div class="cp-section-box mt-2">
+        <strong style="color:var(--accent-coffee);"><i class="fa-solid fa-bookmark"></i> ${sec.title}</strong>
+        <p style="white-space:pre-line; color:var(--text-main); margin-top:0.2rem;">${sec.content}</p>
+      </div>
+    `).join('');
+
+    return `
+      <div class="cp-card">
+        <div class="cp-card-header">
+          <div style="display:flex; align-items:center; gap:0.8rem;">
+            <div class="cp-avatars-row">${avatarsHtml}</div>
+            <div>
+              <h3 style="font-size:1.05rem;">${cp.name}</h3>
+              <div style="margin-top:0.2rem;">${positionsHtml}</div>
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-xs btn-outline" onclick="openCpModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
+            <button class="btn btn-xs btn-danger" onclick="deleteCp('${cp.id}')">&times;</button>
+          </div>
+        </div>
+
+        ${cp.relationshipThoughts ? `
+          <div style="font-size:0.84rem; color:var(--text-muted); font-style:italic;">
+            <i class="fa-solid fa-quote-left"></i> ${cp.relationshipThoughts}
+          </div>
+        ` : ''}
+
+        ${cp.r18Notes ? `
+          <div style="font-size:0.82rem; background:var(--bg-secondary); padding:0.5rem 0.8rem; border-radius:6px; border-left:3px solid var(--accent-gold);">
+            <strong><i class="fa-solid fa-heart"></i> 關係細節：</strong> ${cp.r18Notes}
+          </div>
+        ` : ''}
+
+        ${sectionsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+function openCpModal(cpId = null) {
+  const modal = document.getElementById("cpModal");
+  const activeChars = characters.filter(c => !c.isHidden);
+  const cbContainer = document.getElementById("cpCharCheckboxes");
+  const posContainer = document.getElementById("cpPositionsContainer");
+  const secContainer = document.getElementById("cpCustomSectionsContainer");
+
+  secContainer.innerHTML = '';
+
+  if (cpId) {
+    const cp = cps.find(item => item.id === cpId);
+    document.getElementById("cpModalTitle").innerText = `編輯 CP：${cp.name}`;
+    document.getElementById("cpId").value = cp.id;
+    document.getElementById("cpName").value = cp.name;
+    document.getElementById("cpR18Notes").value = cp.r18Notes || "";
+    document.getElementById("cpThoughts").value = cp.relationshipThoughts || "";
+
+    cbContainer.innerHTML = activeChars.map(c => `
+      <label class="checkbox-pill">
+        <input type="checkbox" value="${c.id}" ${ (cp.memberIds || []).includes(c.id) ? 'checked' : '' } onchange="renderCpPositionsInputs()">
+        <span>${c.name}</span>
+      </label>
+    `).join('');
+
+    (cp.customSections || []).forEach(sec => addCpSectionRow(sec.title, sec.content));
+  } else {
+    document.getElementById("cpModalTitle").innerText = "新建 CP 組合";
+    document.getElementById("cpId").value = "";
+    document.getElementById("cpName").value = "";
+    document.getElementById("cpR18Notes").value = "";
+    document.getElementById("cpThoughts").value = "";
+
+    cbContainer.innerHTML = activeChars.map(c => `
+      <label class="checkbox-pill">
+        <input type="checkbox" value="${c.id}" ${ (activeChars.slice(0, 2).map(x=>x.id)).includes(c.id) ? 'checked' : '' } onchange="renderCpPositionsInputs()">
+        <span>${c.name}</span>
+      </label>
+    `).join('');
+
+    addCpSectionRow("相遇情況", "講述兩人第一次相遇的地點與心境...");
+    addCpSectionRow("交往過程", "告白與確立戀人關係的經過...");
+    addCpSectionRow("交往後相處模式", "日常相處氛圍與默契細節...");
+  }
+
+  renderCpPositionsInputs(cpId);
+  modal.classList.add("active");
+}
+
+function renderCpPositionsInputs(cpId = null) {
+  const container = document.getElementById("cpPositionsContainer");
+  const checkedBoxes = Array.from(document.querySelectorAll("#cpCharCheckboxes input:checked"));
+  const existingCp = cpId ? cps.find(c => c.id === cpId) : null;
+
+  container.innerHTML = checkedBoxes.map(cb => {
+    const char = characters.find(c => c.id === cb.value);
+    if (!char) return '';
+    const existingPos = existingCp ? (existingCp.positions || []).find(p => p.charId === char.id) : null;
+    const roleVal = existingPos ? existingPos.role : (char.orientation || '攻');
+
+    return `
+      <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.4rem;">
+        <span style="width:110px; font-size:0.85rem; font-weight:600;">${char.name}：</span>
+        <input type="text" class="cp-pos-role" data-charid="${char.id}" placeholder="定位 / 左右位 (如: 攻/受/主攻)" value="${roleVal}" style="flex:1;">
+      </div>
+    `;
+  }).join('');
+}
+
+function addCpSectionRow(title = "", content = "") {
+  const container = document.getElementById("cpCustomSectionsContainer");
+  const row = document.createElement("div");
+  row.className = "cp-sec-row";
+  row.style.cssText = "background:var(--bg-secondary); padding:0.6rem; border-radius:6px; margin-bottom:0.5rem; display:flex; flex-direction:column; gap:0.3rem;";
+  row.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <input type="text" class="cp-sec-title" placeholder="詞條標題 (如: 相遇情況 / 約會模式)" value="${title}" style="font-weight:600; flex:1;">
+      <button type="button" class="btn btn-xs btn-danger ml-2" onclick="this.parentElement.parentElement.remove()">&times;</button>
+    </div>
+    <textarea class="cp-sec-content" rows="2" placeholder="詳細內文與情節描繪...">${content}</textarea>
+  `;
+  container.appendChild(row);
+}
+
+function saveCpForm() {
+  const id = document.getElementById("cpId").value;
+  const name = document.getElementById("cpName").value.trim();
+  if (!name) { alert("請輸入 CP 組合名稱！"); return; }
+
+  const checkedMemberIds = Array.from(document.querySelectorAll("#cpCharCheckboxes input:checked")).map(cb => cb.value);
+  const positionInputs = document.querySelectorAll("#cpPositionsContainer .cp-pos-role");
+  const positions = Array.from(positionInputs).map(input => ({
+    charId: input.getAttribute("data-charid"),
+    role: input.value.trim()
+  }));
+
+  const secRows = document.querySelectorAll("#cpCustomSectionsContainer .cp-sec-row");
+  const customSections = Array.from(secRows).map(row => ({
+    id: `cpsec_${Date.now()}_${Math.random().toString(36).substr(2,4)}`,
+    title: row.querySelector(".cp-sec-title").value.trim(),
+    content: row.querySelector(".cp-sec-content").value.trim()
+  })).filter(s => s.title);
+
+  const cpData = {
+    id: id || `cp_${Date.now()}`,
+    name,
+    memberIds: checkedMemberIds,
+    positions,
+    r18Notes: document.getElementById("cpR18Notes").value.trim(),
+    relationshipThoughts: document.getElementById("cpThoughts").value.trim(),
+    customSections
+  };
+
+  if (id) {
+    const idx = cps.findIndex(c => c.id === id);
+    if (idx !== -1) cps[idx] = cpData;
+  } else {
+    cps.push(cpData);
+  }
+
+  saveStateToLocalStorage();
+  renderCpModule();
+  closeModal("cpModal");
+}
+
+function deleteCp(cpId) {
+  if (confirm("確定要刪除此 CP 組合紀錄嗎？")) {
+    cps = cps.filter(c => c.id !== cpId);
+    saveStateToLocalStorage();
+    renderCpModule();
+  }
+}
+
 // ========== 5. 角色編輯 Modal ==========
 function openCharacterModal(charId = null) {
   const modal = document.getElementById("characterModal");
   const form = document.getElementById("characterForm");
   form.reset();
-  document.getElementById("characterCustomSections").innerHTML = "";
   syncGlobalTags();
 
   if (charId) {
@@ -377,7 +590,6 @@ function openCharacterModal(charId = null) {
       document.getElementById("charPersonality").value = char.personality || '';
       document.getElementById("charExtraNotes").value = char.extraNotes || '';
       document.getElementById("charTags").value = (char.tags || []).join(', ');
-      (char.customSections || []).forEach(section => addLongSectionRow("characterCustomSections", section.title, section.content));
 
       const theme = char.themeColor || { primary: "#d97706", secondary: "#78350f", mode: "gradient" };
       document.getElementById("charPrimaryColor").value = theme.primary;
@@ -448,7 +660,6 @@ function saveCharacterForm() {
     appearance: document.getElementById("charAppearance").value.trim(),
     personality: document.getElementById("charPersonality").value.trim(),
     extraNotes: document.getElementById("charExtraNotes").value.trim(),
-    customSections: readLongSections("characterCustomSections"),
     tags: document.getElementById("charTags").value.split(',').map(t => t.trim()).filter(Boolean),
     themeColor: {
       primary: document.getElementById("charPrimaryColor").value,
@@ -562,7 +773,7 @@ function convertFileToBase64(file) {
   });
 }
 
-// ========== 7. 稱呼矩陣 (含主角頭像與選擇目標) 與 SVG 關係圖 ==========
+// ========== 7. 稱呼矩陣與 SVG 關係圖 ==========
 function switchRelView(mode) {
   currentRelViewMode = mode;
   document.getElementById("relModeMatrixBtn").classList.toggle("active", mode === 'matrix');
@@ -595,7 +806,6 @@ function renderCallNameMatrix() {
 
   const currentSubject = activeChars.find(c => c.id === selectedCharId) || activeChars[0];
 
-  // Perspective Header Card with Avatar
   document.getElementById("perspectiveHeaderCard").innerHTML = `
     <img class="perspective-avatar" src="${currentSubject.avatar}" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
     <div>
@@ -604,10 +814,8 @@ function renderCallNameMatrix() {
     </div>
   `;
 
-  // Filter target characters for this subject
   if (!perspectiveTargets[currentSubject.id]) {
     perspectiveTargets[currentSubject.id] = (currentSubject.relationships || []).map(r => r.targetName);
-    // If empty, default include first 5 characters
     if (!perspectiveTargets[currentSubject.id].length) {
       perspectiveTargets[currentSubject.id] = activeChars.filter(c => c.id !== currentSubject.id).slice(0, 5).map(c => c.name);
     }
@@ -661,7 +869,6 @@ function openAddCallNameTargetModal() {
 }
 
 function confirmAddCallNameTarget() {
-  const activeChars = characters.filter(c => !c.isHidden);
   const selectCharId = document.getElementById("perspectiveCharSelect").value;
   const targetName = document.getElementById("callNameTargetCharSelect").value;
 
@@ -1029,7 +1236,7 @@ function removeRankingItem(rankId, index) {
   if (rank) { rank.items.splice(index, 1); saveStateToLocalStorage(); renderRankingModule(); }
 }
 
-// ========== 9. Paro 平行世界 (一頁一個 Paro + 自訂欄位與個人內容編輯) ==========
+// ========== 9. Paro 平行世界 ==========
 function renderParoList() {
   const bar = document.getElementById("paroSubjectBar");
   const card = document.getElementById("paroSingleCard");
@@ -1244,60 +1451,50 @@ function saveParoForm() {
   closeModal("paroModal");
 }
 
-// ========== 10. 陣營與世界觀 ==========
+// ========== 10. 陣營與大事件詞條 ==========
 function renderFactionList() {
   const container = document.getElementById("factionList");
-  container.innerHTML = factions.map(f => {
-    const members = getFactionMemberGroups(f);
-    return `
-    <div class="faction-card">
-      <h3>
-        <span><i class="fa-solid fa-sitemap"></i> ${f.name}</span>
-        <button class="btn btn-xs btn-outline" onclick="openFactionModal('${f.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
-      </h3>
-      <p style="font-size:0.85rem; color:var(--text-muted);">${f.description || '暫無簡介'}</p>
-      <div class="faction-member-groups">
-        ${members.main.length ? `<div class="faction-member-row"><strong><i class="fa-solid fa-users"></i> 主陣營成員</strong><div class="tag-cloud">${members.main.map(c => `<span class="tag-pill">${c.name}</span>`).join('')}</div></div>` : ''}
-        ${(f.subTags || []).map(sub => {
-          const subMembers = members.subGroups[sub.name] || [];
-          return subMembers.length ? `<div class="faction-member-row"><strong><i class="fa-solid fa-user-group"></i> ${sub.name}</strong><div class="tag-cloud">${subMembers.map(c => `<span class="tag-pill">${c.name}</span>`).join('')}</div></div>` : '';
-        }).join('')}
-        ${!members.main.length && !Object.values(members.subGroups).some(group => group.length) ? '<div class="faction-member-empty">尚無人物加入此陣營</div>' : ''}
-      </div>
-      <div style="display:flex; flex-direction:column; gap:0.3rem;">
-        ${(f.subTags || []).map(sub => `
-          <div style="background:var(--bg-secondary); padding:0.35rem 0.7rem; border-radius:6px; font-size:0.8rem; border-left:3px solid var(--accent-gold);">
-            <strong>${sub.name}</strong>: ${sub.description || ''}
-          </div>
-        `).join('')}
-      </div>
-      ${(f.customSections || []).map(section => `
-        <div class="long-section"><strong>${section.title || '未命名詞條'}</strong><div style="white-space:pre-wrap; margin-top:.4rem; font-size:.84rem;">${section.content || '（尚無內容）'}</div></div>
-      `).join('')}
-    </div>
-  `; }).join('');
-}
+  if (!container) return;
 
-function getFactionMemberGroups(faction) {
-  const subGroups = {};
-  (faction.subTags || []).forEach(sub => { subGroups[sub.name] = []; });
-  const main = [];
-  characters.filter(c => !c.isHidden).forEach(char => {
-    const tags = char.tags || [];
-    const matchedSubs = (faction.subTags || []).filter(sub => tags.includes(sub.name));
-    matchedSubs.forEach(sub => subGroups[sub.name].push(char));
-    // 同時具有主陣營和子陣營標籤時，只列在子陣營；只有主標籤時才列於主陣營。
-    if (tags.includes(faction.name) && matchedSubs.length === 0) main.push(char);
-  });
-  return { main, subGroups };
+  container.innerHTML = factions.map(f => {
+    const subTagsHtml = (f.subTags || []).map(sub => `
+      <div style="background:var(--bg-secondary); padding:0.35rem 0.7rem; border-radius:6px; font-size:0.8rem; border-left:3px solid var(--accent-gold);">
+        <strong>${sub.name}</strong>: ${sub.description || ''}
+      </div>
+    `).join('');
+
+    const customSectionsHtml = (f.customSections || []).map(sec => `
+      <div style="background:var(--bg-secondary); padding:0.6rem 0.8rem; border-radius:6px; margin-top:0.4rem; border-left:3px solid var(--accent-coffee);">
+        <strong style="color:var(--accent-coffee); font-size:0.88rem;"><i class="fa-solid fa-book-open"></i> ${sec.title}</strong>
+        <p style="white-space:pre-line; font-size:0.84rem; color:var(--text-main); margin-top:0.2rem;">${sec.content}</p>
+      </div>
+    `).join('');
+
+    return `
+      <div class="faction-card">
+        <h3>
+          <span><i class="fa-solid fa-sitemap"></i> ${f.name}</span>
+          <div>
+            <button class="btn btn-xs btn-outline" onclick="openFactionModal('${f.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
+            <button class="btn btn-xs btn-danger" onclick="deleteFaction('${f.id}')">&times;</button>
+          </div>
+        </h3>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.6rem;">${f.description || '暫無簡介'}</p>
+        
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">${subTagsHtml}</div>
+        ${customSectionsHtml}
+      </div>
+    `;
+  }).join('');
 }
 
 function openFactionModal(factionId = null) {
   const modal = document.getElementById("factionModal");
   const subContainer = document.getElementById("subTagsContainer");
-  const customContainer = document.getElementById("factionCustomSections");
+  const secContainer = document.getElementById("factionCustomSectionsContainer");
+
   subContainer.innerHTML = '';
-  customContainer.innerHTML = '';
+  secContainer.innerHTML = '';
 
   if (factionId) {
     const f = factions.find(item => item.id === factionId);
@@ -1305,14 +1502,17 @@ function openFactionModal(factionId = null) {
     document.getElementById("factionId").value = f.id;
     document.getElementById("factionName").value = f.name;
     document.getElementById("factionDescription").value = f.description || "";
+
     (f.subTags || []).forEach(sub => addSubTagRow(sub.name, sub.description));
-    (f.customSections || []).forEach(section => addLongSectionRow("factionCustomSections", section.title, section.content));
+    (f.customSections || []).forEach(sec => addFactionSectionRow(sec.title, sec.content));
   } else {
-    document.getElementById("factionModalTitle").innerText = "新建陣營";
+    document.getElementById("factionModalTitle").innerText = "新建陣營與世界觀";
     document.getElementById("factionId").value = "";
     document.getElementById("factionName").value = "";
     document.getElementById("factionDescription").value = "";
+
     addSubTagRow("二年A班", "二年級A班");
+    addFactionSectionRow("創世大事件", "在此填寫陣營重大歷史事件與法則...");
   }
   modal.classList.add("active");
 }
@@ -1330,10 +1530,25 @@ function addSubTagRow(name = "", desc = "") {
   container.appendChild(row);
 }
 
+function addFactionSectionRow(title = "", content = "") {
+  const container = document.getElementById("factionCustomSectionsContainer");
+  const row = document.createElement("div");
+  row.className = "faction-sec-row";
+  row.style.cssText = "background:var(--bg-secondary); padding:0.6rem; border-radius:6px; margin-bottom:0.5rem; display:flex; flex-direction:column; gap:0.3rem;";
+  row.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <input type="text" class="faction-sec-title" placeholder="大事件 / 自訂詞條標題 (如: 神魔大戰歷史)" value="${title}" style="font-weight:600; flex:1;">
+      <button type="button" class="btn btn-xs btn-danger ml-2" onclick="this.parentElement.parentElement.remove()">&times;</button>
+    </div>
+    <textarea class="faction-sec-content" rows="3" placeholder="詳細大段長文字內容與設定補充...">${content}</textarea>
+  `;
+  container.appendChild(row);
+}
+
 function saveFactionForm() {
   const id = document.getElementById("factionId").value;
   const name = document.getElementById("factionName").value.trim();
-  if (!name) { alert("請輸入名稱！"); return; }
+  if (!name) { alert("請輸入陣營名稱！"); return; }
 
   const subTagRows = document.querySelectorAll("#subTagsContainer .sub-tag-row");
   const subTags = Array.from(subTagRows).map(row => ({
@@ -1341,124 +1556,468 @@ function saveFactionForm() {
     description: row.querySelector(".sub-desc").value.trim()
   })).filter(s => s.name);
 
-  const customSections = readLongSections("factionCustomSections");
-  const factionData = { id: id || `faction_${Date.now()}`, name, description: document.getElementById("factionDescription").value.trim(), subTags, customSections };
-  if (id) { const idx = factions.findIndex(f => f.id === id); if (idx !== -1) factions[idx] = factionData; }
-  else { factions.push(factionData); }
-  saveStateToLocalStorage(); syncGlobalTags(); renderFactionList(); closeModal("factionModal");
+  const secRows = document.querySelectorAll("#factionCustomSectionsContainer .faction-sec-row");
+  const customSections = Array.from(secRows).map(row => ({
+    id: `fsec_${Date.now()}_${Math.random().toString(36).substr(2,4)}`,
+    title: row.querySelector(".faction-sec-title").value.trim(),
+    content: row.querySelector(".faction-sec-content").value.trim()
+  })).filter(s => s.title);
+
+  const factionData = {
+    id: id || `faction_${Date.now()}`,
+    name,
+    description: document.getElementById("factionDescription").value.trim(),
+    subTags,
+    customSections
+  };
+
+  if (id) {
+    const idx = factions.findIndex(f => f.id === id);
+    if (idx !== -1) factions[idx] = factionData;
+  } else {
+    factions.push(factionData);
+  }
+
+  saveStateToLocalStorage();
+  syncGlobalTags();
+  renderFactionList();
+  closeModal("factionModal");
 }
 
-// ========== 10.5 CP 關係卡庫與通用長篇詞條 ==========
-function addLongSectionRow(containerId, title = "", content = "") {
-  const container = document.getElementById(containerId);
-  const row = document.createElement("div");
-  row.className = "long-section";
-  row.innerHTML = `<div class="long-section-head"><input class="section-title" type="text" placeholder="自訂標題"><button type="button" class="btn btn-xs btn-danger" onclick="this.closest('.long-section').remove()">&times;</button></div><textarea class="section-content" placeholder="可填寫大段設定內容……"></textarea>`;
-  row.querySelector(".section-title").value = title;
-  row.querySelector(".section-content").value = content;
-  container.appendChild(row);
+function deleteFaction(factionId) {
+  if (confirm("確定要刪除此陣營設定嗎？")) {
+    factions = factions.filter(f => f.id !== factionId);
+    saveStateToLocalStorage();
+    syncGlobalTags();
+    renderFactionList();
+  }
 }
 
-function readLongSections(containerId) {
-  return Array.from(document.querySelectorAll(`#${containerId} .long-section`)).map(row => ({
-    title: row.querySelector(".section-title").value.trim(),
-    content: row.querySelector(".section-content").value.trim()
-  })).filter(section => section.title || section.content);
+// ========== 10.5. 同人文檔與書籍資料庫 (書籍勾選總結、自訂書籍Icon顏色、摺疊) ==========
+function toggleBookCollapse(bookId) {
+  collapsedBooks[bookId] = !collapsedBooks[bookId];
+  saveStateToLocalStorage();
+  renderDocumentsModule();
 }
 
-function renderCoupleList() {
-  const container = document.getElementById("coupleGrid");
-  if (!container) return;
-  if (!couples.length) {
-    container.innerHTML = `<div class="ranking-card" style="color:var(--text-muted);">尚未建立 CP 關係。點擊「新建 CP」開始記錄。</div>`;
+function renderDocumentsModule() {
+  const workspace = document.getElementById("docWorkspace");
+  if (!workspace) return;
+
+  const activeChars = characters.filter(c => !c.isHidden);
+  
+  const charFilterSelect = document.getElementById("docCharFilter");
+  const factionFilterSelect = document.getElementById("docFactionFilter");
+
+  if (charFilterSelect && charFilterSelect.children.length <= 1) {
+    charFilterSelect.innerHTML = `<option value="">全部角色</option>` + activeChars.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
+  if (factionFilterSelect && factionFilterSelect.children.length <= 1) {
+    factionFilterSelect.innerHTML = `<option value="">全部世界觀</option>` + factions.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+  }
+
+  const searchKeyword = (document.getElementById("docSearchInput") ? document.getElementById("docSearchInput").value : "").toLowerCase().trim();
+  const selectedCharId = document.getElementById("docCharFilter") ? document.getElementById("docCharFilter").value : "";
+  const selectedFactionId = document.getElementById("docFactionFilter") ? document.getElementById("docFactionFilter").value : "";
+  const selectedTag = document.getElementById("docTagFilter") ? document.getElementById("docTagFilter").value : "";
+
+  const filterFn = (doc) => {
+    const matchSearch = !searchKeyword || doc.title.toLowerCase().includes(searchKeyword) || (doc.content && doc.content.toLowerCase().includes(searchKeyword));
+    const matchChar = !selectedCharId || (doc.charIds || []).includes(selectedCharId);
+    const matchFaction = !selectedFactionId || (doc.factionIds || []).includes(selectedFactionId);
+    const matchTag = !selectedTag || (doc.tags || []).includes(selectedTag);
+    return matchSearch && matchChar && matchFaction && matchTag;
+  };
+
+  const filteredDocs = documents.filter(filterFn);
+
+  const bookHtmlList = books.map(book => {
+    const bookDocs = filteredDocs.filter(d => d.bookId === book.id);
+    const isCollapsed = !!collapsedBooks[book.id];
+    const memberChars = (book.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
+    const memberFactions = (book.factionIds || []).map(id => factions.find(f => f.id === id)).filter(Boolean);
+    const bookIconColor = book.iconColor || 'var(--accent-gold)';
+
+    return `
+      <div class="book-folder-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <input type="checkbox" class="book-summary-cb" value="${book.id}" title="勾選整本書籍進行 AI 總結" style="width:18px; height:18px;">
+            <button class="btn btn-xs btn-outline" onclick="toggleBookCollapse('${book.id}')">
+              <i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}"></i>
+            </button>
+            <div>
+              <h3 style="font-size:1.1rem; color:var(--text-main); display:inline-flex; align-items:center; gap:0.4rem;">
+                <i class="fa-solid fa-book-bookmark" style="color:${bookIconColor}; font-size:1.15rem;"></i> ${book.title}
+                <span class="badge" style="margin-left:0.3rem;">${bookDocs.length} 章</span>
+              </h3>
+              <p style="font-size:0.83rem; color:var(--text-muted); margin-top:0.15rem;">${book.description || '暫無簡介'}</p>
+              <div style="font-size:0.78rem; color:var(--accent-coffee); margin-top:0.2rem;">
+                ${memberChars.length ? `角色: ${memberChars.map(c=>c.name).join(', ')} ｜ ` : ''}
+                ${memberFactions.length ? `世界觀: ${memberFactions.map(f=>f.name).join(', ')}` : ''}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:0.4rem;">
+            <button class="btn btn-xs btn-outline" onclick="openBookModal('${book.id}')"><i class="fa-solid fa-pen"></i> 編輯書籍</button>
+            <button class="btn btn-xs btn-danger" onclick="deleteBook('${book.id}')">&times;</button>
+          </div>
+        </div>
+
+        ${!isCollapsed ? `
+          <div style="margin-top:0.8rem;">
+            ${bookDocs.length ? bookDocs.map(doc => renderSingleDocItemHtml(doc)).join('') : `<p style="font-size:0.82rem; color:var(--text-dark); margin-top:0.4rem;">此書籍尚無章節文檔。</p>`}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const standaloneDocs = filteredDocs.filter(d => !d.bookId);
+  const standaloneHtml = standaloneDocs.length ? `
+    <div class="book-folder-card">
+      <h3><i class="fa-solid fa-file-lines" style="color:var(--accent-coffee);"></i> 獨立章節文檔 (${standaloneDocs.length})</h3>
+      <div style="margin-top:0.6rem;">
+        ${standaloneDocs.map(doc => renderSingleDocItemHtml(doc)).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  workspace.innerHTML = (bookHtmlList + standaloneHtml) || `<div class="empty-state"><p>尚無符合條件的文檔或書籍。點擊「新建書籍資料夾」或「新建文檔章節」建立創作紀錄！</p></div>`;
+}
+
+function renderSingleDocItemHtml(doc) {
+  const docChars = (doc.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
+  const docFactions = (doc.factionIds || []).map(id => factions.find(f => f.id === id)).filter(Boolean);
+  const tagsHtml = (doc.tags || []).map(t => `<span class="tag-pill">${t}</span>`).join(' ');
+
+  return `
+    <div class="doc-item-row">
+      <div style="display:flex; align-items:center; gap:0.6rem; flex:1;">
+        <input type="checkbox" class="doc-summary-cb" value="${doc.id}" style="width:16px; height:16px;">
+        <i class="fa-solid fa-file-lines" style="color:var(--accent-coffee); font-size:1.05rem; flex-shrink:0;"></i>
+        <div>
+          <strong style="font-size:0.92rem; color:var(--text-main);">${doc.title}</strong>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.15rem;">
+            ${docChars.length ? `角色: ${docChars.map(c => c.name).join(', ')} ` : ''}
+            ${docFactions.length ? `｜ 世界觀: ${docFactions.map(f => f.name).join(', ')}` : ''}
+          </div>
+          ${tagsHtml ? `<div style="margin-top:0.2rem;">${tagsHtml}</div>` : ''}
+        </div>
+      </div>
+      <div>
+        <button class="btn btn-xs btn-outline" onclick="openDocumentModal('${doc.id}')"><i class="fa-solid fa-pen"></i> 閱讀/編輯</button>
+        <button class="btn btn-xs btn-danger" onclick="deleteDocument('${doc.id}')">&times;</button>
+      </div>
+    </div>
+  `;
+}
+
+function openBookModal(bookId = null) {
+  const modal = document.getElementById("bookModal");
+  const activeChars = characters.filter(c => !c.isHidden);
+  const charCb = document.getElementById("bookCharCheckboxes");
+  const factionCb = document.getElementById("bookFactionCheckboxes");
+
+  if (bookId) {
+    const b = books.find(item => item.id === bookId);
+    document.getElementById("bookModalTitle").innerText = `編輯書籍：${b.title}`;
+    document.getElementById("bookId").value = b.id;
+    document.getElementById("bookTitle").value = b.title;
+    document.getElementById("bookIconColor").value = b.iconColor || "#f59e0b";
+    document.getElementById("bookDescription").value = b.description || "";
+    document.getElementById("bookTags").value = (b.tags || []).join(', ');
+
+    charCb.innerHTML = activeChars.map(c => `
+      <label class="checkbox-pill">
+        <input type="checkbox" value="${c.id}" ${ (b.charIds || []).includes(c.id) ? 'checked' : '' }>
+        <span>${c.name}</span>
+      </label>
+    `).join('');
+
+    factionCb.innerHTML = factions.map(f => `
+      <label class="checkbox-pill">
+        <input type="checkbox" value="${f.id}" ${ (b.factionIds || []).includes(f.id) ? 'checked' : '' }>
+        <span>${f.name}</span>
+      </label>
+    `).join('');
+  } else {
+    document.getElementById("bookModalTitle").innerText = "新建書籍資料夾";
+    document.getElementById("bookId").value = "";
+    document.getElementById("bookTitle").value = "";
+    document.getElementById("bookIconColor").value = "#f59e0b";
+    document.getElementById("bookDescription").value = "";
+    document.getElementById("bookTags").value = "";
+
+    charCb.innerHTML = activeChars.map(c => `
+      <label class="checkbox-pill"><input type="checkbox" value="${c.id}"><span>${c.name}</span></label>
+    `).join('');
+
+    factionCb.innerHTML = factions.map(f => `
+      <label class="checkbox-pill"><input type="checkbox" value="${f.id}"><span>${f.name}</span></label>
+    `).join('');
+  }
+
+  modal.classList.add("active");
+}
+
+function saveBookForm() {
+  const id = document.getElementById("bookId").value;
+  const title = document.getElementById("bookTitle").value.trim();
+  if (!title) { alert("請輸入書籍標題！"); return; }
+
+  const checkedCharIds = Array.from(document.querySelectorAll("#bookCharCheckboxes input:checked")).map(cb => cb.value);
+  const checkedFactionIds = Array.from(document.querySelectorAll("#bookFactionCheckboxes input:checked")).map(cb => cb.value);
+
+  const bookData = {
+    id: id || `book_${Date.now()}`,
+    title,
+    iconColor: document.getElementById("bookIconColor").value,
+    description: document.getElementById("bookDescription").value.trim(),
+    charIds: checkedCharIds,
+    factionIds: checkedFactionIds,
+    tags: document.getElementById("bookTags").value.split(',').map(t => t.trim()).filter(Boolean)
+  };
+
+  if (id) {
+    const idx = books.findIndex(b => b.id === id);
+    if (idx !== -1) books[idx] = bookData;
+  } else {
+    books.push(bookData);
+  }
+
+  saveStateToLocalStorage();
+  syncGlobalTags();
+  renderDocumentsModule();
+  closeModal("bookModal");
+}
+
+function deleteBook(bookId) {
+  if (confirm("確定要刪除此書籍資料夾嗎？（所屬文檔將轉為獨立文檔）")) {
+    books = books.filter(b => b.id !== bookId);
+    documents.forEach(d => { if (d.bookId === bookId) d.bookId = null; });
+    saveStateToLocalStorage();
+    renderDocumentsModule();
+  }
+}
+
+function openDocumentModal(docId = null) {
+  const modal = document.getElementById("documentModal");
+  const activeChars = characters.filter(c => !c.isHidden);
+  const charCb = document.getElementById("docCharCheckboxes");
+  const factionCb = document.getElementById("docFactionCheckboxes");
+  const bookSelect = document.getElementById("docBelongingBookId");
+
+  bookSelect.innerHTML = `<option value="">(獨立文檔，不屬於書籍)</option>` + books.map(b => `<option value="${b.id}">${b.title}</option>`).join('');
+
+  if (docId) {
+    const d = documents.find(item => item.id === docId);
+    document.getElementById("docModalTitle").innerText = `編輯文檔：${d.title}`;
+    document.getElementById("docId").value = d.id;
+    document.getElementById("docTitle").value = d.title;
+    document.getElementById("docBelongingBookId").value = d.bookId || "";
+    document.getElementById("docTags").value = (d.tags || []).join(', ');
+    document.getElementById("docContent").value = d.content || "";
+
+    charCb.innerHTML = activeChars.map(c => `
+      <label class="checkbox-pill">
+        <input type="checkbox" value="${c.id}" ${ (d.charIds || []).includes(c.id) ? 'checked' : '' }>
+        <span>${c.name}</span>
+      </label>
+    `).join('');
+
+    factionCb.innerHTML = factions.map(f => `
+      <label class="checkbox-pill">
+        <input type="checkbox" value="${f.id}" ${ (d.factionIds || []).includes(f.id) ? 'checked' : '' }>
+        <span>${f.name}</span>
+      </label>
+    `).join('');
+  } else {
+    document.getElementById("docModalTitle").innerText = "新建同人文檔章節";
+    document.getElementById("docId").value = "";
+    document.getElementById("docTitle").value = "";
+    document.getElementById("docBelongingBookId").value = "";
+    document.getElementById("docTags").value = "";
+    document.getElementById("docContent").value = "";
+
+    charCb.innerHTML = activeChars.map(c => `
+      <label class="checkbox-pill"><input type="checkbox" value="${c.id}"><span>${c.name}</span></label>
+    `).join('');
+
+    factionCb.innerHTML = factions.map(f => `
+      <label class="checkbox-pill"><input type="checkbox" value="${f.id}"><span>${f.name}</span></label>
+    `).join('');
+  }
+
+  modal.classList.add("active");
+}
+
+function saveDocumentForm() {
+  const id = document.getElementById("docId").value;
+  const title = document.getElementById("docTitle").value.trim();
+  if (!title) { alert("請輸入文檔標題！"); return; }
+
+  const checkedCharIds = Array.from(document.querySelectorAll("#docCharCheckboxes input:checked")).map(cb => cb.value);
+  const checkedFactionIds = Array.from(document.querySelectorAll("#docFactionCheckboxes input:checked")).map(cb => cb.value);
+
+  const docData = {
+    id: id || `doc_${Date.now()}`,
+    title,
+    bookId: document.getElementById("docBelongingBookId").value || null,
+    charIds: checkedCharIds,
+    factionIds: checkedFactionIds,
+    tags: document.getElementById("docTags").value.split(',').map(t => t.trim()).filter(Boolean),
+    content: document.getElementById("docContent").value.trim()
+  };
+
+  if (id) {
+    const idx = documents.findIndex(d => d.id === id);
+    if (idx !== -1) documents[idx] = docData;
+  } else {
+    documents.push(docData);
+  }
+
+  saveStateToLocalStorage();
+  syncGlobalTags();
+  renderDocumentsModule();
+  closeModal("documentModal");
+}
+
+function deleteDocument(docId) {
+  if (confirm("確定要刪除此同人文檔章節嗎？")) {
+    documents = documents.filter(d => d.id !== docId);
+    saveStateToLocalStorage();
+    renderDocumentsModule();
+  }
+}
+
+async function summarizeSelectedDocsWithAi() {
+  const checkedBookCbs = Array.from(document.querySelectorAll(".book-summary-cb:checked"));
+  const checkedDocCbs = Array.from(document.querySelectorAll(".doc-summary-cb:checked"));
+
+  if (!checkedBookCbs.length && !checkedDocCbs.length) {
+    alert("請先在列表中勾選至少一本書籍資料夾或單個文檔章節！");
     return;
   }
-  container.innerHTML = couples.map(cp => `
-    <article class="couple-card">
-      <h3><span><i class="fa-solid ${cp.type === 'other' ? 'fa-people-group' : 'fa-heart'}"></i> ${cp.name} <small class="tag-pill">${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}</small></span><span><button class="btn btn-xs btn-outline" onclick="openCoupleModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯</button> <button class="btn btn-xs btn-danger" onclick="deleteCouple('${cp.id}')"><i class="fa-solid fa-trash"></i></button></span></h3>
-      ${(cp.members || []).map(member => {
-        const char = characters.find(c => c.id === member.charId);
-        return `<div class="couple-member"><strong>${char ? char.name : '已移除角色'}</strong>${member.position ? ` · ${member.position}` : ''}${cp.type !== 'other' && member.r18 ? `<div><small>R18：</small>${member.r18}</div>` : ''}${member.thoughts ? `<div><small>對關係的感想：</small>${member.thoughts}</div>` : ''}</div>`;
-      }).join('')}
-      ${(cp.sections || []).map(section => `<div class="long-section"><strong>${section.title || '未命名詞條'}</strong><div style="white-space:pre-wrap; margin-top:.4rem; font-size:.84rem;">${section.content || '（尚無內容）'}</div></div>`).join('')}
-    </article>`).join('');
+
+  let docSet = new Set();
+
+  // Add all docs from checked books
+  checkedBookCbs.forEach(cb => {
+    const bookId = cb.value;
+    const bookDocs = documents.filter(d => d.bookId === bookId);
+    bookDocs.forEach(d => docSet.add(d));
+  });
+
+  // Add individually checked docs
+  checkedDocCbs.forEach(cb => {
+    const doc = documents.find(d => d.id === cb.value);
+    if (doc) docSet.add(doc);
+  });
+
+  const selectedDocs = Array.from(docSet);
+  if (!selectedDocs.length) {
+    alert("所選書籍中尚無任何文檔章節內容可以總結！");
+    return;
+  }
+
+  runAiDocumentSummary(selectedDocs, `所選書籍與文檔 (${selectedDocs.length} 章)`);
 }
 
-function openCoupleModal(coupleId = null) {
-  const cp = couples.find(item => item.id === coupleId);
-  document.getElementById("coupleId").value = cp ? cp.id : "";
-  document.getElementById("coupleName").value = cp ? cp.name : "";
-  document.getElementById("coupleType").value = cp?.type || "cp";
-  document.getElementById("otherRelationType").value = cp?.relationType || "";
-  document.getElementById("coupleModalTitle").innerText = cp ? `編輯 CP：${cp.name}` : "新建 CP 關係";
-  const selectedIds = new Set((cp?.members || []).map(member => member.charId));
-  document.getElementById("coupleCharacterChoices").innerHTML = characters.filter(c => !c.isHidden).map(c => `<label class="checkbox-label"><input type="checkbox" class="couple-char-cb" value="${c.id}" ${selectedIds.has(c.id) ? 'checked' : ''} onchange="renderCoupleMemberEditors()"> ${c.name}</label>`).join('');
-  document.getElementById("coupleCustomSections").innerHTML = "";
-  (cp?.sections || [
-    { title: "相遇情況", content: "" }, { title: "交往過程", content: "" }, { title: "交往後相處模式", content: "" }
-  ]).forEach(section => addLongSectionRow("coupleCustomSections", section.title, section.content));
-  document.getElementById("coupleModal").dataset.editingMembers = JSON.stringify(cp?.members || []);
-  toggleCoupleTypeFields(false);
-  renderCoupleMemberEditors();
-  document.getElementById("coupleModal").classList.add("active");
+async function runAiDocumentSummary(docArray, titlePrefix) {
+  if (!deepseekSettings.apiKey) {
+    alert("請設定 DeepSeek API Key 才能使用 AI 故事大綱總結！");
+    return;
+  }
+
+  let combinedText = docArray.map(d => `【章節標題：${d.title}】\n${d.content || '（無正文內容）'}`).join('\n\n---\n\n');
+
+  showToast(`DeepSeek AI 正在閱讀 ${titlePrefix} 並總結大綱...`);
+
+  try {
+    const response = await fetch(`${deepseekSettings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${deepseekSettings.apiKey}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [
+          {
+            role: "system",
+            content: "你是一位精通故事結構分析與小說大綱整理的 AI 編輯。請詳細閱讀提供的同人文檔章節內文，並輸出繁體中文的『故事核心大綱』、『劇情起承轉合發展』與『角色情感動向總結』。"
+          },
+          {
+            role: "user",
+            content: combinedText
+          }
+        ]
+      })
+    });
+
+    hideToast();
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.choices && data.choices[0] && data.choices[0].message) {
+        document.getElementById("aiSummaryResultArea").value = `# 【${titlePrefix} 故事大綱總結】\n生成時間：${new Date().toLocaleString()}\n包含章節：${docArray.map(d => d.title).join('、')}\n\n` + data.choices[0].message.content;
+        document.getElementById("aiSummaryModal").classList.add("active");
+      }
+    } else {
+      alert("AI 總結失敗：伺服器未返回正確回應。");
+    }
+  } catch (err) {
+    hideToast();
+    alert("AI 總結失敗：" + err.message);
+  }
 }
 
-function toggleCoupleTypeFields(rerender = true) {
-  const isOther = document.getElementById("coupleType").value === "other";
-  document.getElementById("otherRelationTypeGroup").style.display = isOther ? "flex" : "none";
-  if (rerender) renderCoupleMemberEditors();
+function copyAiSummaryText() {
+  const area = document.getElementById("aiSummaryResultArea");
+  if (!area.value) return;
+  area.select();
+  document.execCommand("copy");
+  alert("大綱總結已複製到剪貼簿！");
 }
 
-function renderCoupleMemberEditors() {
-  const box = document.getElementById("coupleMemberDetails");
-  const oldMembers = (() => { try { return JSON.parse(document.getElementById("coupleModal").dataset.editingMembers || "[]"); } catch (e) { return []; } })();
-  const live = {};
-  box.querySelectorAll(".member-detail-editor").forEach(row => { live[row.dataset.charId] = { position: row.querySelector(".member-position").value, r18: row.querySelector(".member-r18")?.value || "", thoughts: row.querySelector(".member-thoughts").value }; });
-  const ids = Array.from(document.querySelectorAll(".couple-char-cb:checked")).map(cb => cb.value);
-  box.innerHTML = ids.map(id => {
-    const char = characters.find(c => c.id === id);
-    const saved = live[id] || oldMembers.find(m => m.charId === id) || {};
-    const isOther = document.getElementById("coupleType").value === "other";
-    return `<div class="long-section member-detail-editor" data-char-id="${id}"><strong>${char?.name || '角色'}</strong><div class="basic-fields-grid mt-2"><div class="form-group"><label>${isOther ? '在關係中的身分／定位' : '左右位／定位'}</label><input class="member-position" value="${saved.position || ''}" placeholder="${isOther ? '如：姊姊、朋友、老師' : '如：左位、右位、可逆'}"></div>${isOther ? '' : '<div class="form-group"><label>R18 相關狀況</label><textarea class="member-r18" rows="3"></textarea></div>'}</div><div class="form-group"><label>本人對這段關係的感想</label><textarea class="member-thoughts" rows="3"></textarea></div></div>`;
-  }).join('');
-  box.querySelectorAll(".member-detail-editor").forEach(row => { const saved = live[row.dataset.charId] || oldMembers.find(m => m.charId === row.dataset.charId) || {}; const r18 = row.querySelector(".member-r18"); if (r18) r18.value = saved.r18 || ""; row.querySelector(".member-thoughts").value = saved.thoughts || ""; });
-}
-
-function saveCoupleForm() {
-  const id = document.getElementById("coupleId").value;
-  const name = document.getElementById("coupleName").value.trim();
-  const type = document.getElementById("coupleType").value;
-  const relationType = type === "other" ? document.getElementById("otherRelationType").value.trim() : "";
-  const members = Array.from(document.querySelectorAll("#coupleMemberDetails .member-detail-editor")).map(row => ({ charId: row.dataset.charId, position: row.querySelector(".member-position").value.trim(), ...(type === "cp" ? { r18: (row.querySelector(".member-r18")?.value || "").trim() } : {}), thoughts: row.querySelector(".member-thoughts").value.trim() }));
-  if (!name) return alert("請輸入關係卡名稱！");
-  if (type === "other" && !relationType) return alert("請輸入其他關係名稱，例如朋友或家人！");
-  if (members.length < 2) return alert("關係卡請至少選擇兩位人物！");
-  const data = { id: id || `couple_${Date.now()}`, name, type, relationType, members, sections: readLongSections("coupleCustomSections") };
-  const index = couples.findIndex(cp => cp.id === id);
-  if (index >= 0) couples[index] = data; else couples.push(data);
-  saveStateToLocalStorage(); updateBadges(); renderCoupleList(); closeModal("coupleModal");
-}
-
-function deleteCouple(id) {
-  if (!confirm("確定刪除這筆 CP 關係嗎？")) return;
-  couples = couples.filter(cp => cp.id !== id); saveStateToLocalStorage(); updateBadges(); renderCoupleList();
-}
-
-// ========== 11. 獨立導出 ==========
+// ========== 11. 獨立與選人導出 ==========
 function toggleExportMode(mode) {
   const charGroup = document.getElementById("exportCharSelectGroup");
-  if (charGroup) charGroup.style.display = mode === 'full' ? 'block' : 'none';
+  if (charGroup) charGroup.style.display = (mode === 'full' || mode === 'cps_only') ? 'block' : 'none';
 }
 
 function renderExportCharList() {
   const activeChars = characters.filter(c => !c.isHidden);
   const container = document.getElementById("exportCharList");
-  container.innerHTML = activeChars.map(c => `
-    <label class="checkbox-label">
-      <input type="checkbox" class="export-char-cb" value="${c.id}" checked>
-      <span>${c.name}</span>
-    </label>
-  `).join('');
+  if (container) {
+    container.innerHTML = activeChars.map(c => `
+      <label class="checkbox-label">
+        <input type="checkbox" class="export-char-cb" value="${c.id}" checked>
+        <span>${c.name}</span>
+      </label>
+    `).join('');
+  }
+
+  const rankContainer = document.getElementById("exportRankingList");
+  if (rankContainer) {
+    rankContainer.innerHTML = rankings.map(r => `
+      <label class="checkbox-label">
+        <input type="checkbox" class="export-rank-cb" value="${r.id}" checked>
+        <span>${r.subject}</span>
+      </label>
+    `).join('');
+  }
+
+  const paroContainer = document.getElementById("exportParoList");
+  if (paroContainer) {
+    paroContainer.innerHTML = paros.map(p => `
+      <label class="checkbox-label">
+        <input type="checkbox" class="export-paro-cb" value="${p.id}" checked>
+        <span>${p.name}</span>
+      </label>
+    `).join('');
+  }
 }
 
 function selectAllExportChars(status) {
@@ -1469,9 +2028,40 @@ async function generateExportText() {
   const mode = document.getElementById("exportModeSelect").value;
   let text = "";
 
-  if (mode === 'rankings_only') {
+  const selectedCharIds = Array.from(document.querySelectorAll(".export-char-cb:checked")).map(cb => cb.value);
+  const targetChars = characters.filter(c => selectedCharIds.includes(c.id));
+  const selectedCharNames = targetChars.map(c => c.name);
+
+  const selectedRankIds = Array.from(document.querySelectorAll(".export-rank-cb:checked")).map(cb => cb.value);
+  const targetRankings = rankings.filter(r => selectedRankIds.includes(r.id));
+
+  const selectedParoIds = Array.from(document.querySelectorAll(".export-paro-cb:checked")).map(cb => cb.value);
+  const targetParos = paros.filter(p => selectedParoIds.includes(p.id));
+
+  const incTheme = document.getElementById("expIncThemeColor").checked;
+  const incRel = document.getElementById("expIncRelationships").checked;
+  const incCp = document.getElementById("expIncCps").checked;
+
+  if (mode === 'cps_only') {
+    text = `# 【CP 關係細節獨立報告】\n生成時間：${new Date().toLocaleString()}\n\n`;
+    cps.forEach(cp => {
+      text += `## CP 組合: ${cp.name}\n`;
+      if ((cp.positions || []).length) {
+        text += `- 定位/左右位: ${cp.positions.map(p => {
+          const char = characters.find(c => c.id === p.charId);
+          return char ? `${char.name}(${p.role})` : '';
+        }).join(' / ')}\n`;
+      }
+      if (cp.relationshipThoughts) text += `- 感想: ${cp.relationshipThoughts}\n`;
+      if (cp.r18Notes) text += `- 關係細節: ${cp.r18Notes}\n`;
+      (cp.customSections || []).forEach(sec => {
+        text += `\n✦ 【${sec.title}】\n${sec.content}\n`;
+      });
+      text += `\n-----------------------------------\n\n`;
+    });
+  } else if (mode === 'rankings_only') {
     text = `# 【評分與排名獨立報告】\n生成時間：${new Date().toLocaleString()}\n\n`;
-    rankings.forEach(r => {
+    targetRankings.forEach(r => {
       text += `## 評比主題: ${r.subject}\n`;
       const itemStr = (r.items || []).map(it => {
         const char = characters.find(c => c.id === it.charId);
@@ -1486,65 +2076,126 @@ async function generateExportText() {
       }
       text += `\n`;
     });
+  } else if (mode === 'paros_only') {
+    text = `# 【Paro 平行世界獨立設定】\n生成時間：${new Date().toLocaleString()}\n\n`;
+    targetParos.forEach(p => {
+      text += `## Paro: ${p.name}\n${p.description || ''}\n`;
+      const memberChars = characters.filter(c => !c.isHidden && (p.members || []).includes(c.id));
+      memberChars.forEach(c => {
+        text += `\n### 角色: ${c.name}\n`;
+        const valObj = (c.paroValues && c.paroValues[p.id]) || {};
+        (p.fields || []).forEach(f => {
+          text += `- ${f.name}: ${valObj[f.id] || '未填寫'}\n`;
+        });
+      });
+      text += `\n-----------------------------------\n\n`;
+    });
   } else if (mode === 'factions_only') {
     text = `# 【世界觀與陣營獨立簡介】\n生成時間：${new Date().toLocaleString()}\n\n`;
     factions.forEach(f => {
       text += `## 陣營: ${f.name}\n${f.description || '（無簡介）'}\n`;
-      const members = getFactionMemberGroups(f);
-      if (members.main.length) text += `- 主陣營成員：${members.main.map(c => c.name).join('、')}\n`;
       if ((f.subTags || []).length) {
         f.subTags.forEach(sub => {
           text += `- 子標籤【${sub.name}】：${sub.description || ''}\n`;
-          const subMembers = members.subGroups[sub.name] || [];
-          if (subMembers.length) text += `  - 成員：${subMembers.map(c => c.name).join('、')}\n`;
         });
       }
-      (f.customSections || []).forEach(section => {
-        text += `### ${section.title || '未命名詞條'}\n${section.content || '（無內容）'}\n`;
-      });
-      text += `\n`;
+      if ((f.customSections || []).length) {
+        f.customSections.forEach(sec => {
+          text += `\n✦ 大事件【${sec.title}】:\n${sec.content}\n`;
+        });
+      }
+      text += `\n-----------------------------------\n\n`;
     });
   } else {
-    const selectedIds = Array.from(document.querySelectorAll(".export-char-cb:checked")).map(cb => cb.value);
-    const targetChars = characters.filter(c => selectedIds.includes(c.id));
+    text = `# 原創人物設定與關係全集\n生成時間：${new Date().toLocaleString()}\n包含角色 (${targetChars.length} 位): ${selectedCharNames.join('、')}\n\n`;
 
-    text = `# 原創人物設定與同人寫作 Prompt\n生成時間：${new Date().toLocaleString()}\n\n`;
     targetChars.forEach((c, idx) => {
+      text += `===================================\n`;
       text += `### [${idx + 1}] ${c.name} (${c.englishName || 'OC'})\n`;
       text += `- 基本：${c.gender || ''}｜${c.height || ''}｜${c.zodiac || ''}｜${c.orientation || ''}｜${c.occupation || ''}\n`;
       text += `- 固定 CP：${c.fixedCp || '無'}\n`;
+      if (incTheme && c.themeColor) {
+        text += `- 主題色：${c.themeColor.primary} / ${c.themeColor.secondary} (${c.themeColor.mode})\n`;
+      }
       if (c.appearance) text += `✦ 外貌：${c.appearance.replace(/\n/g, ' ')}\n`;
       if (c.personality) text += `✦ 性格：${c.personality.replace(/\n/g, ' ')}\n`;
       if (c.extraNotes) text += `✦ 補充：${c.extraNotes.replace(/\n/g, ' ')}\n`;
-      (c.customSections || []).forEach(section => {
-        text += `✦ ${section.title || '未命名欄位'}：${section.content || '（無內容）'}\n`;
-      });
+
+      if (incRel && (c.relationships || []).length) {
+        text += `✦ 社交關係視角 (僅導出所選角色):\n`;
+        c.relationships.forEach(rel => {
+          if (selectedCharNames.includes(rel.targetName)) {
+            text += `  * 對 ${rel.targetName} 稱呼『${rel.callName}』: ${rel.opinion}\n`;
+          }
+        });
+      }
       text += `\n`;
     });
-    if (document.getElementById("expIncFactions").checked && factions.length) {
-      text += `## 陣營／世界觀介紹\n\n`;
-      factions.forEach(f => {
-        text += `### ${f.name}\n${f.description || '（無簡介）'}\n`;
-        const members = getFactionMemberGroups(f);
-        if (members.main.length) text += `- 主陣營成員：${members.main.map(c => c.name).join('、')}\n`;
-        (f.subTags || []).forEach(sub => {
-          text += `- ${sub.name}：${sub.description || ''}\n`;
-          const subMembers = members.subGroups[sub.name] || [];
-          if (subMembers.length) text += `  - 成員：${subMembers.map(c => c.name).join('、')}\n`;
-        });
-        (f.customSections || []).forEach(section => { text += `#### ${section.title || '未命名詞條'}\n${section.content || '（無內容）'}\n`; });
-        text += `\n`;
+
+    if (incCp) {
+      text += `\n===================================\n`;
+      text += `## 【CP 關係細節 (僅所選角色相關)】\n\n`;
+      cps.forEach(cp => {
+        const hasSelectedChar = (cp.memberIds || []).some(id => selectedCharIds.includes(id));
+        if (hasSelectedChar) {
+          text += `### CP 組合: ${cp.name}\n`;
+          if (cp.relationshipThoughts) text += `- 感想: ${cp.relationshipThoughts}\n`;
+          if (cp.r18Notes) text += `- 關係細節: ${cp.r18Notes}\n`;
+          (cp.customSections || []).forEach(sec => {
+            text += `✦ 【${sec.title}】: ${sec.content}\n`;
+          });
+          text += `\n`;
+        }
       });
     }
-    if (couples.length) {
-      text += `## CP 關係設定\n\n`;
-      couples.forEach(cp => {
-        text += `### ${cp.name}（${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}）\n`;
-        (cp.members || []).forEach(member => {
-          const char = characters.find(c => c.id === member.charId);
-          text += `- ${char?.name || '已移除角色'}｜定位：${member.position || '未填'}${cp.type === 'other' ? '' : `｜R18：${member.r18 || '未填'}`}｜對關係的感想：${member.thoughts || '未填'}\n`;
+
+    if (targetRankings.length) {
+      text += `\n===================================\n`;
+      text += `## 【評分與排名評比 (已順用切點，去除未選角色)】\n\n`;
+      targetRankings.forEach(r => {
+        text += `### 主題: ${r.subject}\n`;
+        const items = r.items || [];
+        const filteredItems = items.filter(it => selectedCharIds.includes(it.charId));
+        
+        let seqStr = "";
+        filteredItems.forEach((it, i) => {
+          const char = targetChars.find(c => c.id === it.charId);
+          if (!char) return;
+          seqStr += char.name;
+
+          const origIdx = items.findIndex(orig => orig.charId === it.charId);
+          let attachedCutoffLabel = null;
+          if (origIdx !== -1 && (r.cutoffs || []).length) {
+            const prevOrigIdx = i > 0 ? items.findIndex(orig => orig.charId === filteredItems[i-1].charId) : -1;
+            r.cutoffs.forEach(co => {
+              const coOrigIdx = items.findIndex(orig => orig.charId === co.charId);
+              if (coOrigIdx > prevOrigIdx && coOrigIdx <= origIdx) {
+                attachedCutoffLabel = co.label;
+              }
+            });
+          }
+
+          if (attachedCutoffLabel) seqStr += `【切點: ${attachedCutoffLabel}】`;
+          if (i < filteredItems.length - 1) seqStr += ` ${it.operator || '>'} `;
         });
-        (cp.sections || []).forEach(section => { text += `#### ${section.title || '未命名詞條'}\n${section.content || '（無內容）'}\n`; });
+
+        text += `順序: ${seqStr || '（無所選角色）'}\n\n`;
+      });
+    }
+
+    if (targetParos.length) {
+      text += `\n===================================\n`;
+      text += `## 【Paro 平行世界設定 (所選角色)】\n\n`;
+      targetParos.forEach(p => {
+        text += `### Paro: ${p.name}\n`;
+        const memberChars = targetChars.filter(c => (p.members || []).includes(c.id));
+        memberChars.forEach(c => {
+          text += `- 角色 ${c.name}:\n`;
+          const valObj = (c.paroValues && c.paroValues[p.id]) || {};
+          (p.fields || []).forEach(f => {
+            text += `   * ${f.name}: ${valObj[f.id] || '未填寫'}\n`;
+          });
+        });
         text += `\n`;
       });
     }
@@ -1611,7 +2262,7 @@ function downloadExportPdf() {
 
 // ========== 12. 線上快照同步 ==========
 function openCloudSyncModal() {
-  const exportData = { characters, paros, factions, rankings, couples, exportedAt: new Date().toISOString() };
+  const exportData = { characters, paros, factions, rankings, cps, books, documents, collapsedBooks, exportedAt: new Date().toISOString() };
   const jsonStr = JSON.stringify(exportData);
   const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
   document.getElementById("cloudSyncStringArea").value = encoded;
@@ -1635,7 +2286,10 @@ function applyCloudSyncString() {
     if (data.paros) paros = data.paros;
     if (data.factions) factions = data.factions;
     if (data.rankings) rankings = data.rankings;
-    if (Array.isArray(data.couples)) couples = data.couples;
+    if (data.cps) cps = data.cps;
+    if (data.books) books = data.books;
+    if (data.documents) documents = data.documents;
+    if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
 
     saveStateToLocalStorage();
     syncGlobalTags();
@@ -1650,16 +2304,16 @@ function applyCloudSyncString() {
 // 手機底部選單
 function toggleMobileCardSubmenu() {
   const menu = document.getElementById("mobileCardSubmenu");
-  menu.classList.toggle("active");
+  if (menu) menu.classList.toggle("active");
 }
 function hideMobileCardSubmenu() {
   const menu = document.getElementById("mobileCardSubmenu");
-  menu.classList.remove("active");
+  if (menu) menu.classList.remove("active");
 }
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = { characters, paros, factions, rankings, couples, deepseekSettings };
+  const exportData = { characters, paros, factions, rankings, cps, books, documents, collapsedBooks, deepseekSettings };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1680,7 +2334,10 @@ function handleImportJson(event) {
       if (data.paros) paros = data.paros;
       if (data.factions) factions = data.factions;
       if (data.rankings) rankings = data.rankings;
-      if (Array.isArray(data.couples)) couples = data.couples;
+      if (data.cps) cps = data.cps;
+      if (data.books) books = data.books;
+      if (data.documents) documents = data.documents;
+      if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
       saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
       alert("JSON 資料匯入成功！");
     } catch (err) { alert("匯入失敗：" + err.message); }
