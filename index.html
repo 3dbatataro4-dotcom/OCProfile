@@ -126,8 +126,8 @@
     <section id="tab-cps" class="tab-content">
       <div class="section-banner">
         <div>
-          <h2><i class="fa-solid fa-heart-pulse"></i> CP 關係細節與情感歷程</h2>
-          <p>專門記錄 CP 組合（支援雙人或多人組合），可自訂無限個相遇、交往與日常相處詞條。</p>
+          <h2><i class="fa-solid fa-heart-pulse"></i> CP 與多種人物關係</h2>
+          <p>兼容 CP、朋友、家人等雙人或多人關係；每位成員可分別填寫定位、看法與互動細節。</p>
         </div>
         <button class="btn btn-primary" onclick="openCpModal()">
           <i class="fa-solid fa-plus"></i> 新建 CP 組合
@@ -620,32 +620,31 @@
       <div class="modal-body">
         <input type="hidden" id="cpId">
         <div class="form-group">
-          <label>CP 組合名稱 *</label>
-          <input type="text" id="cpName" placeholder="如：納希瑟斯 × 尼古拉斯．維納托">
+          <label>關係卡名稱 *</label>
+          <input type="text" id="cpName" placeholder="如：角色 A × 角色 B／某某一家人">
+        </div>
+
+        <div class="basic-fields-grid">
+          <div class="form-group">
+            <label>關係類型 *</label>
+            <select id="cpType" onchange="toggleCpTypeFields()"><option value="cp">CP 關係</option><option value="other">其他關係</option></select>
+          </div>
+          <div class="form-group" id="cpOtherTypeGroup" style="display:none;">
+            <label>其他關係名稱 *</label>
+            <input type="text" id="cpRelationType" placeholder="如：朋友、家人、師生、宿敵">
+          </div>
         </div>
 
         <div class="form-group">
-          <label>關聯 CP 角色選擇 (支持多選 2人/3人或以上)：</label>
+          <label>關聯人物（支援 2 人、3 人或更多）：</label>
           <div class="checkbox-pill-group" id="cpCharCheckboxes">
             <!-- Populated by app.js -->
           </div>
         </div>
 
         <div class="form-group">
-          <label>每位角色的左右位 / 定位設定：</label>
-          <div id="cpPositionsContainer">
-            <!-- Populated dynamically per checked char -->
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>關係狀況補充：</label>
-          <textarea id="cpR18Notes" rows="2" placeholder="填寫互動風格與細節..."></textarea>
-        </div>
-
-        <div class="form-group">
-          <label>對關係的總體感想：</label>
-          <textarea id="cpThoughts" rows="2" placeholder="填寫對這個 CP 關係的感想..."></textarea>
+          <label>每位人物的獨立設定：</label>
+          <div id="cpMemberDetailsContainer"></div>
         </div>
 
         <div class="form-group">
