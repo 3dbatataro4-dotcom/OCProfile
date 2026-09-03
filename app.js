@@ -12,6 +12,8 @@ let books = [];
 let documents = [];
 let collapsedBooks = {};
 let globalTags = new Set();
+let articleTags = new Set();
+let visualNovelTemplates = [];
 
 let deepseekSettings = {
   apiKey: "sk-af4ffa206b844a3fb2a0b2575602fa23",
@@ -38,6 +40,23 @@ let currentReadingDocId = null;
 let documentReaderFontSize = 1.05;
 let pendingAdvancedImport = null;
 let pendingImportConflicts = [];
+let draggedDocumentId = null;
+let currentVisualNovelDocId = null;
+let currentVisualNovelEvents = [];
+let currentVisualNovelIndex = -1;
+let visualNovelAutoPlay = false;
+let visualNovelAutoTimer = null;
+let visualNovelHistory = [];
+let currentVisualNovelSettings = {};
+let visualNovelTyping = null;
+let visualNovelAudioContext = null;
+let visualNovelBgmFadeToken = 0;
+let visualNovelBgmChannelIndex = 0;
+let visualNovelFastForwardDelay = null;
+let visualNovelFastForwardTimer = null;
+let visualNovelFastForwardActive = false;
+let visualNovelSuppressContinueClick = false;
+const editorModalSnapshots = { documentModal:null, visualNovelEditorModal:null };
 
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
@@ -111,9 +130,15 @@ function loadStateFromLocalStorage() {
       if (!Array.isArray(documents) || documents.length === 0) documents = [...PRESET_DOCUMENTS];
     } catch (e) { documents = [...PRESET_DOCUMENTS]; }
   } else { documents = [...PRESET_DOCUMENTS]; }
+  documents.forEach(doc => {
+    if (doc.visualNovel?.scriptText) doc.visualNovel.scriptText = formatVisualNovelScriptBlocks(doc.visualNovel.scriptText);
+  });
 
   const savedCollapsed = localStorage.getItem("oc_collapsed_books");
   if (savedCollapsed) { try { collapsedBooks = JSON.parse(savedCollapsed); } catch (e) {} }
+
+  const savedVnTemplates = localStorage.getItem("oc_visual_novel_templates");
+  if (savedVnTemplates) { try { visualNovelTemplates = JSON.parse(savedVnTemplates) || []; } catch (e) { visualNovelTemplates = []; } }
 
   const savedTargets = localStorage.getItem("oc_perspective_targets");
   if (savedTargets) { try { perspectiveTargets = JSON.parse(savedTargets); } catch (e) {} }
@@ -139,6 +164,7 @@ function saveStateToLocalStorage() {
   localStorage.setItem("oc_books", JSON.stringify(books));
   localStorage.setItem("oc_documents", JSON.stringify(documents));
   localStorage.setItem("oc_collapsed_books", JSON.stringify(collapsedBooks));
+  localStorage.setItem("oc_visual_novel_templates", JSON.stringify(visualNovelTemplates));
   localStorage.setItem("oc_perspective_targets", JSON.stringify(perspectiveTargets));
   localStorage.setItem("oc_deepseek_settings", JSON.stringify(deepseekSettings));
 }
@@ -180,17 +206,19 @@ function updateThemeButtonUI() {
 // ========== 2. 標籤自動同步 ==========
 function syncGlobalTags() {
   globalTags.clear();
+  articleTags.clear();
   characters.forEach(c => (c.tags || []).forEach(t => globalTags.add(t)));
   factions.forEach(f => {
     if (f.name) globalTags.add(f.name);
     (f.subTags || []).forEach(sub => { if (sub.name) globalTags.add(sub.name); });
   });
-  books.forEach(b => (b.tags || []).forEach(t => globalTags.add(t)));
-  documents.forEach(d => (d.tags || []).forEach(t => globalTags.add(t)));
+  books.forEach(b => (b.tags || []).forEach(t => articleTags.add(t)));
+  documents.forEach(d => (d.tags || []).forEach(t => articleTags.add(t)));
 
   const filterSelect = document.getElementById("tagFilter");
   const modalSelect = document.getElementById("charTagSelect");
   const docTagSelect = document.getElementById("docTagFilter");
+  const articleTagSuggestions = document.getElementById("articleTagSuggestions");
 
   if (filterSelect) filterSelect.innerHTML = `<option value="">全部標籤</option>`;
   if (modalSelect) modalSelect.innerHTML = `<option value="">+ 下拉選擇已建立標籤 / 陣營</option>`;
@@ -199,8 +227,11 @@ function syncGlobalTags() {
   globalTags.forEach(tag => {
     if (filterSelect) filterSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
     if (modalSelect) modalSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
+  });
+  articleTags.forEach(tag => {
     if (docTagSelect) docTagSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
   });
+  if (articleTagSuggestions) articleTagSuggestions.innerHTML = [...articleTags].map(tag => `<option value="${tag}"></option>`).join('');
 }
 
 function addTagFromSelect(tag) {
@@ -527,6 +558,7 @@ function openCpModal(cpId = null) {
   toggleCpTypeFields(false);
   renderCpMemberInputs();
   modal.classList.add("active");
+  captureEditorModalSnapshot("documentModal");
 }
 
 function toggleCpTypeFields(rerender = true) {
@@ -1880,11 +1912,15 @@ function renderDocumentsModule() {
   const charFilterSelect = document.getElementById("docCharFilter");
   const factionFilterSelect = document.getElementById("docFactionFilter");
 
-  if (charFilterSelect && charFilterSelect.children.length <= 1) {
+  if (charFilterSelect) {
+    const previous = charFilterSelect.value;
     charFilterSelect.innerHTML = `<option value="">全部角色</option>` + activeChars.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    charFilterSelect.value = previous;
   }
-  if (factionFilterSelect && factionFilterSelect.children.length <= 1) {
+  if (factionFilterSelect) {
+    const previous = factionFilterSelect.value;
     factionFilterSelect.innerHTML = `<option value="">全部世界觀</option>` + factions.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+    factionFilterSelect.value = previous;
   }
 
   const searchKeyword = (document.getElementById("docSearchInput") ? document.getElementById("docSearchInput").value : "").toLowerCase().trim();
@@ -1902,12 +1938,28 @@ function renderDocumentsModule() {
 
   const filteredDocs = documents.filter(filterFn);
 
-  const bookHtmlList = books.map(book => {
-    const bookDocs = filteredDocs.filter(d => d.bookId === book.id);
+  const filtersActive = !!(searchKeyword || selectedCharId || selectedFactionId || selectedTag);
+  const visibleBooks = books.filter(book => {
+    if (!filtersActive) return true;
+    const bookSearch = !searchKeyword || `${book.title || ''} ${book.description || ''}`.toLowerCase().includes(searchKeyword);
+    const bookChar = !selectedCharId || (book.charIds || []).includes(selectedCharId);
+    const bookFaction = !selectedFactionId || (book.factionIds || []).includes(selectedFactionId);
+    const bookTag = !selectedTag || (book.tags || []).includes(selectedTag);
+    return (bookSearch && bookChar && bookFaction && bookTag) || filteredDocs.some(doc => doc.bookId === book.id);
+  });
+
+  const bookHtmlList = visibleBooks.map(book => {
+    const bookDirectMatch = filtersActive &&
+      (!searchKeyword || `${book.title || ''} ${book.description || ''}`.toLowerCase().includes(searchKeyword)) &&
+      (!selectedCharId || (book.charIds || []).includes(selectedCharId)) &&
+      (!selectedFactionId || (book.factionIds || []).includes(selectedFactionId)) &&
+      (!selectedTag || (book.tags || []).includes(selectedTag));
+    const bookDocs = (bookDirectMatch ? documents : filteredDocs).filter(d => d.bookId === book.id);
     const isCollapsed = !!collapsedBooks[book.id];
     const memberChars = (book.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
     const memberFactions = (book.factionIds || []).map(id => factions.find(f => f.id === id)).filter(Boolean);
     const bookIconColor = book.iconColor || 'var(--accent-gold)';
+    const bookTagsHtml = (book.tags || []).map(tag => `<span class="tag-pill">${tag}</span>`).join(' ');
 
     return `
       <div class="book-folder-card">
@@ -1927,10 +1979,12 @@ function renderDocumentsModule() {
                 ${memberChars.length ? `角色: ${memberChars.map(c=>c.name).join(', ')} ｜ ` : ''}
                 ${memberFactions.length ? `世界觀: ${memberFactions.map(f=>f.name).join(', ')}` : ''}
               </div>
+              ${bookTagsHtml ? `<div style="margin-top:0.25rem;">${bookTagsHtml}</div>` : ''}
             </div>
           </div>
-          <div style="display:flex; gap:0.4rem;">
+          <div class="book-inline-actions" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
             <button class="btn btn-xs btn-outline" onclick="openBookModal('${book.id}')"><i class="fa-solid fa-pen"></i> 編輯書籍</button>
+            <button class="btn btn-xs btn-primary" onclick="openDocumentModal(null, '${book.id}')"><i class="fa-solid fa-plus"></i> 新增章節</button>
             <button class="btn btn-xs btn-danger" onclick="deleteBook('${book.id}')">&times;</button>
           </div>
         </div>
@@ -1963,8 +2017,11 @@ function renderSingleDocItemHtml(doc) {
   const tagsHtml = (doc.tags || []).map(t => `<span class="tag-pill">${t}</span>`).join(' ');
 
   return `
-    <div class="doc-item-row">
+    <div class="doc-item-row" data-doc-id="${doc.id}" data-book-id="${doc.bookId || ''}" draggable="true"
+      ondragstart="beginDocumentDrag(event, '${doc.id}')" ondragend="finishDocumentDrag()" ondragover="event.preventDefault()" ondrop="dropDocumentDrag(event, '${doc.id}')">
       <div style="display:flex; align-items:center; gap:0.6rem; flex:1;">
+        <button class="doc-drag-handle" type="button" title="拖曳調整章節順序"
+          onpointerdown="beginDocumentPointerDrag(event, '${doc.id}')"><i class="fa-solid fa-grip-vertical"></i></button>
         <input type="checkbox" class="doc-summary-cb" value="${doc.id}" style="width:16px; height:16px;">
         <i class="fa-solid fa-file-lines" style="color:var(--accent-coffee); font-size:1.05rem; flex-shrink:0;"></i>
         <div>
@@ -1979,7 +2036,7 @@ function renderSingleDocItemHtml(doc) {
       <div>
         <button class="btn btn-xs btn-primary" onclick="openDocumentReader('${doc.id}')"><i class="fa-solid fa-book-open-reader"></i> 閱讀</button>
         <button class="btn btn-xs btn-outline" onclick="openDocumentModal('${doc.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
-        <button class="btn btn-xs btn-danger" onclick="deleteDocument('${doc.id}')">&times;</button>
+        <button class="btn btn-xs btn-magic" onclick="openVisualNovelForDocument('${doc.id}')"><i class="fa-solid fa-gamepad"></i> ${doc.visualNovel?.scriptText ? '視覺小說' : '建立視覺小說'}</button>
       </div>
     </div>
   `;
@@ -2073,7 +2130,7 @@ function deleteBook(bookId) {
   }
 }
 
-function openDocumentModal(docId = null) {
+function openDocumentModal(docId = null, defaultBookId = "") {
   const modal = document.getElementById("documentModal");
   const activeChars = characters.filter(c => !c.isHidden);
   const charCb = document.getElementById("docCharCheckboxes");
@@ -2090,6 +2147,9 @@ function openDocumentModal(docId = null) {
     document.getElementById("docBelongingBookId").value = d.bookId || "";
     document.getElementById("docTags").value = (d.tags || []).join(', ');
     document.getElementById("docContent").value = d.content || "";
+    document.getElementById("deleteDocumentInEditorBtn").style.display = "inline-flex";
+    document.getElementById("editDocumentVisualNovelBtn").style.display = "inline-flex";
+    document.getElementById("editDocumentVisualNovelBtn").innerHTML = `<i class="fa-solid fa-gamepad"></i> ${d.visualNovel?.scriptText ? '改寫視覺小說' : '建立視覺小說'}`;
 
     charCb.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
@@ -2108,9 +2168,11 @@ function openDocumentModal(docId = null) {
     document.getElementById("docModalTitle").innerText = "新建同人文檔章節";
     document.getElementById("docId").value = "";
     document.getElementById("docTitle").value = "";
-    document.getElementById("docBelongingBookId").value = "";
+    document.getElementById("docBelongingBookId").value = defaultBookId || "";
     document.getElementById("docTags").value = "";
     document.getElementById("docContent").value = "";
+    document.getElementById("deleteDocumentInEditorBtn").style.display = "none";
+    document.getElementById("editDocumentVisualNovelBtn").style.display = "none";
 
     charCb.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill"><input type="checkbox" value="${c.id}"><span>${c.name}</span></label>
@@ -2185,7 +2247,8 @@ function saveDocumentForm() {
     charIds: checkedCharIds,
     factionIds: checkedFactionIds,
     tags: document.getElementById("docTags").value.split(',').map(t => t.trim()).filter(Boolean),
-    content: document.getElementById("docContent").value.trim()
+    content: document.getElementById("docContent").value.trim(),
+    visualNovel: id ? documents.find(d => d.id === id)?.visualNovel : undefined
   };
 
   if (id) {
@@ -2198,7 +2261,7 @@ function saveDocumentForm() {
   saveStateToLocalStorage();
   syncGlobalTags();
   renderDocumentsModule();
-  closeModal("documentModal");
+  closeModal("documentModal", true);
 }
 
 function deleteDocument(docId) {
@@ -2207,6 +2270,854 @@ function deleteDocument(docId) {
     saveStateToLocalStorage();
     renderDocumentsModule();
   }
+}
+
+function deleteDocumentFromEditor() {
+  const docId = document.getElementById("docId").value;
+  if (!docId) return;
+  if (confirm("確定要刪除此同人文檔章節嗎？此章的視覺小說腳本也會一併刪除。")) {
+    documents = documents.filter(d => d.id !== docId);
+    saveStateToLocalStorage(); syncGlobalTags(); renderDocumentsModule(); closeModal("documentModal", true);
+  }
+}
+
+function reorderDocument(sourceId, targetId) {
+  if (!sourceId || !targetId || sourceId === targetId) return;
+  const sourceIndex = documents.findIndex(doc => doc.id === sourceId);
+  const targetIndex = documents.findIndex(doc => doc.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0 || (documents[sourceIndex].bookId || "") !== (documents[targetIndex].bookId || "")) return;
+  const [moved] = documents.splice(sourceIndex, 1);
+  const updatedTargetIndex = documents.findIndex(doc => doc.id === targetId);
+  documents.splice(updatedTargetIndex, 0, moved);
+  saveStateToLocalStorage(); renderDocumentsModule();
+}
+
+function beginDocumentDrag(event, docId) {
+  draggedDocumentId = docId;
+  event.dataTransfer.effectAllowed = "move";
+  event.currentTarget.classList.add("is-dragging");
+}
+
+function dropDocumentDrag(event, targetId) {
+  event.preventDefault();
+  reorderDocument(draggedDocumentId, targetId);
+  draggedDocumentId = null;
+}
+
+function finishDocumentDrag() {
+  draggedDocumentId = null;
+  document.querySelectorAll(".doc-item-row").forEach(row => row.classList.remove("is-dragging", "is-drop-target"));
+}
+
+function beginDocumentPointerDrag(event, docId) {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  draggedDocumentId = docId;
+  const handle = event.currentTarget;
+  handle.setPointerCapture?.(event.pointerId);
+  handle.closest(".doc-item-row")?.classList.add("is-dragging");
+  const move = moveEvent => {
+    const target = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest(".doc-item-row");
+    document.querySelectorAll(".doc-item-row.is-drop-target").forEach(row => row.classList.remove("is-drop-target"));
+    if (target && target.dataset.bookId === (handle.closest(".doc-item-row")?.dataset.bookId || "")) target.classList.add("is-drop-target");
+  };
+  const finish = finishEvent => {
+    const target = document.elementFromPoint(finishEvent.clientX, finishEvent.clientY)?.closest(".doc-item-row");
+    document.querySelectorAll(".doc-item-row").forEach(row => row.classList.remove("is-dragging", "is-drop-target"));
+    handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", finish); handle.removeEventListener("pointercancel", finish);
+    if (target) reorderDocument(docId, target.dataset.docId);
+    draggedDocumentId = null;
+  };
+  handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", finish); handle.addEventListener("pointercancel", finish);
+  event.preventDefault();
+}
+
+// ========== 10.6. 小說自動視覺小說化 ==========
+const DEFAULT_VN_AVATAR = "https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E8%B7%AF%E4%BA%BA.png";
+
+function getDefaultVisualNovelSettings(doc) {
+  const book = books.find(item => item.id === doc?.bookId);
+  const firstCharacter = (doc?.charIds || []).map(id => characters.find(char => char.id === id)).find(Boolean);
+  return {
+    primaryColor: firstCharacter?.themeColor?.primary || book?.iconColor || "#d97706",
+    secondaryColor: firstCharacter?.themeColor?.secondary || "#7c3aed",
+    themeMode: "dark", backgroundColor: "#17130f", textColor: "#fffaf0",
+    narratorBorderColor: "#b8aa98", narratorTextColor: "#fffaf0", globalBgm: "", bgmVolume: 0.7,
+    useCharacterColors: true, typewriterEnabled: true, typewriterSound: false
+  };
+}
+
+function collectVisualNovelSettings() {
+  return {
+    primaryColor: document.getElementById("vnPrimaryColor").value,
+    secondaryColor: document.getElementById("vnSecondaryColor").value,
+    themeMode: document.getElementById("vnThemeMode").value,
+    backgroundColor: document.getElementById("vnBackgroundColor").value,
+    textColor: document.getElementById("vnTextColor").value,
+    narratorBorderColor: document.getElementById("vnNarratorBorderColor").value,
+    narratorTextColor: document.getElementById("vnNarratorTextColor").value,
+    globalBgm: document.getElementById("vnGlobalBgm").value.trim(),
+    bgmVolume: Number(document.getElementById("vnBgmVolume").value),
+    useCharacterColors: document.getElementById("vnUseCharacterColors").checked,
+    typewriterEnabled: document.getElementById("vnTypewriterEnabled").checked,
+    typewriterSound: document.getElementById("vnTypewriterSound").checked
+  };
+}
+
+function fillVisualNovelSettings(settings) {
+  document.getElementById("vnPrimaryColor").value = settings.primaryColor || "#d97706";
+  document.getElementById("vnSecondaryColor").value = settings.secondaryColor || "#7c3aed";
+  document.getElementById("vnThemeMode").value = settings.themeMode === "light" ? "light" : "dark";
+  document.getElementById("vnBackgroundColor").value = settings.backgroundColor || "#17130f";
+  document.getElementById("vnTextColor").value = settings.textColor || "#fffaf0";
+  document.getElementById("vnNarratorBorderColor").value = settings.narratorBorderColor || "#b8aa98";
+  document.getElementById("vnNarratorTextColor").value = settings.narratorTextColor || (settings.themeMode === "light" ? "#2b2118" : "#fffaf0");
+  document.getElementById("vnGlobalBgm").value = settings.globalBgm || "";
+  const bgmVolume = Number.isFinite(Number(settings.bgmVolume)) ? Number(settings.bgmVolume) : 0.7;
+  document.getElementById("vnBgmVolume").value = bgmVolume;
+  updateVisualNovelVolumeLabel(bgmVolume);
+  document.getElementById("vnUseCharacterColors").checked = settings.useCharacterColors !== false;
+  document.getElementById("vnTypewriterEnabled").checked = settings.typewriterEnabled !== false;
+  document.getElementById("vnTypewriterSound").checked = !!settings.typewriterSound;
+}
+
+function updateVisualNovelThemeModeDefaults() {
+  const light = document.getElementById("vnThemeMode").value === "light";
+  document.getElementById("vnBackgroundColor").value = light ? "#fffaf0" : "#17130f";
+  document.getElementById("vnTextColor").value = light ? "#2b2118" : "#fffaf0";
+  document.getElementById("vnNarratorTextColor").value = light ? "#2b2118" : "#fffaf0";
+}
+
+function updateVisualNovelVolumeLabel(value) {
+  const label = document.getElementById("vnBgmVolumeLabel");
+  if (label) label.textContent = `${Math.round(Number(value) * 100)}%`;
+}
+
+function renderVisualNovelTemplateSelect() {
+  const select = document.getElementById("vnTemplateSelect");
+  select.innerHTML = `<option value="">套用已存模板…</option>` + visualNovelTemplates.map(template => `<option value="${template.id}">${template.name}</option>`).join('');
+}
+
+function openVisualNovelForDocument(docId) {
+  const doc = documents.find(item => item.id === docId);
+  if (!doc) return;
+  if (doc.visualNovel?.scriptText?.trim()) startVisualNovel(docId);
+  else openVisualNovelEditor(docId);
+}
+
+function openVisualNovelEditor(docId) {
+  const doc = documents.find(item => item.id === docId);
+  if (!doc) return;
+  const settings = { ...getDefaultVisualNovelSettings(doc), ...(doc.visualNovel?.settings || {}) };
+  document.getElementById("vnDocumentId").value = doc.id;
+  document.getElementById("vnEditorChapterTitle").textContent = doc.title;
+  document.getElementById("vnScriptText").value = formatVisualNovelScriptBlocks(doc.visualNovel?.scriptText || "");
+  document.getElementById("vnTemplateName").value = "";
+  fillVisualNovelSettings(settings);
+  renderVisualNovelTemplateSelect();
+  document.getElementById("visualNovelEditorModal").classList.add("active");
+  captureEditorModalSnapshot("visualNovelEditorModal");
+}
+
+function openVisualNovelEditorFromDocumentModal() {
+  const docId = document.getElementById("docId").value;
+  if (!docId) return;
+  if (!closeModal("documentModal")) return;
+  openVisualNovelEditor(docId);
+}
+
+function openCurrentVisualNovelEditor() {
+  if (!currentVisualNovelDocId) return;
+  closeVisualNovelPlayer();
+  openVisualNovelEditor(currentVisualNovelDocId);
+}
+
+function saveVisualNovelTemplate() {
+  const name = document.getElementById("vnTemplateName").value.trim();
+  if (!name) { alert("請先輸入模板名稱。"); return; }
+  const existing = visualNovelTemplates.find(template => normalizedImportName(template.name) === normalizedImportName(name));
+  const template = { id: existing?.id || `vnt_${Date.now()}`, name, settings: collectVisualNovelSettings() };
+  if (existing) visualNovelTemplates[visualNovelTemplates.indexOf(existing)] = template;
+  else visualNovelTemplates.push(template);
+  saveStateToLocalStorage(); renderVisualNovelTemplateSelect();
+  document.getElementById("vnTemplateSelect").value = template.id;
+  alert("視覺小說模板已儲存。");
+}
+
+function applyVisualNovelTemplate() {
+  const template = visualNovelTemplates.find(item => item.id === document.getElementById("vnTemplateSelect").value);
+  if (!template) { alert("請先選擇模板。"); return; }
+  fillVisualNovelSettings(template.settings || {});
+}
+
+function deleteVisualNovelTemplate() {
+  const id = document.getElementById("vnTemplateSelect").value;
+  const template = visualNovelTemplates.find(item => item.id === id);
+  if (!template || !confirm(`確定刪除模板「${template.name}」嗎？`)) return;
+  visualNovelTemplates = visualNovelTemplates.filter(item => item.id !== id);
+  saveStateToLocalStorage(); renderVisualNovelTemplateSelect();
+}
+
+function saveVisualNovelScript(preview = false) {
+  const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
+  if (!doc) return;
+  const scriptText = formatVisualNovelScriptBlocks(document.getElementById("vnScriptText").value);
+  if (!scriptText.trim()) { alert("腳本目前是空白的，請先產生或輸入內容。"); return; }
+  document.getElementById("vnScriptText").value = scriptText;
+  doc.visualNovel = { version: 1, settings: collectVisualNovelSettings(), scriptText, updatedAt: new Date().toISOString() };
+  saveStateToLocalStorage(); renderDocumentsModule(); closeModal("visualNovelEditorModal", true);
+  if (preview) startVisualNovel(doc.id);
+}
+
+function deleteVisualNovelScript() {
+  const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
+  if (!doc?.visualNovel || !confirm("確定刪除此章的視覺小說腳本嗎？小說正文不會被刪除。")) return;
+  delete doc.visualNovel;
+  saveStateToLocalStorage(); renderDocumentsModule(); closeModal("visualNovelEditorModal", true);
+}
+
+function downloadVisualNovelScript() {
+  const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
+  const text = document.getElementById("vnScriptText").value;
+  if (!doc || !text.trim()) { alert("目前沒有可下載的腳本。"); return; }
+  const blob = new Blob([text], { type:"text/plain;charset=utf-8" });
+  const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
+  link.download = `${doc.title.replace(/[\\/:*?"<>|]/g, "_")}_視覺小說腳本.txt`; link.click(); URL.revokeObjectURL(link.href);
+}
+
+function importVisualNovelScriptFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { document.getElementById("vnScriptText").value = formatVisualNovelScriptBlocks(reader.result || ""); };
+  reader.onerror = () => alert("文字腳本讀取失敗。");
+  reader.readAsText(file, "utf-8");
+  event.target.value = "";
+}
+
+function insertVisualNovelCommand(type) {
+  const editor = document.getElementById("vnScriptText");
+  let command = "@shake";
+  if (type === "cg-none") command = "@cg none";
+  else if (type === "bgm-none") command = "@bgm none";
+  else if (type !== "shake") {
+    const label = type === "cg" ? "CG 圖片" : type.toUpperCase();
+    const url = prompt(`請輸入${label}的直接網址：`);
+    if (!url) return;
+    command = `@${type} ${url.trim()}`;
+  }
+  const start = editor.selectionStart ?? editor.value.length;
+  const end = editor.selectionEnd ?? start;
+  const before = editor.value.slice(0, start);
+  const after = editor.value.slice(end);
+  const prefix = !before ? "" : (before.endsWith("\n\n") ? "" : (before.endsWith("\n") ? "\n" : "\n\n"));
+  const suffix = !after ? "" : (after.startsWith("\n\n") ? "" : (after.startsWith("\n") ? "\n" : "\n\n"));
+  editor.setRangeText(`${prefix}${command}${suffix}`, start, end, "end");
+  editor.focus();
+}
+
+function inferVisualNovelSpeaker(text, possibleCharacters) {
+  const quoted = /^「[\s\S]*」$/u.test(String(text || "").trim());
+  if (!quoted) return { speaker:"旁白", text };
+  const named = possibleCharacters.find(character => new RegExp(`${escapeRegExp(character.name)}.{0,12}(說|問|答|喊|叫|道|表示|開口|回應)`).test(text));
+  return { speaker:named?.name || "路人", text };
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripInvisibleFormatting(value) {
+  return String(value || "").replace(/[\u200B-\u200D\u2060\uFEFF]/g, "");
+}
+
+function compactVisualNovelSpeakerName(value) {
+  return normalizedImportName(value).replace(/[\s\p{P}\p{S}\p{Cf}]/gu, "").replace(/(先生|小姐|老師|大人|殿下)$/u, "");
+}
+
+function createLosslessVisualNovelSegments(content) {
+  const segments = [];
+  String(content || "").replace(/\r\n?/g, "\n").split("\n").forEach(line => {
+    if (line === "") {
+      segments.push({ text:"", joinPrevious:false, isDialogue:false });
+      return;
+    }
+    const parts = [];
+    const pattern = /「[^」]*」/gu;
+    let cursor = 0;
+    for (const match of line.matchAll(pattern)) {
+      if (match.index > cursor) parts.push({ text:line.slice(cursor, match.index), isDialogue:false });
+      parts.push({ text:match[0], isDialogue:true });
+      cursor = match.index + match[0].length;
+    }
+    if (cursor < line.length) parts.push({ text:line.slice(cursor), isDialogue:false });
+    if (!parts.length) parts.push({ text:line, isDialogue:false });
+    parts.forEach((part, index) => segments.push({ ...part, joinPrevious:index > 0 }));
+  });
+  return segments.map((segment, index) => ({ id:`L${String(index + 1).padStart(6, "0")}`, ...segment }));
+}
+
+function cleanLegacyVisualNovelScript(scriptText) {
+  return String(scriptText || "").replace(/^@blank$/gm, "").replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/gm, "");
+}
+
+function formatVisualNovelScriptBlocks(scriptText) {
+  return cleanLegacyVisualNovelScript(scriptText)
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map(line => line.trimEnd())
+    .filter(line => line.trim() !== "")
+    .join("\n\n");
+}
+
+function normalizeVisualNovelSpeaker(speaker, possibleCharacters) {
+  const value = String(speaker || "").trim();
+  const special = { "旁白":"旁白", "narrator":"旁白", "系統":"系統", "system":"系統", "路人":"路人", "unknown":"路人" };
+  if (special[value.toLowerCase()]) return special[value.toLowerCase()];
+  const compactValue = compactVisualNovelSpeakerName(value);
+  const character = possibleCharacters.find(item => {
+    const compactName = compactVisualNovelSpeakerName(item.name);
+    return compactName === compactValue || (compactName.length >= 2 && compactValue.includes(compactName)) || (compactValue.length >= 2 && compactName.includes(compactValue));
+  });
+  return character ? stripInvisibleFormatting(character.name).trim() : "路人";
+}
+
+function inferVisualNovelSpeakerWithContext(segments, index, possibleCharacters) {
+  const direct = inferVisualNovelSpeaker(segments[index].text, possibleCharacters).speaker;
+  const normalizedDirect = normalizeVisualNovelSpeaker(direct, possibleCharacters);
+  if (normalizedDirect !== "路人") return normalizedDirect;
+  const text = segments[index].text;
+  if (!segments[index].isDialogue) return "旁白";
+  let lineStart = index;
+  while (lineStart > 0 && segments[lineStart].joinPrevious) lineStart--;
+  let lineEnd = index + 1;
+  while (lineEnd < segments.length && segments[lineEnd].joinPrevious) lineEnd++;
+  const nearby = segments.slice(Math.max(0, lineStart - 2), Math.min(segments.length, lineEnd + 2)).map(item => item.text).join("\n");
+  const contextual = possibleCharacters.find(character => {
+    const name = escapeRegExp(character.name);
+    return new RegExp(`(?:${name}.{0,18}(?:說|問|答|喊|叫|道|表示|開口|回應|[：:])|(?:說|問|答|喊|叫|道|表示|開口|回應).{0,18}${name})`, "u").test(nearby);
+  });
+  return contextual?.name || normalizedDirect;
+}
+
+function buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters) {
+  return segments.map((segment, index) => {
+    if (segment.text === "") return null;
+    const fallback = inferVisualNovelSpeakerWithContext(segments, index, possibleCharacters);
+    const aiSpeaker = normalizeVisualNovelSpeaker(speakerMap.get(segment.id), possibleCharacters);
+    const speaker = !segment.isDialogue ? "旁白" : (aiSpeaker === "路人" && fallback !== "路人" ? fallback : (speakerMap.has(segment.id) ? aiSpeaker : fallback));
+    return `${speaker}｜${segment.text}`;
+  }).filter(line => line !== null).join("\n\n");
+}
+
+function visualNovelScriptPreservesSegments(script, segments) {
+  const lines = String(script || "").split("\n").filter(line => line.trim() !== "");
+  const contentSegments = segments.filter(segment => segment.text !== "");
+  if (lines.length !== contentSegments.length) return false;
+  return lines.every((rawLine, index) => {
+    const line = rawLine.replace(/^\s*↳\s?/, "");
+    const separatorIndex = line.indexOf("｜");
+    return separatorIndex >= 0 && line.slice(separatorIndex + 1) === contentSegments[index].text;
+  });
+}
+
+function createVisualNovelAiBatches(segments) {
+  const batches = [];
+  let batch = [], characterCount = 0;
+  segments.filter(segment => segment.text !== "").forEach(segment => {
+    if (batch.length && (batch.length >= 90 || characterCount + segment.text.length > 12000)) {
+      batches.push(batch); batch = []; characterCount = 0;
+    }
+    batch.push(segment); characterCount += segment.text.length;
+  });
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+
+function parseVisualNovelSpeakerResponse(content) {
+  let text = String(content || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace >= firstBrace) text = text.slice(firstBrace, lastBrace + 1);
+  const parsed = JSON.parse(text);
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+}
+
+function getDocumentPossibleCharacters(doc) {
+  const book = books.find(item => item.id === doc?.bookId);
+  const ids = [...new Set([...(doc?.charIds || []), ...(book?.charIds || [])])];
+  return ids.map(id => characters.find(character => character.id === id)).filter(Boolean);
+}
+
+function generateVisualNovelLocally() {
+  const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
+  if (!doc?.content?.trim()) { alert("此章沒有正文內容。"); return; }
+  const possibleCharacters = getDocumentPossibleCharacters(doc);
+  const segments = createLosslessVisualNovelSegments(doc.content);
+  const script = buildLosslessVisualNovelScript(segments, new Map(), possibleCharacters);
+  if (!visualNovelScriptPreservesSegments(script, segments)) {
+    alert("完整性檢查失敗，已停止產生腳本以保護原文。"); return;
+  }
+  document.getElementById("vnScriptText").value = script;
+}
+
+async function generateVisualNovelWithAi(forceRecalculate = false) {
+  const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
+  if (!doc?.content?.trim()) { alert("此章沒有正文內容可供判斷。"); return; }
+  if (!deepseekSettings.apiKey) { alert("請先在 DeepSeek AI API 設定中填入 API Key。"); return; }
+  if (forceRecalculate && document.getElementById("vnScriptText").value.trim() && !confirm("AI 將重新判斷全文並取代目前編輯框中的腳本，確定繼續嗎？")) return;
+  const possibleCharacters = getDocumentPossibleCharacters(doc);
+  const characterContext = possibleCharacters.map(character => `- ${character.name}：${character.personality || "無性格資料"}；稱呼線索：${(character.relationships || []).map(item => `${item.targetName}=${item.callName}`).join("、")}`).join("\n");
+  const segments = createLosslessVisualNovelSegments(doc.content);
+  const batches = createVisualNovelAiBatches(segments);
+  const speakerMap = new Map();
+  let fallbackBatchCount = 0;
+  showToast(`AI 正在辨識說話者（1 / ${batches.length}）…`);
+  try {
+    for (let index = 0; index < batches.length; index++) {
+      document.getElementById("toastMessage").textContent = `AI 正在辨識說話者（${index + 1} / ${batches.length}）…原文由程式鎖定，不交給 AI 改寫`;
+      const batch = batches[index];
+      const response = await fetch(`${deepseekSettings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method:"POST", headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${deepseekSettings.apiKey}` },
+        body:JSON.stringify({ model:"deepseek-chat", temperature:0, messages:[
+          { role:"system", content:`你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isDialogue=true 才是角色對話；isDialogue=false 一律標旁白。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物（包含「尤佩特羅斯」等完整名稱），並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。可用角色：\n${characterContext || "（無已關聯角色）"}` },
+          { role:"user", content:JSON.stringify(batch) }
+        ]})
+      });
+      if (!response.ok) throw new Error(`第 ${index + 1} 批 API 回應 ${response.status}`);
+      const result = await response.json();
+      try {
+        const mapping = parseVisualNovelSpeakerResponse(result.choices?.[0]?.message?.content);
+        batch.forEach(segment => { if (mapping[segment.id]) speakerMap.set(segment.id, mapping[segment.id]); });
+        if (batch.some(segment => !mapping[segment.id])) fallbackBatchCount++;
+      } catch (error) { fallbackBatchCount++; }
+    }
+    const script = buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters);
+    if (!visualNovelScriptPreservesSegments(script, segments)) throw new Error("完整性驗證未通過，沒有覆蓋目前腳本");
+    document.getElementById("vnScriptText").value = script;
+    if (fallbackBatchCount) alert(`AI 辨識完成。共有 ${fallbackBatchCount} 批存在漏標行，這些行已由本機規則補上說話者；所有原文字句仍完整保留。`);
+  } catch (error) { alert("AI 視覺小說化失敗：" + error.message); }
+  finally { hideToast(); }
+}
+
+function parseVisualNovelScript(scriptText) {
+  return formatVisualNovelScriptBlocks(scriptText).split(/\r?\n/).map(line => {
+    const contentLine = line.replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/, "").replace(/^[\u200B-\u200D\u2060\uFEFF]+/, "");
+    const trimmedLine = contentLine.trim();
+    if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank" };
+    const command = trimmedLine.match(/^@(cg|bgm|se)\s+(.+)$/i);
+    if (command) return { type:command[1].toLowerCase(), value:command[2].trim() };
+    if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake" };
+    const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
+    if (!separator) return { type:"dialogue", speaker:"旁白", text:contentLine };
+    const index = contentLine.indexOf(separator);
+    return { type:"dialogue", speaker:stripInvisibleFormatting(contentLine.slice(0, index)).trim() || "旁白", text:contentLine.slice(index + separator.length) };
+  });
+}
+
+function applyVisualNovelTheme(settings) {
+  const player = document.getElementById("vnPlayer");
+  player.style.setProperty("--vn-primary", settings.primaryColor || "#d97706");
+  player.style.setProperty("--vn-secondary", settings.secondaryColor || settings.primaryColor || "#7c3aed");
+  player.style.setProperty("--vn-bg", settings.backgroundColor || (settings.themeMode === "light" ? "#fffaf0" : "#17130f"));
+  player.style.setProperty("--vn-text", settings.textColor || (settings.themeMode === "light" ? "#2b2118" : "#fffaf0"));
+  player.style.setProperty("--vn-narrator-border", settings.narratorBorderColor || "#b8aa98");
+  player.style.setProperty("--vn-narrator-text", settings.narratorTextColor || (settings.themeMode === "light" ? "#2b2118" : "#fffaf0"));
+  player.dataset.theme = settings.themeMode === "light" ? "light" : "dark";
+  document.getElementById("vnStoryColor").style.background = `linear-gradient(135deg, ${settings.primaryColor || '#d97706'}, ${settings.secondaryColor || '#7c3aed'})`;
+}
+
+function startVisualNovel(docId, withTransition = true, preserveHistory = false) {
+  const doc = documents.find(item => item.id === docId);
+  if (!doc?.visualNovel?.scriptText) { openVisualNovelEditor(docId); return; }
+  clearTimeout(visualNovelAutoTimer);
+  currentVisualNovelDocId = doc.id;
+  currentVisualNovelEvents = parseVisualNovelScript(doc.visualNovel.scriptText);
+  currentVisualNovelIndex = -1;
+  if (!preserveHistory) visualNovelHistory = [];
+  const settings = { ...getDefaultVisualNovelSettings(doc), ...(doc.visualNovel.settings || {}) };
+  currentVisualNovelSettings = settings;
+  finishVisualNovelTyping(false);
+  applyVisualNovelTheme(settings);
+  document.getElementById("vnTypeSoundBtn").classList.toggle("active", !!settings.typewriterSound);
+  document.getElementById("vnPlayerBgmVolume").value = Number.isFinite(Number(settings.bgmVolume)) ? Number(settings.bgmVolume) : 0.7;
+  const book = books.find(item => item.id === doc.bookId);
+  document.getElementById("vnPlayerBookTitle").textContent = book?.title || "獨立故事";
+  document.getElementById("vnPlayerChapterTitle").textContent = doc.title;
+  const feed = document.getElementById("vnStoryFeed");
+  feed.replaceChildren();
+  const chapterHeading = document.createElement("div");
+  chapterHeading.className = "vn-feed-chapter"; chapterHeading.textContent = doc.title;
+  feed.appendChild(chapterHeading);
+  document.getElementById("vnCg").style.backgroundImage = "";
+  document.getElementById("vnPlayer").classList.add("no-cg");
+  document.getElementById("visualNovelPlayerModal").classList.add("active");
+  document.getElementById("vnHistoryPanel").classList.remove("active");
+  document.getElementById("vnChapterPanel").classList.remove("active");
+  playVisualNovelAudio("bgm", settings.globalBgm || "none");
+  if (withTransition) showVisualNovelChapterTransition(doc.title);
+  advanceVisualNovel();
+}
+
+function showVisualNovelChapterTransition(title) {
+  const overlay = document.getElementById("vnChapterTransition");
+  overlay.textContent = title; overlay.classList.remove("show"); void overlay.offsetWidth; overlay.classList.add("show");
+}
+
+function fadeVisualNovelAudio(audio, targetVolume, duration, token) {
+  const startVolume = Number.isFinite(audio.volume) ? audio.volume : 1;
+  const startedAt = performance.now();
+  return new Promise(resolve => {
+    function step(now) {
+      if (token !== visualNovelBgmFadeToken) { resolve(false); return; }
+      const progress = Math.min(1, (now - startedAt) / duration);
+      audio.volume = startVolume + (targetVolume - startVolume) * progress;
+      if (progress < 1) requestAnimationFrame(step);
+      else resolve(true);
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+async function transitionVisualNovelBgm(src) {
+  const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
+  const current = channels[visualNovelBgmChannelIndex];
+  const source = normalizeVisualNovelAudioSource(src);
+  const token = ++visualNovelBgmFadeToken;
+  const statusButton = document.getElementById("vnAudioStatus");
+  delete statusButton.dataset.retrySource;
+  const targetVolume = Number.isFinite(Number(currentVisualNovelSettings.bgmVolume)) ? Number(currentVisualNovelSettings.bgmVolume) : 0.7;
+  if (source && source.toLowerCase() !== "none" && current.dataset.source === source && !current.paused) {
+    current.volume = targetVolume;
+    return;
+  }
+  if (!source || source.toLowerCase() === "none") {
+    document.querySelector("#vnAudioStatus span").textContent = "背景音樂：關閉";
+    if (!current.paused && current.currentSrc) await fadeVisualNovelAudio(current, 0, 450, token);
+    if (token !== visualNovelBgmFadeToken) return;
+    channels.forEach(audio => { audio.pause(); audio.removeAttribute("src"); delete audio.dataset.source; audio.load(); audio.volume = targetVolume; });
+    return;
+  }
+  const nextIndex = visualNovelBgmChannelIndex === 0 ? 1 : 0;
+  const next = channels[nextIndex];
+  next.pause(); next.src = source; next.dataset.source = source; next.volume = 0; next.muted = current.muted; next.load();
+  let fileName = source.split('/').pop()?.split('?')[0] || "播放中";
+  try { fileName = decodeURIComponent(fileName); } catch (error) {}
+  document.querySelector("#vnAudioStatus span").textContent = `背景音樂：${fileName}`;
+  try {
+    const playPromise = next.play();
+    visualNovelBgmChannelIndex = nextIndex;
+    await playPromise;
+    if (token !== visualNovelBgmFadeToken) return;
+    await Promise.all([
+      fadeVisualNovelAudio(next, targetVolume, 850, token),
+      (!current.paused && current.currentSrc) ? fadeVisualNovelAudio(current, 0, 650, token) : Promise.resolve(true)
+    ]);
+    if (token === visualNovelBgmFadeToken) {
+      current.pause(); current.removeAttribute("src"); delete current.dataset.source; current.load(); current.volume = targetVolume;
+    }
+  } catch (error) {
+    if (token !== visualNovelBgmFadeToken) return;
+    next.pause(); next.removeAttribute("src"); delete next.dataset.source;
+    statusButton.dataset.retrySource = source;
+    document.querySelector("#vnAudioStatus span").textContent = `BGM 播放失敗，點此重試：${fileName}`;
+    console.warn("BGM 播放失敗", error);
+  }
+}
+
+function normalizeVisualNovelAudioSource(value) {
+  let source = String(value || "").trim();
+  const markdownLink = source.match(/^\[[^\]]*\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) source = markdownLink[1];
+  return source.replace(/^[<"']|[>"']$/g, "").trim();
+}
+
+function setVisualNovelBgmVolume(value, event) {
+  event?.stopPropagation?.();
+  const volume = Math.max(0, Math.min(1, Number(value)));
+  currentVisualNovelSettings.bgmVolume = volume;
+  const activeAudio = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")][visualNovelBgmChannelIndex];
+  if (activeAudio) activeAudio.volume = volume;
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  if (doc?.visualNovel) {
+    doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), bgmVolume:volume };
+    saveStateToLocalStorage();
+  }
+}
+
+function playVisualNovelAudio(type, src) {
+  if (type === "bgm") { transitionVisualNovelBgm(src); return; }
+  const audio = document.getElementById("vnSeAudio");
+  if (!src || src.toLowerCase() === "none") { audio.pause(); audio.removeAttribute("src"); return; }
+  audio.src = src; audio.volume = 1;
+  audio.play().catch(() => {});
+}
+
+function playVisualNovelTypeBeep() {
+  if (!currentVisualNovelSettings.typewriterSound) return;
+  try {
+    if (!visualNovelAudioContext) visualNovelAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (visualNovelAudioContext.state === "suspended") visualNovelAudioContext.resume();
+    const oscillator = visualNovelAudioContext.createOscillator();
+    const gain = visualNovelAudioContext.createGain();
+    oscillator.type = "square"; oscillator.frequency.setValueAtTime(400, visualNovelAudioContext.currentTime);
+    gain.gain.setValueAtTime(0.012, visualNovelAudioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, visualNovelAudioContext.currentTime + 0.045);
+    oscillator.connect(gain); gain.connect(visualNovelAudioContext.destination);
+    oscillator.start(); oscillator.stop(visualNovelAudioContext.currentTime + 0.05);
+  } catch (error) {}
+}
+
+function playVisualNovelAdvanceSound() {
+  if (!currentVisualNovelSettings.typewriterSound) return;
+  try {
+    if (!visualNovelAudioContext) visualNovelAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (visualNovelAudioContext.state === "suspended") visualNovelAudioContext.resume();
+    const oscillator = visualNovelAudioContext.createOscillator();
+    const gain = visualNovelAudioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(620, visualNovelAudioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(390, visualNovelAudioContext.currentTime + 0.09);
+    gain.gain.setValueAtTime(0.035, visualNovelAudioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, visualNovelAudioContext.currentTime + 0.1);
+    oscillator.connect(gain); gain.connect(visualNovelAudioContext.destination);
+    oscillator.start(); oscillator.stop(visualNovelAudioContext.currentTime + 0.105);
+  } catch (error) {}
+}
+
+function typeVisualNovelText(element, text) {
+  finishVisualNovelTyping(false);
+  element.textContent = "";
+  const state = { element, text, index:0, timer:null };
+  visualNovelTyping = state;
+  const typeNextCharacter = () => {
+    if (state.index >= text.length) {
+      clearTimeout(state.timer); visualNovelTyping = null;
+      if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), 1700);
+      return;
+    }
+    const character = text[state.index++];
+    element.textContent += character;
+    if (character.trim() && !/[，。！？、；：「」『』（）…—,.!?;:'"()]/.test(character) && state.index % 2 === 0) playVisualNovelTypeBeep();
+    const nextDelay = character === "，" ? 100 : (character === "。" ? 200 : 28);
+    state.timer = setTimeout(typeNextCharacter, nextDelay);
+  };
+  state.timer = setTimeout(typeNextCharacter, 28);
+}
+
+function finishVisualNovelTyping(showFull = true) {
+  if (!visualNovelTyping) return false;
+  clearInterval(visualNovelTyping.timer);
+  if (showFull) visualNovelTyping.element.textContent = visualNovelTyping.text;
+  visualNovelTyping = null;
+  return true;
+}
+
+function executeVisualNovelEvent(event) {
+  const player = document.getElementById("vnPlayer");
+  if (event.type === "blank") {
+    const spacer = document.createElement("div"); spacer.className = "vn-feed-blank";
+    document.getElementById("vnStoryFeed").appendChild(spacer);
+    return false;
+  }
+  if (event.type === "bgm" || event.type === "se") { playVisualNovelAudio(event.type, event.value); return false; }
+  if (event.type === "cg") {
+    const cg = document.getElementById("vnCg");
+    if (event.value.toLowerCase() === "none") { cg.style.backgroundImage = ""; player.classList.add("no-cg"); }
+    else {
+      cg.classList.remove("vn-changing"); void cg.offsetWidth;
+      cg.style.backgroundImage = `url("${event.value.replace(/"/g, '%22')}")`; cg.classList.add("vn-changing"); player.classList.remove("no-cg");
+    }
+    return false;
+  }
+  if (event.type === "shake") { player.classList.remove("vn-shake"); void player.offsetWidth; player.classList.add("vn-shake"); return false; }
+  const isSystem = ["系統", "system"].includes(event.speaker.toLowerCase());
+  const narrator = ["旁白", "系統", "narrator", "system"].includes(event.speaker.toLowerCase());
+  const resolvedSpeaker = normalizeVisualNovelSpeaker(event.speaker, characters);
+  const character = characters.find(item => normalizedImportName(item.name) === normalizedImportName(resolvedSpeaker));
+  const displaySpeaker = character ? stripInvisibleFormatting(character.name).trim() : stripInvisibleFormatting(event.speaker).trim();
+  const speakerColor = currentVisualNovelSettings.useCharacterColors !== false && character?.themeColor?.primary
+    ? character.themeColor.primary : "var(--vn-primary)";
+  const feed = document.getElementById("vnStoryFeed");
+  const row = document.createElement("div");
+  row.className = `vn-feed-entry ${narrator ? (isSystem ? 'vn-feed-system' : 'vn-feed-narrator') : 'vn-feed-character'}`;
+  row.dataset.eventIndex = currentVisualNovelIndex;
+  let dialogueTextElement;
+  if (narrator) {
+    const text = document.createElement("p"); dialogueTextElement = text;
+    row.appendChild(text);
+  } else {
+    const frame = document.createElement("div"); frame.className = "vn-feed-avatar";
+    frame.style.setProperty("--speaker-color", speakerColor);
+    const image = document.createElement("img"); image.src = character?.avatar || DEFAULT_VN_AVATAR; image.alt = displaySpeaker;
+    frame.appendChild(image);
+    const card = document.createElement("div"); card.className = "vn-feed-dialogue";
+    card.style.setProperty("--speaker-color", speakerColor);
+    const name = document.createElement("strong"); name.textContent = displaySpeaker;
+    const text = document.createElement("p"); dialogueTextElement = text;
+    card.append(name, text); row.append(frame, card);
+  }
+  feed.appendChild(row);
+  if (currentVisualNovelSettings.typewriterEnabled !== false) typeVisualNovelText(dialogueTextElement, event.text);
+  else dialogueTextElement.textContent = event.text;
+  requestAnimationFrame(() => { feed.scrollTo({ top:feed.scrollHeight, behavior:"smooth" }); });
+  const historyKey = `${currentVisualNovelDocId}:${currentVisualNovelIndex}`;
+  if (!visualNovelHistory.some(item => item.key === historyKey)) visualNovelHistory.push({ key:historyKey, speaker:narrator ? "旁白" : displaySpeaker, text:event.text });
+  return true;
+}
+
+function advanceVisualNovel(event) {
+  event?.stopPropagation?.();
+  if (event) playVisualNovelAdvanceSound();
+  clearTimeout(visualNovelAutoTimer);
+  if (finishVisualNovelTyping(true)) return;
+  let displayed = false;
+  while (++currentVisualNovelIndex < currentVisualNovelEvents.length && !displayed) displayed = executeVisualNovelEvent(currentVisualNovelEvents[currentVisualNovelIndex]);
+  if (!displayed) {
+    if (getVisualNovelChapter(1)) navigateVisualNovelChapter(1);
+    else {
+      const feed = document.getElementById("vnStoryFeed");
+      if (!feed.querySelector(".vn-feed-end")) {
+        const end = document.createElement("div"); end.className = "vn-feed-end"; end.textContent = "— 本章故事已結束 —"; feed.appendChild(end); feed.scrollTop = feed.scrollHeight;
+      }
+    }
+    return;
+  }
+  if (visualNovelAutoPlay && !visualNovelTyping) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), 3200);
+}
+
+function advanceVisualNovelFast() {
+  clearTimeout(visualNovelAutoTimer);
+  finishVisualNovelTyping(true);
+  advanceVisualNovel();
+  finishVisualNovelTyping(true);
+}
+
+function startVisualNovelFastForward(event) {
+  event?.stopPropagation?.();
+  if (event?.button != null && event.button !== 0) return;
+  if (visualNovelFastForwardDelay || visualNovelFastForwardActive) return;
+  visualNovelFastForwardActive = false;
+  visualNovelSuppressContinueClick = false;
+  event?.currentTarget?.setPointerCapture?.(event.pointerId);
+  visualNovelFastForwardDelay = setTimeout(() => {
+    visualNovelFastForwardActive = true;
+    visualNovelSuppressContinueClick = true;
+    event?.currentTarget?.classList.add("fast-forwarding");
+    advanceVisualNovelFast();
+    visualNovelFastForwardTimer = setInterval(advanceVisualNovelFast, 110);
+  }, 2000);
+}
+
+function stopVisualNovelFastForward(event) {
+  event?.stopPropagation?.();
+  clearTimeout(visualNovelFastForwardDelay);
+  clearInterval(visualNovelFastForwardTimer);
+  visualNovelFastForwardDelay = null;
+  visualNovelFastForwardTimer = null;
+  const wasActive = visualNovelFastForwardActive;
+  visualNovelFastForwardActive = false;
+  event?.currentTarget?.classList.remove("fast-forwarding");
+  document.querySelector?.(".vn-primary-control.fast-forwarding")?.classList.remove("fast-forwarding");
+  if (wasActive) setTimeout(() => { visualNovelSuppressContinueClick = false; }, 350);
+}
+
+function handleVisualNovelContinueClick(event) {
+  event?.stopPropagation?.();
+  if (visualNovelSuppressContinueClick) { visualNovelSuppressContinueClick = false; return; }
+  advanceVisualNovel(event);
+}
+
+function getVisualNovelChapter(direction) {
+  const current = documents.find(item => item.id === currentVisualNovelDocId);
+  if (!current) return null;
+  const sequence = documents.filter(item => (item.bookId || "") === (current.bookId || "") && item.visualNovel?.scriptText);
+  return sequence[sequence.findIndex(item => item.id === current.id) + direction] || null;
+}
+
+function navigateVisualNovelChapter(direction, event) {
+  event?.stopPropagation?.();
+  const next = getVisualNovelChapter(direction);
+  if (next) startVisualNovel(next.id, true, true);
+}
+
+function renderVisualNovelHistory() {
+  const list = document.getElementById("vnHistoryList");
+  list.replaceChildren();
+  visualNovelHistory.forEach(item => {
+    const row = document.createElement("div"); row.className = "vn-history-item";
+    const speaker = document.createElement("strong"); speaker.textContent = item.speaker;
+    const text = document.createElement("p"); text.textContent = item.text;
+    row.append(speaker, text); list.appendChild(row);
+  });
+  if (!visualNovelHistory.length) list.textContent = "尚無對話紀錄。";
+  list.scrollTop = list.scrollHeight;
+}
+
+function renderVisualNovelChapterList() {
+  const current = documents.find(item => item.id === currentVisualNovelDocId);
+  const sequence = documents.filter(item => (item.bookId || "") === (current?.bookId || "") && item.visualNovel?.scriptText);
+  const list = document.getElementById("vnChapterList");
+  list.replaceChildren();
+  sequence.forEach((doc, index) => {
+    const button = document.createElement("button");
+    button.className = doc.id === currentVisualNovelDocId ? "active" : "";
+    button.innerHTML = `<small>CHAPTER ${String(index + 1).padStart(2, '0')}</small><strong></strong>`;
+    button.querySelector("strong").textContent = doc.title;
+    button.onclick = event => { event.stopPropagation(); startVisualNovel(doc.id, true, true); };
+    list.appendChild(button);
+  });
+}
+
+function toggleVisualNovelPanel(panel, event) {
+  event?.stopPropagation?.();
+  const target = document.getElementById(panel === "history" ? "vnHistoryPanel" : "vnChapterPanel");
+  const other = document.getElementById(panel === "history" ? "vnChapterPanel" : "vnHistoryPanel");
+  other.classList.remove("active");
+  if (panel === "history") renderVisualNovelHistory(); else renderVisualNovelChapterList();
+  target.classList.toggle("active");
+}
+
+function toggleVisualNovelMute(event) {
+  event?.stopPropagation?.();
+  const statusButton = document.getElementById("vnAudioStatus");
+  if (statusButton.dataset.retrySource) {
+    const source = statusButton.dataset.retrySource;
+    delete statusButton.dataset.retrySource;
+    transitionVisualNovelBgm(source);
+    return;
+  }
+  const bgmChannels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
+  const bgm = bgmChannels[visualNovelBgmChannelIndex];
+  const se = document.getElementById("vnSeAudio");
+  const muted = !bgm.muted;
+  bgmChannels.forEach(audio => { audio.muted = muted; }); se.muted = muted;
+  document.querySelector("#vnAudioStatus i").className = `fa-solid ${bgm.muted ? 'fa-volume-xmark' : 'fa-volume-high'}`;
+  document.getElementById("vnAudioStatus").classList.toggle("muted", bgm.muted);
+}
+
+function toggleVisualNovelAutoPlay(event) {
+  event?.stopPropagation?.();
+  visualNovelAutoPlay = !visualNovelAutoPlay;
+  document.getElementById("vnAutoPlayBtn").classList.toggle("active", visualNovelAutoPlay);
+  if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), 3200);
+  else clearTimeout(visualNovelAutoTimer);
+}
+
+function toggleVisualNovelTypeSound(event) {
+  event?.stopPropagation?.();
+  currentVisualNovelSettings.typewriterSound = !currentVisualNovelSettings.typewriterSound;
+  document.getElementById("vnTypeSoundBtn").classList.toggle("active", currentVisualNovelSettings.typewriterSound);
+  if (currentVisualNovelSettings.typewriterSound) playVisualNovelTypeBeep();
+}
+
+function closeVisualNovelPlayer() {
+  clearTimeout(visualNovelAutoTimer); stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;
+  document.getElementById("vnAutoPlayBtn").classList.remove("active");
+  visualNovelBgmFadeToken++;
+  [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")].forEach(audio => { audio.pause(); audio.volume = 1; });
+  document.getElementById("vnSeAudio").pause();
+  document.getElementById("vnHistoryPanel").classList.remove("active"); document.getElementById("vnChapterPanel").classList.remove("active");
+  closeModal("visualNovelPlayerModal");
 }
 
 async function summarizeSelectedDocsWithAi() {
@@ -2584,7 +3495,7 @@ function downloadExportPdf() {
 
 // ========== 12. 線上快照同步 ==========
 function openCloudSyncModal() {
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, collapsedBooks, exportedAt: new Date().toISOString() };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, exportedAt: new Date().toISOString() };
   const jsonStr = JSON.stringify(exportData);
   const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
   document.getElementById("cloudSyncStringArea").value = encoded;
@@ -2611,6 +3522,7 @@ function applyCloudSyncString() {
     if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
     if (data.books) books = data.books;
     if (data.documents) documents = data.documents;
+    if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
     if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
 
     saveStateToLocalStorage();
@@ -2635,7 +3547,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, collapsedBooks, deepseekSettings };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, deepseekSettings };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -2678,6 +3590,7 @@ function handleImportJson(event) {
       if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
       if (data.books) books = data.books;
       if (data.documents) documents = data.documents;
+      if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
       if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
       saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
       closeModal("importOptionsModal");
@@ -2689,7 +3602,7 @@ function handleImportJson(event) {
 }
 
 function normalizedImportName(value) {
-  return String(value || "").trim().toLocaleLowerCase();
+  return stripInvisibleFormatting(value).trim().toLocaleLowerCase();
 }
 
 function comparableImportRecord(value) {
@@ -2716,7 +3629,15 @@ const importFieldLabels = {
   targetName: "對象", callName: "稱呼", opinion: "看法", customSections: "自訂詞條",
   sections: "自訂詞條", title: "標題", content: "內容", description: "介紹",
   subgroups: "子陣營", members: "成員", position: "左右位／定位", r18: "R18 狀況",
-  thoughts: "對關係的看法", paroValues: "Paro 資料"
+  thoughts: "對關係的看法", paroValues: "Paro 資料",
+  bookId: "所屬書籍", charIds: "關聯角色", factionIds: "關聯世界觀／陣營",
+  iconColor: "書籍圖示色", items: "排名項目", cutoffs: "排名分界", operator: "比較符號",
+  fields: "自訂欄位", relationType: "關係類型", type: "類型", visualNovel: "視覺小說",
+  scriptText: "視覺小說腳本", settings: "視覺小說設定", globalBgm: "全局 BGM",
+  primaryColor: "UI 主色", secondaryColor: "漸層副色", themeMode: "深淺模式",
+  backgroundColor: "底色", textColor: "文字色", narratorBorderColor: "旁白邊條色",
+  narratorTextColor: "旁白文字色", useCharacterColors: "人物使用自身印象色", bgmVolume: "BGM 音量", updatedAt: "更新時間",
+  typewriterEnabled: "台詞逐字顯示", typewriterSound: "逐字滴滴聲"
 };
 
 function importValuesEqual(a, b) {
@@ -2764,17 +3685,50 @@ function prepareAdvancedImport(data, fileName) {
   pendingAdvancedImport = data;
   pendingImportConflicts = [];
 
-  [["character", importedCharacters, characters], ["faction", importedFactions, factions]].forEach(([type, incoming, current]) => {
+  const importedBookName = id => (data.books || []).find(book => String(book.id) === String(id))?.title || id || "standalone";
+  const currentBookName = id => books.find(book => String(book.id) === String(id))?.title || id || "standalone";
+  const collections = [
+    { type:"character", incoming:importedCharacters, current:characters, getIncoming:item => item.name, getCurrent:item => item.name },
+    { type:"faction", incoming:importedFactions, current:factions, getIncoming:item => item.name, getCurrent:item => item.name },
+    { type:"paro", incoming:Array.isArray(data.paros) ? data.paros : [], current:paros, getIncoming:item => item.name, getCurrent:item => item.name },
+    { type:"ranking", incoming:Array.isArray(data.rankings) ? data.rankings : [], current:rankings, getIncoming:item => item.subject, getCurrent:item => item.subject },
+    { type:"cp", incoming:normalizeCpCollection(data.cps || data.couples || []), current:normalizeCpCollection(cps), getIncoming:item => item.name, getCurrent:item => item.name },
+    { type:"book", incoming:Array.isArray(data.books) ? data.books : [], current:books, getIncoming:item => item.title, getCurrent:item => item.title },
+    { type:"document", incoming:Array.isArray(data.documents) ? data.documents : [], current:documents,
+      getIncoming:item => `${item.title}@@${importedBookName(item.bookId)}`, getCurrent:item => `${item.title}@@${currentBookName(item.bookId)}`,
+      compareIncoming:item => {
+        const { visualNovel, bookId, charIds = [], factionIds = [], ...article } = item;
+        return { ...article, book:importedBookName(bookId), characters:charIds.map(id => importedCharacters.find(char => String(char.id) === String(id))?.name || id).sort(), factions:factionIds.map(id => importedFactions.find(faction => String(faction.id) === String(id))?.name || id).sort() };
+      },
+      compareCurrent:item => {
+        const { visualNovel, bookId, charIds = [], factionIds = [], ...article } = item;
+        return { ...article, book:currentBookName(bookId), characters:charIds.map(id => characters.find(char => String(char.id) === String(id))?.name || id).sort(), factions:factionIds.map(id => factions.find(faction => String(faction.id) === String(id))?.name || id).sort() };
+      } },
+    { type:"vnTemplate", incoming:Array.isArray(data.visualNovelTemplates) ? data.visualNovelTemplates : [], current:visualNovelTemplates, getIncoming:item => item.name, getCurrent:item => item.name }
+  ];
+
+  collections.forEach(({ type, incoming, current, getIncoming, getCurrent, compareIncoming = item => item, compareCurrent = item => item }) => {
     incoming.forEach((record, importedIndex) => {
-      const recordName = normalizedImportName(record.name);
-      const currentIndex = recordName ? current.findIndex(item => normalizedImportName(item.name) === recordName) : -1;
-      if (currentIndex >= 0 && importRecordsDiffer(current[currentIndex], record)) {
+      const recordName = normalizedImportName(getIncoming(record));
+      const currentIndex = recordName ? current.findIndex(item => normalizedImportName(getCurrent(item)) === recordName) : -1;
+      if (currentIndex >= 0 && importRecordsDiffer(compareCurrent(current[currentIndex]), compareIncoming(record))) {
         pendingImportConflicts.push({
-          key: `${type}_${importedIndex}`, type, name: record.name || "（未命名）",
+          key: `${type}_${importedIndex}`, type, name: record.name || record.title || record.subject || "（未命名）",
           importedIndex, currentIndex, current: current[currentIndex], imported: record
         });
       }
     });
+  });
+
+  (Array.isArray(data.documents) ? data.documents : []).forEach((record, importedIndex) => {
+    const recordName = normalizedImportName(`${record.title}@@${importedBookName(record.bookId)}`);
+    const currentIndex = recordName ? documents.findIndex(item => normalizedImportName(`${item.title}@@${currentBookName(item.bookId)}`) === recordName) : -1;
+    if (currentIndex >= 0 && importRecordsDiffer(documents[currentIndex].visualNovel ?? null, record.visualNovel ?? null)) {
+      pendingImportConflicts.push({
+        key:`visualNovel_${importedIndex}`, type:"visualNovel", name:record.title || "（未命名章節）",
+        importedIndex, currentIndex, current:documents[currentIndex].visualNovel ?? null, imported:record.visualNovel ?? null
+      });
+    }
   });
 
   renderAdvancedImportConflicts(fileName, importedCharacters, importedFactions);
@@ -2785,8 +3739,10 @@ function prepareAdvancedImport(data, fileName) {
 function renderAdvancedImportConflicts(fileName, importedCharacters, importedFactions) {
   const missingChars = importedCharacters.filter(record => !normalizedImportName(record.name) || !characters.some(item => normalizedImportName(item.name) === normalizedImportName(record.name))).length;
   const missingFactions = importedFactions.filter(record => !normalizedImportName(record.name) || !factions.some(item => normalizedImportName(item.name) === normalizedImportName(record.name))).length;
+  const incomingTotal = [pendingAdvancedImport.paros, pendingAdvancedImport.rankings, pendingAdvancedImport.books, pendingAdvancedImport.documents, pendingAdvancedImport.cps || pendingAdvancedImport.couples, pendingAdvancedImport.visualNovelTemplates]
+    .reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
   document.getElementById("advancedImportSummary").textContent =
-    `${fileName}：將新增 ${missingChars} 張人物卡、${missingFactions} 個陣營；有 ${pendingImportConflicts.length} 筆同名差異需要確認。`;
+    `${fileName}：將自動合併缺少的資料（含 ${missingChars} 張人物卡、${missingFactions} 個陣營及其餘 ${incomingTotal} 筆設定）；有 ${pendingImportConflicts.length} 筆同名差異需要確認。`;
   const container = document.getElementById("advancedImportConflicts");
   container.replaceChildren();
   if (!pendingImportConflicts.length) {
@@ -2801,7 +3757,8 @@ function renderAdvancedImportConflicts(fileName, importedCharacters, importedFac
     const card = document.createElement("section");
     card.className = "import-conflict-card";
     const title = document.createElement("h4");
-    title.textContent = `${conflict.type === "character" ? "人物" : "陣營"}：${conflict.name}`;
+    const typeLabels = { character:"人物", faction:"陣營／世界觀", paro:"Paro", ranking:"排名", cp:"CP／其他關係", book:"書籍", document:"同人文章／章節", visualNovel:"視覺小說腳本／設定", vnTemplate:"視覺小說模板" };
+    title.textContent = `${typeLabels[conflict.type] || conflict.type}：${conflict.name}`;
     card.appendChild(title);
     const differenceSummary = document.createElement("div");
     differenceSummary.className = "import-difference-summary";
@@ -2843,13 +3800,13 @@ function makeUniqueImportId(preferred, prefix, usedIds) {
   return id;
 }
 
-function mergeImportedNamedRecords(current, incoming, type, idMap, transform = value => value) {
+function mergeImportedNamedRecords(current, incoming, type, idMap, transform = value => value, identityFn = record => record.name || record.title || record.subject) {
   const result = current.map(item => ({ ...item }));
   const usedIds = new Set(result.map(item => String(item.id)));
   (Array.isArray(incoming) ? incoming : []).forEach((raw, importedIndex) => {
     const record = transform(raw);
-    const identity = normalizedImportName(record.name || record.title || record.subject);
-    const sameIndex = identity ? result.findIndex(item => normalizedImportName(item.name || item.title || item.subject) === identity) : -1;
+    const identity = normalizedImportName(identityFn(record));
+    const sameIndex = identity ? result.findIndex(item => normalizedImportName(identityFn(item)) === identity) : -1;
     const oldId = raw.id;
     if (sameIndex >= 0) {
       const conflict = pendingImportConflicts.find(item => item.type === type && item.importedIndex === importedIndex);
@@ -2873,6 +3830,7 @@ function applyAdvancedImport() {
   if (!pendingAdvancedImport) return;
   const data = pendingAdvancedImport;
   const charIdMap = new Map(), factionIdMap = new Map(), paroIdMap = new Map(), bookIdMap = new Map();
+  const previousDocuments = documents.map(item => ({ ...item }));
 
   characters = mergeImportedNamedRecords(characters, data.characters, "character", charIdMap);
   factions = mergeImportedNamedRecords(factions, data.factions, "faction", factionIdMap);
@@ -2907,7 +3865,19 @@ function applyAdvancedImport() {
     bookId: bookIdMap.get(String(record.bookId)) ?? record.bookId,
     charIds: remapImportIds(record.charIds, charIdMap),
     factionIds: remapImportIds(record.factionIds, factionIdMap)
-  }));
+  }), record => `${record.title}@@${record.bookId || "standalone"}`);
+  (Array.isArray(data.documents) ? data.documents : []).forEach((raw, importedIndex) => {
+    const mappedBookId = bookIdMap.get(String(raw.bookId)) ?? raw.bookId;
+    const identity = normalizedImportName(`${raw.title}@@${mappedBookId || "standalone"}`);
+    const target = documents.find(item => normalizedImportName(`${item.title}@@${item.bookId || "standalone"}`) === identity);
+    const conflict = pendingImportConflicts.find(item => item.type === "visualNovel" && item.importedIndex === importedIndex);
+    if (!target || !conflict) return;
+    const choice = document.querySelector(`input[name="import_choice_${conflict.key}"]:checked`)?.value || "current";
+    const selected = choice === "imported" ? raw.visualNovel : previousDocuments[conflict.currentIndex]?.visualNovel;
+    if (selected == null) delete target.visualNovel;
+    else target.visualNovel = selected;
+  });
+  visualNovelTemplates = mergeImportedNamedRecords(visualNovelTemplates, data.visualNovelTemplates, "vnTemplate", new Map());
   collapsedBooks = { ...collapsedBooks, ...(data.collapsedBooks || {}) };
 
   saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
