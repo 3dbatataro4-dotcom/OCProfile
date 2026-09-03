@@ -1899,10 +1899,11 @@ function addSubTagRow(name = "", desc = "") {
   const container = document.getElementById("subTagsContainer");
   const row = document.createElement("div");
   row.className = "sub-tag-row";
+  row.dataset.originalName = name;
   row.style.cssText = "display:flex; gap:0.5rem; margin-bottom:0.4rem;";
   row.innerHTML = `
-    <input type="text" class="sub-name" placeholder="子標籤名稱" value="${name}" style="flex:1;">
-    <input type="text" class="sub-desc" placeholder="簡介說明" value="${desc}" style="flex:2;">
+    <input type="text" class="sub-name" placeholder="子標籤名稱" value="${escapeHtml(name)}" style="flex:1;">
+    <input type="text" class="sub-desc" placeholder="簡介說明" value="${escapeHtml(desc)}" style="flex:2;">
     <button type="button" class="btn btn-xs btn-danger" onclick="this.parentElement.remove()">&times;</button>
   `;
   container.appendChild(row);
@@ -1917,10 +1918,10 @@ function addFactionSectionRow(title = "", content = "", existingSecId = null) {
   row.style.cssText = "background:var(--bg-secondary); padding:0.6rem; border-radius:6px; margin-bottom:0.5rem; display:flex; flex-direction:column; gap:0.3rem;";
   row.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center;">
-      <input type="text" class="faction-sec-title" placeholder="大事件 / 自訂詞條標題 (如: 神魔大戰歷史)" value="${title}" style="font-weight:600; flex:1;">
+      <input type="text" class="faction-sec-title" placeholder="大事件 / 自訂詞條標題 (如: 神魔大戰歷史)" value="${escapeHtml(title)}" style="font-weight:600; flex:1;">
       <button type="button" class="btn btn-xs btn-danger ml-2" onclick="this.parentElement.parentElement.remove()">&times;</button>
     </div>
-    <textarea class="faction-sec-content" rows="3" placeholder="詳細大段長文字內容與設定補充...">${content}</textarea>
+    <textarea class="faction-sec-content" rows="3" placeholder="詳細大段長文字內容與設定補充...">${escapeHtml(content)}</textarea>
   `;
   container.appendChild(row);
 }
@@ -1931,10 +1932,25 @@ function saveFactionForm() {
   if (!name) { alert("請輸入陣營名稱！"); return; }
 
   const subTagRows = document.querySelectorAll("#subTagsContainer .sub-tag-row");
-  const subTags = Array.from(subTagRows).map(row => ({
-    name: row.querySelector(".sub-name").value.trim(),
-    description: row.querySelector(".sub-desc").value.trim()
-  })).filter(s => s.name);
+  const subTags = [];
+  const tagReplacements = new Map(); // oldName -> newName
+
+  const oldFaction = id ? factions.find(f => f.id === id) : null;
+  if (oldFaction && oldFaction.name !== name) {
+    tagReplacements.set(oldFaction.name, name);
+  }
+
+  subTagRows.forEach(row => {
+    const subName = row.querySelector(".sub-name").value.trim();
+    const subDesc = row.querySelector(".sub-desc").value.trim();
+    const origName = row.dataset.originalName ? row.dataset.originalName.trim() : "";
+    if (subName) {
+      subTags.push({ name: subName, description: subDesc });
+      if (origName && origName !== subName) {
+        tagReplacements.set(origName, subName);
+      }
+    }
+  });
 
   const secRows = document.querySelectorAll("#factionCustomSectionsContainer .faction-sec-row");
   const customSections = Array.from(secRows).map(row => {
@@ -1954,6 +1970,25 @@ function saveFactionForm() {
     customSections
   };
 
+  // If any faction or subtag names were changed, cascade update to characters, books, and documents!
+  if (tagReplacements.size > 0) {
+    characters.forEach(c => {
+      if (Array.isArray(c.tags)) {
+        c.tags = c.tags.map(t => tagReplacements.get(t) || t);
+      }
+    });
+    books.forEach(b => {
+      if (Array.isArray(b.tags)) {
+        b.tags = b.tags.map(t => tagReplacements.get(t) || t);
+      }
+    });
+    documents.forEach(d => {
+      if (Array.isArray(d.tags)) {
+        d.tags = d.tags.map(t => tagReplacements.get(t) || t);
+      }
+    });
+  }
+
   if (id) {
     const idx = factions.findIndex(f => f.id === id);
     if (idx !== -1) factions[idx] = factionData;
@@ -1964,15 +1999,43 @@ function saveFactionForm() {
   saveStateToLocalStorage();
   syncGlobalTags();
   renderFactionList();
+  renderCharacterCards();
+  renderDocumentsModule();
   closeModal("factionModal");
 }
 
 function deleteFaction(factionId) {
-  if (confirm("確定要刪除此陣營設定嗎？")) {
+  const faction = factions.find(f => f.id === factionId);
+  if (!faction) return;
+  if (confirm(`確定要刪除「${faction.name}」陣營與世界觀設定嗎？`)) {
+    const deletedNames = new Set([faction.name, ...(faction.subTags || []).map(s => s.name)]);
+    characters.forEach(c => {
+      if (Array.isArray(c.tags)) {
+        c.tags = c.tags.filter(t => !deletedNames.has(t));
+      }
+    });
+    books.forEach(b => {
+      if (Array.isArray(b.tags)) {
+        b.tags = b.tags.filter(t => !deletedNames.has(t));
+      }
+      if (Array.isArray(b.factionIds)) {
+        b.factionIds = b.factionIds.filter(id => id !== factionId);
+      }
+    });
+    documents.forEach(d => {
+      if (Array.isArray(d.tags)) {
+        d.tags = d.tags.filter(t => !deletedNames.has(t));
+      }
+      if (Array.isArray(d.factionIds)) {
+        d.factionIds = d.factionIds.filter(id => id !== factionId);
+      }
+    });
     factions = factions.filter(f => f.id !== factionId);
     saveStateToLocalStorage();
     syncGlobalTags();
     renderFactionList();
+    renderCharacterCards();
+    renderDocumentsModule();
   }
 }
 
@@ -2497,6 +2560,8 @@ function openVisualNovelEditor(docId) {
   document.getElementById("vnEditorChapterTitle").textContent = doc.title;
   document.getElementById("vnScriptText").value = formatVisualNovelScriptBlocks(doc.visualNovel?.scriptText || "");
   document.getElementById("vnTemplateName").value = "";
+  const customPromptEl = document.getElementById("vnAiCustomPrompt");
+  if (customPromptEl) customPromptEl.value = doc.visualNovel?.aiCustomPrompt || "";
   fillVisualNovelSettings(settings);
   renderVisualNovelTemplateSelect();
   document.getElementById("visualNovelEditorModal").classList.add("active");
@@ -2547,8 +2612,9 @@ function saveVisualNovelScript(preview = false) {
   if (!doc) return;
   const scriptText = formatVisualNovelScriptBlocks(document.getElementById("vnScriptText").value);
   if (!scriptText.trim()) { alert("腳本目前是空白的，請先產生或輸入內容。"); return; }
+  const aiCustomPrompt = document.getElementById("vnAiCustomPrompt")?.value.trim() || "";
   document.getElementById("vnScriptText").value = scriptText;
-  doc.visualNovel = { version: 1, settings: collectVisualNovelSettings(), scriptText, updatedAt: new Date().toISOString() };
+  doc.visualNovel = { version: 1, settings: collectVisualNovelSettings(), scriptText, aiCustomPrompt, updatedAt: new Date().toISOString() };
   saveStateToLocalStorage(); renderDocumentsModule(); closeModal("visualNovelEditorModal", true);
   if (preview) startVisualNovel(doc.id);
 }
@@ -2750,6 +2816,9 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
   if (!doc?.content?.trim()) { alert("此章沒有正文內容可供判斷。"); return; }
   if (!deepseekSettings.apiKey) { alert("請先在 DeepSeek AI API 設定中填入 API Key。"); return; }
   if (forceRecalculate && document.getElementById("vnScriptText").value.trim() && !confirm("AI 將重新判斷全文並取代目前編輯框中的腳本，確定繼續嗎？")) return;
+  const customPrompt = document.getElementById("vnAiCustomPrompt")?.value.trim() || "";
+  if (doc?.visualNovel) doc.visualNovel.aiCustomPrompt = customPrompt;
+  const customPromptInstruction = customPrompt ? `\n【使用者自訂角色分配指令／稱呼與別名對應關係】：\n${customPrompt}\n請務必嚴格遵循上述指示，若原文出現別名或稱呼，務必對應指認為指定的角色名稱！` : '';
   const possibleCharacters = getDocumentPossibleCharacters(doc);
   const characterContext = possibleCharacters.map(character => `- ${character.name}：${character.personality || "無性格資料"}；稱呼線索：${(character.relationships || []).map(item => `${item.targetName}=${item.callName}`).join("、")}`).join("\n");
   const segments = createLosslessVisualNovelSegments(doc.content);
@@ -2764,7 +2833,7 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
       const response = await fetch(`${deepseekSettings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method:"POST", headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${deepseekSettings.apiKey}` },
         body:JSON.stringify({ model:"deepseek-chat", temperature:0, messages:[
-          { role:"system", content:`你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isDialogue=true 才是角色對話；isDialogue=false 一律標旁白。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物（包含「尤佩特羅斯」等完整名稱），並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。可用角色：\n${characterContext || "（無已關聯角色）"}` },
+          { role:"system", content:`你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isDialogue=true 才是角色對話；isDialogue=false 一律標旁白。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物（包含「尤佩特羅斯」等完整名稱），並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。可用角色：\n${characterContext || "（無已關聯角色）"}${customPromptInstruction}` },
           { role:"user", content:JSON.stringify(batch) }
         ]})
       });
@@ -2782,6 +2851,39 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
     if (fallbackBatchCount) alert(`AI 辨識完成。共有 ${fallbackBatchCount} 批存在漏標行，這些行已由本機規則補上說話者；所有原文字句仍完整保留。`);
   } catch (error) { alert("AI 視覺小說化失敗：" + error.message); }
   finally { hideToast(); }
+}
+
+let currentVisualNovelSpeakerAliases = { aliasToChar: new Map(), charToAlias: new Map() };
+
+function parseVisualNovelSpeakerAliases(customPromptText) {
+  const aliasToChar = new Map();
+  const charToAlias = new Map();
+  if (!customPromptText || typeof customPromptText !== "string") return { aliasToChar, charToAlias };
+  
+  const lines = customPromptText.split(/\r?\n/);
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const parts = trimmed.split(/[=：:—\->]+/).map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const p1 = parts[0];
+      const p2 = parts[1];
+      const char2 = characters.find(c => normalizedImportName(c.name) === normalizedImportName(p2) || c.name.includes(p2));
+      const char1 = characters.find(c => normalizedImportName(c.name) === normalizedImportName(p1) || c.name.includes(p1));
+      if (char2) {
+        aliasToChar.set(p1, char2);
+        aliasToChar.set(normalizedImportName(p1), char2);
+        charToAlias.set(char2.name, p1);
+        charToAlias.set(normalizedImportName(char2.name), p1);
+      } else if (char1) {
+        aliasToChar.set(p2, char1);
+        aliasToChar.set(normalizedImportName(p2), char1);
+        charToAlias.set(char1.name, p2);
+        charToAlias.set(normalizedImportName(char1.name), p2);
+      }
+    }
+  });
+  return { aliasToChar, charToAlias };
 }
 
 function parseVisualNovelScript(scriptText) {
@@ -2818,6 +2920,7 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   if (!doc?.visualNovel?.scriptText) { openVisualNovelEditor(docId); return; }
   clearTimeout(visualNovelAutoTimer);
   currentVisualNovelDocId = doc.id;
+  currentVisualNovelSpeakerAliases = parseVisualNovelSpeakerAliases(doc.visualNovel?.aiCustomPrompt);
   currentVisualNovelEvents = parseVisualNovelScript(doc.visualNovel.scriptText);
   currentVisualNovelIndex = -1;
   if (!preserveHistory) visualNovelHistory = [];
@@ -2858,8 +2961,12 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
 }
 
 function showVisualNovelChapterTransition(title) {
-  const overlay = document.getElementById("vnChapterTransition");
-  overlay.textContent = title; overlay.classList.remove("show"); void overlay.offsetWidth; overlay.classList.add("show");
+  const transition = document.getElementById("vnChapterTransition");
+  transition.textContent = title;
+  transition.classList.remove("show");
+  void transition.offsetWidth;
+  transition.classList.add("show");
+  setTimeout(() => transition.classList.remove("show"), 1650);
 }
 
 function fadeVisualNovelAudio(audio, targetVolume, duration, token) {
@@ -2932,25 +3039,46 @@ function normalizeVisualNovelAudioSource(value) {
 
 function setVisualNovelBgmVolume(value, event) {
   event?.stopPropagation?.();
-  const volume = Math.max(0, Math.min(1, Number(value)));
-  currentVisualNovelSettings.bgmVolume = volume;
-  const activeAudio = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")][visualNovelBgmChannelIndex];
-  if (activeAudio) activeAudio.volume = volume;
-  const bgmLabel = document.getElementById("vnSettingsBgmLabel");
-  if (bgmLabel) bgmLabel.textContent = `${Math.round(volume * 100)}%`;
+  currentVisualNovelSettings.bgmVolume = Number(value);
+  const activeChannel = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")][visualNovelBgmChannelIndex];
+  if (activeChannel) activeChannel.volume = Number(value);
+  const label = document.getElementById("vnSettingsBgmLabel");
+  if (label) label.textContent = `${Math.round(Number(value) * 100)}%`;
+  const playerVolume = document.getElementById("vnPlayerBgmVolume");
+  if (playerVolume) playerVolume.value = value;
   const doc = documents.find(item => item.id === currentVisualNovelDocId);
   if (doc?.visualNovel) {
-    doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), bgmVolume:volume };
+    doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), bgmVolume: Number(value) };
     saveStateToLocalStorage();
   }
 }
 
+function toggleVisualNovelAudioMute(event) {
+  event?.stopPropagation?.();
+  const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
+  const se = document.getElementById("vnSeAudio");
+  const nextMuted = !channels[0].muted;
+  channels.forEach(audio => audio.muted = nextMuted);
+  if (se) se.muted = nextMuted;
+  const status = document.getElementById("vnAudioStatus");
+  status.classList.toggle("muted", nextMuted);
+  const icon = status.querySelector("i");
+  if (icon) icon.className = nextMuted ? "fa-solid fa-volume-xmark" : "fa-solid fa-volume-high";
+}
+
 function playVisualNovelAudio(type, src) {
-  if (type === "bgm") { transitionVisualNovelBgm(src); return; }
-  const audio = document.getElementById("vnSeAudio");
-  if (!src || src.toLowerCase() === "none") { audio.pause(); audio.removeAttribute("src"); return; }
-  audio.src = src; audio.volume = 1;
-  audio.play().catch(() => {});
+  const source = normalizeVisualNovelAudioSource(src);
+  if (type === "bgm") {
+    transitionVisualNovelBgm(source);
+    return;
+  }
+  const se = document.getElementById("vnSeAudio");
+  if (!se) return;
+  if (!source || source.toLowerCase() === "none") {
+    se.pause(); se.currentTime = 0; se.removeAttribute("src"); se.load(); return;
+  }
+  se.pause(); se.src = source; se.currentTime = 0; se.load();
+  se.play().catch(error => console.warn("SE 播放失敗", error));
 }
 
 function playVisualNovelTypeBeep() {
@@ -2960,7 +3088,9 @@ function playVisualNovelTypeBeep() {
     if (visualNovelAudioContext.state === "suspended") visualNovelAudioContext.resume();
     const oscillator = visualNovelAudioContext.createOscillator();
     const gain = visualNovelAudioContext.createGain();
-    oscillator.type = "square"; oscillator.frequency.setValueAtTime(400, visualNovelAudioContext.currentTime);
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(820, visualNovelAudioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(540, visualNovelAudioContext.currentTime + 0.04);
     gain.gain.setValueAtTime(0.012, visualNovelAudioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.00001, visualNovelAudioContext.currentTime + 0.045);
     oscillator.connect(gain); gain.connect(visualNovelAudioContext.destination);
@@ -2990,9 +3120,11 @@ function typeVisualNovelText(element, text) {
   element.textContent = "";
   const state = { element, text, index:0, timer:null };
   visualNovelTyping = state;
+  const feed = document.getElementById("vnStoryFeed");
   const typeNextCharacter = () => {
     if (state.index >= text.length) {
       clearTimeout(state.timer); visualNovelTyping = null;
+      if (feed) feed.scrollTop = feed.scrollHeight;
       if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(300, Math.round(1500 / visualNovelAutoSpeed)));
       return;
     }
@@ -3031,11 +3163,33 @@ function executeVisualNovelEvent(event) {
     return false;
   }
   if (event.type === "shake") { player.classList.remove("vn-shake"); void player.offsetWidth; player.classList.add("vn-shake"); return false; }
-  const isSystem = ["系統", "system"].includes(event.speaker.toLowerCase());
-  const narrator = ["旁白", "系統", "narrator", "system"].includes(event.speaker.toLowerCase());
-  const resolvedSpeaker = normalizeVisualNovelSpeaker(event.speaker, characters);
-  const character = characters.find(item => normalizedImportName(item.name) === normalizedImportName(resolvedSpeaker));
-  const displaySpeaker = character ? stripInvisibleFormatting(character.name).trim() : stripInvisibleFormatting(event.speaker).trim();
+  const rawSpeaker = stripInvisibleFormatting(event.speaker).trim();
+  const isSystem = ["系統", "system"].includes(rawSpeaker.toLowerCase());
+  const narrator = ["旁白", "系統", "narrator", "system"].includes(rawSpeaker.toLowerCase());
+
+  let character = null;
+  let displaySpeaker = rawSpeaker;
+
+  if (!narrator) {
+    if (currentVisualNovelSpeakerAliases?.aliasToChar?.has(rawSpeaker)) {
+      character = currentVisualNovelSpeakerAliases.aliasToChar.get(rawSpeaker);
+      displaySpeaker = rawSpeaker;
+    } else if (currentVisualNovelSpeakerAliases?.aliasToChar?.has(normalizedImportName(rawSpeaker))) {
+      character = currentVisualNovelSpeakerAliases.aliasToChar.get(normalizedImportName(rawSpeaker));
+      displaySpeaker = rawSpeaker;
+    } else {
+      const resolvedSpeaker = normalizeVisualNovelSpeaker(rawSpeaker, characters);
+      character = characters.find(item => normalizedImportName(item.name) === normalizedImportName(resolvedSpeaker));
+      if (character && currentVisualNovelSpeakerAliases?.charToAlias?.has(character.name)) {
+        displaySpeaker = currentVisualNovelSpeakerAliases.charToAlias.get(character.name);
+      } else if (character && currentVisualNovelSpeakerAliases?.charToAlias?.has(normalizedImportName(character.name))) {
+        displaySpeaker = currentVisualNovelSpeakerAliases.charToAlias.get(normalizedImportName(character.name));
+      } else if (character) {
+        displaySpeaker = stripInvisibleFormatting(character.name).trim();
+      }
+    }
+  }
+
   const speakerColor = currentVisualNovelSettings.useCharacterColors !== false && character?.themeColor?.primary
     ? character.themeColor.primary : "var(--vn-primary)";
   const feed = document.getElementById("vnStoryFeed");
@@ -3059,8 +3213,12 @@ function executeVisualNovelEvent(event) {
   }
   feed.appendChild(row);
   if (currentVisualNovelSettings.typewriterEnabled !== false) typeVisualNovelText(dialogueTextElement, event.text);
-  else dialogueTextElement.textContent = event.text;
-  requestAnimationFrame(() => { feed.scrollTo({ top:feed.scrollHeight, behavior:"smooth" }); });
+  else {
+    dialogueTextElement.textContent = event.text;
+    feed.scrollTop = feed.scrollHeight;
+  }
+  feed.scrollTop = feed.scrollHeight;
+  requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
   const historyKey = `${currentVisualNovelDocId}:${currentVisualNovelIndex}`;
   if (!visualNovelHistory.some(item => item.key === historyKey)) visualNovelHistory.push({ key:historyKey, speaker:narrator ? "旁白" : displaySpeaker, text:event.text });
   return true;
