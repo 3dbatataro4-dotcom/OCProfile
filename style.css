@@ -542,9 +542,10 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 
 /* 視覺小說播放器 */
 .vn-player-backdrop { z-index:1400; padding:0; background:#050403; }
-.vn-player { --vn-primary:#d97706; --vn-secondary:#7c3aed; --vn-bg:#17130f; --vn-text:#fffaf0; --vn-font-size:1.05rem; position:relative; width:100vw; height:100dvh; overflow:hidden; display:grid; grid-template-rows:auto 1fr auto; color:var(--vn-text); background:var(--vn-bg); isolation:isolate; user-select:none; -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; }
-.vn-player * { user-select:none; -webkit-user-select:none; -moz-user-select:none; -ms-user-select:none; }
-.vn-player input, .vn-player select, .vn-player textarea { user-select:auto; -webkit-user-select:auto; }
+.vn-player { --vn-primary:#d97706; --vn-secondary:#7c3aed; --vn-bg:#17130f; --vn-text:#fffaf0; --vn-font-size:1.05rem; position:relative; width:100vw; height:100dvh; overflow:hidden; display:grid; grid-template-rows:auto 1fr auto; color:var(--vn-text); background:var(--vn-bg); isolation:isolate; user-select:none !important; -webkit-user-select:none !important; -moz-user-select:none !important; -ms-user-select:none !important; -webkit-tap-highlight-color:transparent !important; -webkit-touch-callout:none !important; outline:none !important; }
+.vn-player *, .vn-stage, .vn-stage *, .vn-story-feed, .vn-story-feed * { user-select:none !important; -webkit-user-select:none !important; -moz-user-select:none !important; -ms-user-select:none !important; -webkit-tap-highlight-color:transparent !important; -webkit-touch-callout:none !important; outline:none !important; }
+.vn-player input, .vn-player select, .vn-player textarea { user-select:auto !important; -webkit-user-select:auto !important; }
+.vn-player button, .vn-player-controls button, .vn-stage button { -webkit-tap-highlight-color:transparent !important; outline:none !important; }
 .vn-player::after { content:""; position:absolute; z-index:30; inset:0; pointer-events:none; opacity:.055; background:repeating-linear-gradient(0deg,transparent 0 3px,#fff 4px); mix-blend-mode:overlay; }
 .vn-player-header { position:relative; z-index:8; min-height:58px; display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.65rem max(1rem,env(safe-area-inset-left)); background:color-mix(in srgb,var(--vn-bg) 88%,transparent); border-bottom:1px solid color-mix(in srgb,var(--vn-primary) 40%,transparent); backdrop-filter:blur(14px); }
 .vn-player-header::after { content:""; position:absolute; left:1rem; right:1rem; bottom:3px; height:1px; background:linear-gradient(90deg,transparent,var(--vn-primary),transparent); opacity:.5; }
