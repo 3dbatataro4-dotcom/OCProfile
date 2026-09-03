@@ -19,7 +19,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20260904-vn10">
 </head>
 <body>
 
@@ -831,7 +831,7 @@
         </div>
         <div class="form-group">
           <label>標籤 (用逗號隔開)：</label>
-          <input type="text" id="bookTags" placeholder="如: 長篇, 奇幻, 甜文">
+          <input type="text" id="bookTags" list="articleTagSuggestions" placeholder="如: 長篇, 奇幻, 甜文">
         </div>
       </div>
       <div class="modal-footer">
@@ -871,7 +871,8 @@
         </div>
         <div class="form-group">
           <label>標籤 (用逗號隔開)：</label>
-          <input type="text" id="docTags" placeholder="如: 初遇, 甜文">
+          <input type="text" id="docTags" list="articleTagSuggestions" placeholder="可直接輸入新文章標籤，如: 初遇, 甜文">
+          <datalist id="articleTagSuggestions"></datalist>
         </div>
         <div class="form-group">
           <label>同人文檔正文內容 (不參與預設導出，可供 AI 總結大綱)：</label>
@@ -879,9 +880,128 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn btn-danger" id="deleteDocumentInEditorBtn" onclick="deleteDocumentFromEditor()" style="display:none; margin-right:auto;"><i class="fa-solid fa-trash"></i> 刪除章節</button>
+        <button class="btn btn-magic" id="editDocumentVisualNovelBtn" onclick="openVisualNovelEditorFromDocumentModal()" style="display:none;"><i class="fa-solid fa-gamepad"></i> 視覺小說</button>
         <button class="btn btn-outline" onclick="closeModal('documentModal')">取消</button>
         <button class="btn btn-primary" onclick="saveDocumentForm()">儲存文檔</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Visual Novel Editor -->
+  <div class="modal-backdrop vn-editor-backdrop" id="visualNovelEditorModal">
+    <div class="modal-box modal-lg vn-editor-shell">
+      <div class="modal-header">
+        <div><h3><i class="fa-solid fa-gamepad"></i> 視覺小說編輯器</h3><small id="vnEditorChapterTitle"></small></div>
+        <button class="close-btn" onclick="closeModal('visualNovelEditorModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="vnDocumentId">
+        <div class="vn-template-toolbar">
+          <select id="vnTemplateSelect"><option value="">套用已存模板…</option></select>
+          <button class="btn btn-xs btn-outline" onclick="applyVisualNovelTemplate()"><i class="fa-solid fa-wand-magic-sparkles"></i> 套用</button>
+          <input type="text" id="vnTemplateName" placeholder="新模板名稱">
+          <button class="btn btn-xs btn-outline" onclick="saveVisualNovelTemplate()"><i class="fa-solid fa-floppy-disk"></i> 存成模板</button>
+          <button class="btn btn-xs btn-danger" onclick="deleteVisualNovelTemplate()" title="刪除目前選擇的模板"><i class="fa-solid fa-trash"></i></button>
+        </div>
+
+        <div class="vn-setting-grid">
+          <label>UI 主色<input type="color" id="vnPrimaryColor" value="#d97706"></label>
+          <label>漸層副色<input type="color" id="vnSecondaryColor" value="#7c3aed"></label>
+          <label>畫面模式<select id="vnThemeMode" onchange="updateVisualNovelThemeModeDefaults()"><option value="dark">深色</option><option value="light">淺色</option></select></label>
+          <label>底色<input type="color" id="vnBackgroundColor" value="#17130f"></label>
+          <label>文字色<input type="color" id="vnTextColor" value="#fffaf0"></label>
+          <label>旁白邊條色<input type="color" id="vnNarratorBorderColor" value="#b8aa98"></label>
+          <label>旁白文字色<input type="color" id="vnNarratorTextColor" value="#fffaf0"></label>
+          <label>BGM 音量 <span id="vnBgmVolumeLabel">70%</span><input type="range" id="vnBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="updateVisualNovelVolumeLabel(this.value)"></label>
+        </div>
+        <div class="form-group">
+          <label><i class="fa-solid fa-music"></i> 全局 BGM 網址</label>
+          <input type="url" id="vnGlobalBgm" placeholder="https://.../music.mp3">
+        </div>
+        <div class="vn-playback-options">
+          <label class="checkbox-label"><input type="checkbox" id="vnUseCharacterColors" checked> 人物使用自身印象色</label>
+          <label class="checkbox-label"><input type="checkbox" id="vnTypewriterEnabled" checked> 台詞逐字顯示</label>
+          <label class="checkbox-label"><input type="checkbox" id="vnTypewriterSound"> 逐字與下一句提示音</label>
+        </div>
+        <div class="vn-ai-actions">
+          <button class="btn btn-magic" onclick="generateVisualNovelWithAi(false)"><i class="fa-solid fa-brain"></i> AI 製作完整腳本</button>
+          <button class="btn btn-outline" onclick="generateVisualNovelWithAi(true)"><i class="fa-solid fa-rotate"></i> AI 重新判斷全文</button>
+          <button class="btn btn-outline" onclick="generateVisualNovelLocally()"><i class="fa-solid fa-bolt"></i> 本機快速分段</button>
+          <button class="btn btn-outline" onclick="downloadVisualNovelScript()"><i class="fa-solid fa-file-arrow-down"></i> 下載文字腳本</button>
+          <button class="btn btn-outline" onclick="document.getElementById('vnScriptFileInput').click()"><i class="fa-solid fa-file-arrow-up"></i> 讀入文字腳本</button>
+          <input type="file" id="vnScriptFileInput" accept=".txt,text/plain" style="display:none" onchange="importVisualNovelScriptFile(event)">
+        </div>
+        <div class="vn-insert-actions">
+          <span>插入到游標：</span>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('cg')"><i class="fa-solid fa-image"></i> CG</button>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('bgm')"><i class="fa-solid fa-music"></i> BGM</button>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('bgm-none')"><i class="fa-solid fa-volume-xmark"></i> 停止 BGM</button>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('se')"><i class="fa-solid fa-volume-high"></i> SE</button>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('shake')"><i class="fa-solid fa-burst"></i> 震動</button>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('cg-none')"><i class="fa-solid fa-image-slash"></i> 收起 CG</button>
+        </div>
+        <div class="form-group">
+          <label>可手動編輯的視覺小說腳本</label>
+          <textarea id="vnScriptText" class="vn-script-editor" rows="18" spellcheck="false" placeholder="旁白｜黃昏落在窗邊。&#10;角色名｜「我們走吧。」&#10;@cg https://.../scene.jpg&#10;@bgm https://.../music.mp3&#10;@se https://.../door.mp3&#10;@shake"></textarea>
+          <div class="vn-script-help">
+            <code>旁白｜內容</code> 敘述　<code>角色名｜台詞</code> 對話　<code>@cg 網址</code> CG　<code>@cg none</code> 收起 CG　
+            <code>@bgm 網址</code> 換音樂　<code>@bgm none</code> 停止音樂　<code>@se 網址</code> 音效　<code>@shake</code> 畫面震動
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" onclick="deleteVisualNovelScript()" style="margin-right:auto;"><i class="fa-solid fa-trash"></i> 刪除腳本</button>
+        <button class="btn btn-outline" onclick="closeModal('visualNovelEditorModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveVisualNovelScript(false)"><i class="fa-solid fa-floppy-disk"></i> 儲存</button>
+        <button class="btn btn-magic" onclick="saveVisualNovelScript(true)"><i class="fa-solid fa-play"></i> 儲存並預覽</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visual Novel Player -->
+  <div class="modal-backdrop vn-player-backdrop" id="visualNovelPlayerModal">
+    <div class="vn-player" id="vnPlayer">
+      <div class="vn-chapter-transition" id="vnChapterTransition"></div>
+      <header class="vn-player-header">
+        <div class="vn-player-audio-controls">
+          <button class="vn-audio-status" id="vnAudioStatus" onclick="toggleVisualNovelMute(event)"><i class="fa-solid fa-volume-high"></i><span>背景音樂</span></button>
+          <label class="vn-live-volume" title="調整 BGM 音量" onclick="event.stopPropagation()"><i class="fa-solid fa-sliders"></i><input type="range" id="vnPlayerBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="setVisualNovelBgmVolume(this.value, event)"></label>
+        </div>
+        <div class="vn-player-title"><strong id="vnPlayerBookTitle"></strong><small id="vnPlayerChapterTitle"></small></div>
+        <div class="vn-player-header-actions">
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelPanel('history', event)"><i class="fa-solid fa-scroll"></i> 回顧</button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelPanel('chapters', event)"><i class="fa-solid fa-layer-group"></i> 章節</button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelTypeSound(event)" id="vnTypeSoundBtn"><i class="fa-solid fa-keyboard"></i> 滴滴聲</button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelAutoPlay()" id="vnAutoPlayBtn"><i class="fa-solid fa-forward"></i> 自動</button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="openCurrentVisualNovelEditor()"><i class="fa-solid fa-pen"></i> 腳本</button>
+          <button class="close-btn" onclick="closeVisualNovelPlayer()">&times;</button>
+        </div>
+      </header>
+      <main class="vn-stage" id="vnStage" onclick="advanceVisualNovel(event)">
+        <div class="vn-visual-area">
+          <div class="vn-story-color" id="vnStoryColor"></div>
+          <div class="vn-cg" id="vnCg"></div>
+          <div class="vn-visual-vignette"></div>
+        </div>
+        <div class="vn-story-feed" id="vnStoryFeed">
+          <div class="vn-feed-chapter" id="vnFeedChapterTitle"></div>
+        </div>
+      </main>
+      <aside class="vn-side-panel" id="vnHistoryPanel">
+        <div class="vn-side-panel-head"><strong><i class="fa-solid fa-scroll"></i> 對話回顧</strong><button onclick="toggleVisualNovelPanel('history', event)">&times;</button></div>
+        <div class="vn-history-list" id="vnHistoryList"></div>
+      </aside>
+      <aside class="vn-side-panel" id="vnChapterPanel">
+        <div class="vn-side-panel-head"><strong><i class="fa-solid fa-layer-group"></i> 章節選擇</strong><button onclick="toggleVisualNovelPanel('chapters', event)">&times;</button></div>
+        <div class="vn-chapter-list" id="vnChapterList"></div>
+      </aside>
+      <footer class="vn-player-controls">
+        <button onclick="navigateVisualNovelChapter(-1)"><i class="fa-solid fa-backward-step"></i><span>上一章</span></button>
+        <button class="vn-primary-control" title="點按繼續；長按 2 秒後快轉" onpointerdown="startVisualNovelFastForward(event)" onpointerup="stopVisualNovelFastForward(event)" onpointercancel="stopVisualNovelFastForward(event)" onmousedown="startVisualNovelFastForward(event)" onmouseup="stopVisualNovelFastForward(event)" onmouseleave="stopVisualNovelFastForward(event)" oncontextmenu="return false" onclick="handleVisualNovelContinueClick(event)"><i class="fa-solid fa-forward"></i><span>點按繼續・長按快轉</span></button>
+        <button onclick="navigateVisualNovelChapter(1)"><i class="fa-solid fa-forward-step"></i><span>下一章</span></button>
+      </footer>
+      <audio id="vnBgmAudio" loop></audio><audio id="vnBgmAudioNext" loop></audio><audio id="vnSeAudio"></audio>
     </div>
   </div>
 
@@ -1102,6 +1222,6 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260904-vn10"></script>
 </body>
 </html>
