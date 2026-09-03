@@ -941,6 +941,10 @@
           <label class="checkbox-label"><input type="checkbox" id="vnTypewriterEnabled" checked> 台詞逐字顯示</label>
           <label class="checkbox-label"><input type="checkbox" id="vnTypewriterSound"> 逐字與下一句提示音</label>
         </div>
+        <div class="form-group mt-2">
+          <label><i class="fa-solid fa-comment-dots"></i> AI 角色說話者分配指令 / 稱呼對應 (選填)：</label>
+          <textarea id="vnAiCustomPrompt" rows="2" placeholder="可在此填寫額外線索或別名對應，例如：&#10;白狼 = 安基洛斯&#10;隊長 / 長官 = 索托斯&#10;文中若出現「黑衣青年」請分配給某角色"></textarea>
+        </div>
         <div class="vn-ai-actions">
           <button class="btn btn-magic" onclick="generateVisualNovelWithAi(false)"><i class="fa-solid fa-brain"></i> AI 製作完整腳本</button>
           <button class="btn btn-outline" onclick="generateVisualNovelWithAi(true)"><i class="fa-solid fa-rotate"></i> AI 重新判斷全文</button>
