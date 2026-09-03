@@ -23,6 +23,15 @@ let deepseekSettings = {
 
 let currentTheme = 'dark';
 let currentRelViewMode = 'matrix';
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 let selectedGraphCharIds = [];
 let currentGraphPerspectiveId = "";
 let perspectiveTargets = {};
@@ -56,6 +65,9 @@ let visualNovelFastForwardDelay = null;
 let visualNovelFastForwardTimer = null;
 let visualNovelFastForwardActive = false;
 let visualNovelSuppressContinueClick = false;
+let visualNovelPointerDownHandled = false;
+let visualNovelAutoSpeed = 1.5;
+let visualNovelFontSize = 1.05;
 const editorModalSnapshots = { documentModal:null, visualNovelEditorModal:null };
 
 // 初始化
@@ -371,6 +383,20 @@ function createCharacterCardHtml(char) {
           </div>
         ` : ''}
 
+        ${Array.isArray(char.customFields) && char.customFields.length ? `
+          ${char.customFields.filter(f => f.type !== 'paragraph').length ? `
+            <div class="char-custom-fields-group">
+              ${char.customFields.filter(f => f.type !== 'paragraph').map(f => `<div class="char-custom-field-badge"><strong>${escapeHtml(f.name)}：</strong><span>${escapeHtml(f.value)}</span></div>`).join('')}
+            </div>
+          ` : ''}
+          ${char.customFields.filter(f => f.type === 'paragraph').map(f => `
+            <div class="char-custom-paragraph-box">
+              <div class="char-field-label"><i class="fa-solid fa-align-left"></i> ${escapeHtml(f.name)}</div>
+              <div class="char-text-box">${escapeHtml(f.value)}</div>
+            </div>
+          `).join('')}
+        ` : ''}
+
         ${tagsHtml ? `<div class="tag-cloud">${tagsHtml}</div>` : ''}
       </div>
 
@@ -671,11 +697,60 @@ function deleteCp(cpId) {
 }
 
 // ========== 5. 角色編輯 Modal ==========
+function addCharCustomFieldRow(type = 'single', name = '', value = '') {
+  const container = document.getElementById("charCustomFieldsContainer");
+  if (!container) return;
+  const row = document.createElement("div");
+  row.className = "char-custom-field-row";
+  row.dataset.fieldType = type;
+  if (type === 'paragraph') {
+    row.style.flexDirection = "column";
+    row.style.alignItems = "stretch";
+    row.style.background = "var(--bg-tertiary)";
+    row.style.padding = "0.6rem";
+    row.style.borderRadius = "6px";
+    row.style.border = "1px solid var(--border-color)";
+    row.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <input type="text" class="char-custom-field-name" placeholder="大段敘述標題 (如：家庭背景/經歷補充)" value="${escapeHtml(name)}">
+        <button type="button" class="btn btn-xs btn-outline-danger" onclick="this.parentElement.parentElement.remove()" title="刪除欄位"><i class="fa-solid fa-trash"></i> 刪除敘述</button>
+      </div>
+      <textarea class="char-custom-field-val" rows="3" placeholder="請輸入長文章內容敘述..." style="margin-top:0.4rem;">${escapeHtml(value)}</textarea>
+    `;
+  } else {
+    row.innerHTML = `
+      <input type="text" class="char-custom-field-name" placeholder="欄位名稱 (如：武器/特質)" value="${escapeHtml(name)}">
+      <input type="text" class="char-custom-field-val" placeholder="欄位內容" value="${escapeHtml(value)}">
+      <button type="button" class="btn btn-xs btn-outline-danger" onclick="this.parentElement.remove()" title="刪除欄位"><i class="fa-solid fa-trash"></i></button>
+    `;
+  }
+  container.appendChild(row);
+}
+
+function collectCharCustomFields() {
+  const container = document.getElementById("charCustomFieldsContainer");
+  if (!container) return [];
+  const rows = Array.from(container.querySelectorAll(".char-custom-field-row"));
+  const fields = [];
+  rows.forEach(row => {
+    const type = row.dataset.fieldType || 'single';
+    const name = row.querySelector(".char-custom-field-name")?.value.trim();
+    const value = row.querySelector(".char-custom-field-val")?.value.trim();
+    if (name && value) {
+      fields.push({ type, name, value });
+    }
+  });
+  return fields;
+}
+
 function openCharacterModal(charId = null) {
   const modal = document.getElementById("characterModal");
   const form = document.getElementById("characterForm");
   form.reset();
   syncGlobalTags();
+
+  const fieldsContainer = document.getElementById("charCustomFieldsContainer");
+  if (fieldsContainer) fieldsContainer.replaceChildren();
 
   if (charId) {
     const char = characters.find(c => c.id === charId);
@@ -702,6 +777,10 @@ function openCharacterModal(charId = null) {
       document.getElementById("charPrimaryColor").value = theme.primary;
       document.getElementById("charSecondaryColor").value = theme.secondary;
       document.getElementById("charColorMode").value = theme.mode;
+
+      if (Array.isArray(char.customFields)) {
+        char.customFields.forEach(f => addCharCustomFieldRow(f.type || 'single', f.name, f.value));
+      }
     }
   } else {
     document.getElementById("charModalTitle").innerText = "新建角色人設卡";
@@ -768,6 +847,7 @@ function saveCharacterForm() {
     personality: document.getElementById("charPersonality").value.trim(),
     extraNotes: document.getElementById("charExtraNotes").value.trim(),
     tags: document.getElementById("charTags").value.split(',').map(t => t.trim()).filter(Boolean),
+    customFields: collectCharCustomFields(),
     themeColor: {
       primary: document.getElementById("charPrimaryColor").value,
       secondary: document.getElementById("charSecondaryColor").value,
@@ -2036,7 +2116,7 @@ function renderSingleDocItemHtml(doc) {
       <div>
         <button class="btn btn-xs btn-primary" onclick="openDocumentReader('${doc.id}')"><i class="fa-solid fa-book-open-reader"></i> 閱讀</button>
         <button class="btn btn-xs btn-outline" onclick="openDocumentModal('${doc.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
-        <button class="btn btn-xs btn-magic" onclick="openVisualNovelForDocument('${doc.id}')"><i class="fa-solid fa-gamepad"></i> ${doc.visualNovel?.scriptText ? '視覺小說' : '建立視覺小說'}</button>
+        <button class="btn btn-xs btn-magic" onclick="openVisualNovelForDocument('${doc.id}')"><i class="fa-solid fa-gamepad"></i> ${doc.visualNovel?.scriptText ? (doc.visualNovel?.bookmarkIndex != null ? '視覺小說 📌' : '視覺小說') : '建立視覺小說'}</button>
       </div>
     </div>
   `;
@@ -2184,6 +2264,7 @@ function openDocumentModal(docId = null, defaultBookId = "") {
   }
 
   modal.classList.add("active");
+  captureEditorModalSnapshot("documentModal");
 }
 
 function getReaderSequence(doc) {
@@ -2357,6 +2438,7 @@ function collectVisualNovelSettings() {
     narratorTextColor: document.getElementById("vnNarratorTextColor").value,
     globalBgm: document.getElementById("vnGlobalBgm").value.trim(),
     bgmVolume: Number(document.getElementById("vnBgmVolume").value),
+    fontSize: Number(document.getElementById("vnFontSizeSelect")?.value) || 1.05,
     useCharacterColors: document.getElementById("vnUseCharacterColors").checked,
     typewriterEnabled: document.getElementById("vnTypewriterEnabled").checked,
     typewriterSound: document.getElementById("vnTypewriterSound").checked
@@ -2375,6 +2457,9 @@ function fillVisualNovelSettings(settings) {
   const bgmVolume = Number.isFinite(Number(settings.bgmVolume)) ? Number(settings.bgmVolume) : 0.7;
   document.getElementById("vnBgmVolume").value = bgmVolume;
   updateVisualNovelVolumeLabel(bgmVolume);
+  if (document.getElementById("vnFontSizeSelect")) {
+    document.getElementById("vnFontSizeSelect").value = String(settings.fontSize || 1.05);
+  }
   document.getElementById("vnUseCharacterColors").checked = settings.useCharacterColors !== false;
   document.getElementById("vnTypewriterEnabled").checked = settings.typewriterEnabled !== false;
   document.getElementById("vnTypewriterSound").checked = !!settings.typewriterSound;
@@ -2722,6 +2807,8 @@ function applyVisualNovelTheme(settings) {
   player.style.setProperty("--vn-text", settings.textColor || (settings.themeMode === "light" ? "#2b2118" : "#fffaf0"));
   player.style.setProperty("--vn-narrator-border", settings.narratorBorderColor || "#b8aa98");
   player.style.setProperty("--vn-narrator-text", settings.narratorTextColor || (settings.themeMode === "light" ? "#2b2118" : "#fffaf0"));
+  if (settings.fontSize) visualNovelFontSize = Number(settings.fontSize);
+  player.style.setProperty("--vn-font-size", `${visualNovelFontSize || 1.05}rem`);
   player.dataset.theme = settings.themeMode === "light" ? "light" : "dark";
   document.getElementById("vnStoryColor").style.background = `linear-gradient(135deg, ${settings.primaryColor || '#d97706'}, ${settings.secondaryColor || '#7c3aed'})`;
 }
@@ -2736,10 +2823,11 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   if (!preserveHistory) visualNovelHistory = [];
   const settings = { ...getDefaultVisualNovelSettings(doc), ...(doc.visualNovel.settings || {}) };
   currentVisualNovelSettings = settings;
+  if (settings.fontSize) visualNovelFontSize = Number(settings.fontSize);
   finishVisualNovelTyping(false);
   applyVisualNovelTheme(settings);
-  document.getElementById("vnTypeSoundBtn").classList.toggle("active", !!settings.typewriterSound);
-  document.getElementById("vnPlayerBgmVolume").value = Number.isFinite(Number(settings.bgmVolume)) ? Number(settings.bgmVolume) : 0.7;
+  updateVisualNovelSettingsUI();
+  updateVisualNovelBookmarkBtnUI();
   const book = books.find(item => item.id === doc.bookId);
   document.getElementById("vnPlayerBookTitle").textContent = book?.title || "獨立故事";
   document.getElementById("vnPlayerChapterTitle").textContent = doc.title;
@@ -2753,6 +2841,17 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   document.getElementById("visualNovelPlayerModal").classList.add("active");
   document.getElementById("vnHistoryPanel").classList.remove("active");
   document.getElementById("vnChapterPanel").classList.remove("active");
+
+  const promptEl = document.getElementById("vnBookmarkPrompt");
+  if (promptEl) {
+    if (doc.visualNovel.bookmarkIndex != null && doc.visualNovel.bookmarkIndex > 0 && doc.visualNovel.bookmarkIndex < currentVisualNovelEvents.length) {
+      document.getElementById("vnBookmarkPromptIndex").textContent = `第 ${doc.visualNovel.bookmarkIndex + 1} 句`;
+      promptEl.style.display = "flex";
+    } else {
+      promptEl.style.display = "none";
+    }
+  }
+
   playVisualNovelAudio("bgm", settings.globalBgm || "none");
   if (withTransition) showVisualNovelChapterTransition(doc.title);
   advanceVisualNovel();
@@ -2837,6 +2936,8 @@ function setVisualNovelBgmVolume(value, event) {
   currentVisualNovelSettings.bgmVolume = volume;
   const activeAudio = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")][visualNovelBgmChannelIndex];
   if (activeAudio) activeAudio.volume = volume;
+  const bgmLabel = document.getElementById("vnSettingsBgmLabel");
+  if (bgmLabel) bgmLabel.textContent = `${Math.round(volume * 100)}%`;
   const doc = documents.find(item => item.id === currentVisualNovelDocId);
   if (doc?.visualNovel) {
     doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), bgmVolume:volume };
@@ -2892,7 +2993,7 @@ function typeVisualNovelText(element, text) {
   const typeNextCharacter = () => {
     if (state.index >= text.length) {
       clearTimeout(state.timer); visualNovelTyping = null;
-      if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), 1700);
+      if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(300, Math.round(1500 / visualNovelAutoSpeed)));
       return;
     }
     const character = text[state.index++];
@@ -2965,6 +3066,17 @@ function executeVisualNovelEvent(event) {
   return true;
 }
 
+function clearVisualNovelBookmark(docId) {
+  const doc = documents.find(item => item.id === docId);
+  if (doc?.visualNovel?.bookmarkIndex != null) {
+    delete doc.visualNovel.bookmarkIndex;
+    delete doc.visualNovel.bookmarkText;
+    saveStateToLocalStorage();
+    renderDocumentsModule();
+    updateVisualNovelBookmarkBtnUI();
+  }
+}
+
 function advanceVisualNovel(event) {
   event?.stopPropagation?.();
   if (event) playVisualNovelAdvanceSound();
@@ -2972,7 +3084,9 @@ function advanceVisualNovel(event) {
   if (finishVisualNovelTyping(true)) return;
   let displayed = false;
   while (++currentVisualNovelIndex < currentVisualNovelEvents.length && !displayed) displayed = executeVisualNovelEvent(currentVisualNovelEvents[currentVisualNovelIndex]);
+  updateVisualNovelBookmarkBtnUI();
   if (!displayed) {
+    clearVisualNovelBookmark(currentVisualNovelDocId);
     if (getVisualNovelChapter(1)) navigateVisualNovelChapter(1);
     else {
       const feed = document.getElementById("vnStoryFeed");
@@ -2982,7 +3096,7 @@ function advanceVisualNovel(event) {
     }
     return;
   }
-  if (visualNovelAutoPlay && !visualNovelTyping) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), 3200);
+  if (visualNovelAutoPlay && !visualNovelTyping) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(500, Math.round(3000 / visualNovelAutoSpeed)));
 }
 
 function advanceVisualNovelFast() {
@@ -2995,36 +3109,189 @@ function advanceVisualNovelFast() {
 function startVisualNovelFastForward(event) {
   event?.stopPropagation?.();
   if (event?.button != null && event.button !== 0) return;
-  if (visualNovelFastForwardDelay || visualNovelFastForwardActive) return;
+  if (event?.type === "mousedown" && visualNovelPointerDownHandled) return;
+  if (event?.type === "pointerdown") visualNovelPointerDownHandled = true;
+
+  clearTimeout(visualNovelFastForwardDelay);
+  clearInterval(visualNovelFastForwardTimer);
   visualNovelFastForwardActive = false;
   visualNovelSuppressContinueClick = false;
-  event?.currentTarget?.setPointerCapture?.(event.pointerId);
+
+  const btn = event?.currentTarget || document.querySelector(".vn-primary-control");
+  btn?.setPointerCapture?.(event.pointerId);
+
   visualNovelFastForwardDelay = setTimeout(() => {
     visualNovelFastForwardActive = true;
     visualNovelSuppressContinueClick = true;
-    event?.currentTarget?.classList.add("fast-forwarding");
+    btn?.classList.add("fast-forwarding");
     advanceVisualNovelFast();
-    visualNovelFastForwardTimer = setInterval(advanceVisualNovelFast, 110);
-  }, 2000);
+    visualNovelFastForwardTimer = setInterval(advanceVisualNovelFast, 80);
+  }, 400);
 }
 
 function stopVisualNovelFastForward(event) {
   event?.stopPropagation?.();
+  if (event?.type === "pointerup" || event?.type === "pointercancel") {
+    setTimeout(() => { visualNovelPointerDownHandled = false; }, 100);
+  }
   clearTimeout(visualNovelFastForwardDelay);
   clearInterval(visualNovelFastForwardTimer);
   visualNovelFastForwardDelay = null;
   visualNovelFastForwardTimer = null;
   const wasActive = visualNovelFastForwardActive;
   visualNovelFastForwardActive = false;
-  event?.currentTarget?.classList.remove("fast-forwarding");
-  document.querySelector?.(".vn-primary-control.fast-forwarding")?.classList.remove("fast-forwarding");
-  if (wasActive) setTimeout(() => { visualNovelSuppressContinueClick = false; }, 350);
+  const btn = event?.currentTarget || document.querySelector(".vn-primary-control");
+  btn?.classList.remove("fast-forwarding");
+  document.querySelectorAll(".vn-primary-control.fast-forwarding").forEach(b => b.classList.remove("fast-forwarding"));
+  if (wasActive) {
+    visualNovelSuppressContinueClick = true;
+    setTimeout(() => { visualNovelSuppressContinueClick = false; }, 200);
+  }
 }
 
 function handleVisualNovelContinueClick(event) {
   event?.stopPropagation?.();
   if (visualNovelSuppressContinueClick) { visualNovelSuppressContinueClick = false; return; }
   advanceVisualNovel(event);
+}
+
+let vnToastTimer = null;
+function showVnFloatingToast(msg) {
+  const toast = document.getElementById("vnFloatingToast");
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.style.display = "block";
+  clearTimeout(vnToastTimer);
+  vnToastTimer = setTimeout(() => {
+    toast.style.display = "none";
+  }, 1800);
+}
+
+function setVisualNovelFontSizeFromRange(val, event) {
+  event?.stopPropagation?.();
+  visualNovelFontSize = Number(val);
+  currentVisualNovelSettings.fontSize = visualNovelFontSize;
+  const player = document.getElementById("vnPlayer");
+  if (player) player.style.setProperty("--vn-font-size", `${visualNovelFontSize}rem`);
+  const fontLabel = document.getElementById("vnSettingsFontSizeLabel");
+  if (fontLabel) fontLabel.textContent = `${visualNovelFontSize}rem`;
+  const fontRange = document.getElementById("vnFontSizeRange");
+  if (fontRange) fontRange.value = visualNovelFontSize;
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  if (doc?.visualNovel) {
+    doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), fontSize: visualNovelFontSize };
+    saveStateToLocalStorage();
+  }
+}
+
+function setVisualNovelAutoSpeedFromRange(val, event) {
+  event?.stopPropagation?.();
+  visualNovelAutoSpeed = Number(val);
+  currentVisualNovelSettings.autoSpeed = visualNovelAutoSpeed;
+  const label = document.getElementById("vnSettingsAutoSpeedLabel");
+  if (label) label.textContent = `${visualNovelAutoSpeed}x`;
+  const range = document.getElementById("vnAutoSpeedRange");
+  if (range) range.value = visualNovelAutoSpeed;
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  if (doc?.visualNovel) {
+    doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), autoSpeed: visualNovelAutoSpeed };
+    saveStateToLocalStorage();
+  }
+}
+
+function changeVisualNovelFontSize(delta, event) {
+  event?.stopPropagation?.();
+  const nextSize = Math.min(1.5, Math.max(0.8, Math.round((visualNovelFontSize + delta * 0.05) * 100) / 100));
+  setVisualNovelFontSizeFromRange(nextSize, event);
+}
+
+function updateVisualNovelSettingsUI() {
+  const bgmLabel = document.getElementById("vnSettingsBgmLabel");
+  const bgmVal = Number.isFinite(Number(currentVisualNovelSettings.bgmVolume)) ? Number(currentVisualNovelSettings.bgmVolume) : 0.7;
+  if (bgmLabel) bgmLabel.textContent = `${Math.round(bgmVal * 100)}%`;
+  const bgmVol = document.getElementById("vnPlayerBgmVolume");
+  if (bgmVol) bgmVol.value = bgmVal;
+
+  const fontLabel = document.getElementById("vnSettingsFontSizeLabel");
+  if (fontLabel) fontLabel.textContent = `${visualNovelFontSize}rem`;
+  const fontRange = document.getElementById("vnFontSizeRange");
+  if (fontRange) fontRange.value = visualNovelFontSize;
+
+  const speedLabel = document.getElementById("vnSettingsAutoSpeedLabel");
+  if (speedLabel) speedLabel.textContent = `${visualNovelAutoSpeed}x`;
+  const speedRange = document.getElementById("vnAutoSpeedRange");
+  if (speedRange) speedRange.value = visualNovelAutoSpeed;
+
+  const soundCheck = document.getElementById("vnTypewriterSoundCheck");
+  if (soundCheck) soundCheck.checked = !!currentVisualNovelSettings.typewriterSound;
+}
+
+function updateVisualNovelBookmarkBtnUI() {
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  const btn = document.getElementById("vnBookmarkBtn");
+  if (!btn || !doc) return;
+  const isBookmarked = doc.visualNovel?.bookmarkIndex === currentVisualNovelIndex && currentVisualNovelIndex >= 0;
+  const hasAnyBookmark = doc.visualNovel?.bookmarkIndex != null;
+  btn.classList.toggle("active", isBookmarked || hasAnyBookmark);
+  if (btn.querySelector("i")) {
+    btn.querySelector("i").className = isBookmarked ? "fa-solid fa-bookmark" : (hasAnyBookmark ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark");
+  }
+}
+
+function toggleVisualNovelBookmark(event) {
+  event?.stopPropagation?.();
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  if (!doc || !doc.visualNovel) return;
+  if (currentVisualNovelIndex < 0) return;
+
+  if (doc.visualNovel.bookmarkIndex === currentVisualNovelIndex) {
+    delete doc.visualNovel.bookmarkIndex;
+    delete doc.visualNovel.bookmarkText;
+    showVnFloatingToast("已移除書籤");
+  } else {
+    doc.visualNovel.bookmarkIndex = currentVisualNovelIndex;
+    const currentEvt = currentVisualNovelEvents[currentVisualNovelIndex];
+    doc.visualNovel.bookmarkText = currentEvt?.text || "";
+    showVnFloatingToast(`已儲存書籤 (第 ${currentVisualNovelIndex + 1} 句)`);
+  }
+  saveStateToLocalStorage();
+  renderDocumentsModule();
+  updateVisualNovelBookmarkBtnUI();
+}
+
+function resumeVisualNovelBookmark(event) {
+  event?.stopPropagation?.();
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  const promptEl = document.getElementById("vnBookmarkPrompt");
+  if (promptEl) promptEl.style.display = "none";
+  if (doc?.visualNovel?.bookmarkIndex == null) return;
+  const targetIndex = doc.visualNovel.bookmarkIndex;
+  
+  finishVisualNovelTyping(false);
+  clearTimeout(visualNovelAutoTimer);
+  const feed = document.getElementById("vnStoryFeed");
+  feed.replaceChildren();
+  const chapterHeading = document.createElement("div");
+  chapterHeading.className = "vn-feed-chapter"; chapterHeading.textContent = doc.title;
+  feed.appendChild(chapterHeading);
+  
+  currentVisualNovelIndex = -1;
+  visualNovelHistory = [];
+  
+  while (currentVisualNovelIndex < targetIndex && currentVisualNovelIndex < currentVisualNovelEvents.length - 1) {
+    currentVisualNovelIndex++;
+    executeVisualNovelEvent(currentVisualNovelEvents[currentVisualNovelIndex]);
+    finishVisualNovelTyping(true);
+  }
+  updateVisualNovelBookmarkBtnUI();
+}
+
+function clearVisualNovelBookmarkPrompt(event) {
+  event?.stopPropagation?.();
+  const promptEl = document.getElementById("vnBookmarkPrompt");
+  if (promptEl) promptEl.style.display = "none";
+  clearVisualNovelBookmark(currentVisualNovelDocId);
+  showVnFloatingToast("已取消書籤，從頭開始閱讀");
 }
 
 function getVisualNovelChapter(direction) {
@@ -3062,7 +3329,7 @@ function renderVisualNovelChapterList() {
     const button = document.createElement("button");
     button.className = doc.id === currentVisualNovelDocId ? "active" : "";
     button.innerHTML = `<small>CHAPTER ${String(index + 1).padStart(2, '0')}</small><strong></strong>`;
-    button.querySelector("strong").textContent = doc.title;
+    button.querySelector("strong").textContent = `${doc.title}${doc.visualNovel?.bookmarkIndex != null ? ' 📌' : ''}`;
     button.onclick = event => { event.stopPropagation(); startVisualNovel(doc.id, true, true); };
     list.appendChild(button);
   });
@@ -3070,17 +3337,26 @@ function renderVisualNovelChapterList() {
 
 function toggleVisualNovelPanel(panel, event) {
   event?.stopPropagation?.();
-  const target = document.getElementById(panel === "history" ? "vnHistoryPanel" : "vnChapterPanel");
-  const other = document.getElementById(panel === "history" ? "vnChapterPanel" : "vnHistoryPanel");
-  other.classList.remove("active");
-  if (panel === "history") renderVisualNovelHistory(); else renderVisualNovelChapterList();
+  const panels = {
+    history: document.getElementById("vnHistoryPanel"),
+    chapters: document.getElementById("vnChapterPanel"),
+    settings: document.getElementById("vnSettingsPanel")
+  };
+  const target = panels[panel];
+  if (!target) return;
+  Object.keys(panels).forEach(key => {
+    if (key !== panel && panels[key]) panels[key].classList.remove("active");
+  });
+  if (panel === "history") renderVisualNovelHistory();
+  else if (panel === "chapters") renderVisualNovelChapterList();
+  else if (panel === "settings") updateVisualNovelSettingsUI();
   target.classList.toggle("active");
 }
 
 function toggleVisualNovelMute(event) {
   event?.stopPropagation?.();
   const statusButton = document.getElementById("vnAudioStatus");
-  if (statusButton.dataset.retrySource) {
+  if (statusButton?.dataset?.retrySource) {
     const source = statusButton.dataset.retrySource;
     delete statusButton.dataset.retrySource;
     transitionVisualNovelBgm(source);
@@ -3091,33 +3367,61 @@ function toggleVisualNovelMute(event) {
   const se = document.getElementById("vnSeAudio");
   const muted = !bgm.muted;
   bgmChannels.forEach(audio => { audio.muted = muted; }); se.muted = muted;
-  document.querySelector("#vnAudioStatus i").className = `fa-solid ${bgm.muted ? 'fa-volume-xmark' : 'fa-volume-high'}`;
-  document.getElementById("vnAudioStatus").classList.toggle("muted", bgm.muted);
+  document.querySelectorAll("#vnAudioStatus i").forEach(i => { i.className = `fa-solid ${bgm.muted ? 'fa-volume-xmark' : 'fa-volume-high'}`; });
+  document.querySelectorAll("#vnAudioStatus").forEach(btn => btn.classList.toggle("muted", bgm.muted));
 }
 
 function toggleVisualNovelAutoPlay(event) {
   event?.stopPropagation?.();
   visualNovelAutoPlay = !visualNovelAutoPlay;
   document.getElementById("vnAutoPlayBtn").classList.toggle("active", visualNovelAutoPlay);
-  if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), 3200);
+  showVnFloatingToast(visualNovelAutoPlay ? `自動播放：開啟 (${visualNovelAutoSpeed}x)` : "自動播放：關閉");
+  if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(500, Math.round(3000 / visualNovelAutoSpeed)));
   else clearTimeout(visualNovelAutoTimer);
 }
 
 function toggleVisualNovelTypeSound(event) {
   event?.stopPropagation?.();
   currentVisualNovelSettings.typewriterSound = !currentVisualNovelSettings.typewriterSound;
-  document.getElementById("vnTypeSoundBtn").classList.toggle("active", currentVisualNovelSettings.typewriterSound);
+  const check = document.getElementById("vnTypewriterSoundCheck");
+  if (check) check.checked = !!currentVisualNovelSettings.typewriterSound;
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  if (doc?.visualNovel) {
+    doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), typewriterSound: currentVisualNovelSettings.typewriterSound };
+    saveStateToLocalStorage();
+  }
   if (currentVisualNovelSettings.typewriterSound) playVisualNovelTypeBeep();
+  showVnFloatingToast(currentVisualNovelSettings.typewriterSound ? "打字音效：開啟" : "打字音效：關閉");
 }
 
 function closeVisualNovelPlayer() {
   clearTimeout(visualNovelAutoTimer); stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
-  [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")].forEach(audio => { audio.pause(); audio.volume = 1; });
-  document.getElementById("vnSeAudio").pause();
-  document.getElementById("vnHistoryPanel").classList.remove("active"); document.getElementById("vnChapterPanel").classList.remove("active");
-  closeModal("visualNovelPlayerModal");
+  const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
+  channels.forEach(audio => {
+    audio.pause();
+    audio.currentTime = 0;
+    audio.removeAttribute("src");
+    delete audio.dataset.source;
+    audio.load();
+  });
+  const se = document.getElementById("vnSeAudio");
+  if (se) {
+    se.pause();
+    se.currentTime = 0;
+    se.removeAttribute("src");
+    se.load();
+  }
+  ["vnHistoryPanel", "vnChapterPanel", "vnSettingsPanel"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("active");
+  });
+  const promptEl = document.getElementById("vnBookmarkPrompt");
+  if (promptEl) promptEl.style.display = "none";
+  const toast = document.getElementById("vnFloatingToast");
+  if (toast) toast.style.display = "none";
+  closeModal("visualNovelPlayerModal", true);
 }
 
 async function summarizeSelectedDocsWithAi() {
@@ -3337,6 +3641,16 @@ async function generateExportText() {
       if (c.appearance) text += `✦ 外貌：${c.appearance.replace(/\n/g, ' ')}\n`;
       if (c.personality) text += `✦ 性格：${c.personality.replace(/\n/g, ' ')}\n`;
       if (c.extraNotes) text += `✦ 補充：${c.extraNotes.replace(/\n/g, ' ')}\n`;
+
+      if (Array.isArray(c.customFields) && c.customFields.length) {
+        c.customFields.forEach(f => {
+          if (f.type === 'paragraph') {
+            text += `✦ ${f.name}：\n${f.value}\n`;
+          } else {
+            text += `✦ ${f.name}：${f.value.replace(/\n/g, ' ')}\n`;
+          }
+        });
+      }
 
       if (incRel && (c.relationships || []).length) {
         text += `✦ 社交關係視角 (僅導出所選角色):\n`;
@@ -3902,12 +4216,69 @@ function saveApiKeySettings() {
   saveStateToLocalStorage(); closeModal("apiKeyModal");
   alert("DeepSeek API 設定已儲存！");
 }
-function closeModal(modalId) { document.getElementById(modalId).classList.remove("active"); }
+function captureEditorModalSnapshot(modalId) {
+  if (modalId === "documentModal") {
+    const checkedChars = Array.from(document.querySelectorAll("#docCharCheckboxes input:checked")).map(cb => cb.value).sort().join(",");
+    const checkedFactions = Array.from(document.querySelectorAll("#docFactionCheckboxes input:checked")).map(cb => cb.value).sort().join(",");
+    editorModalSnapshots.documentModal = JSON.stringify({
+      title: document.getElementById("docTitle")?.value || "",
+      bookId: document.getElementById("docBelongingBookId")?.value || "",
+      tags: document.getElementById("docTags")?.value || "",
+      content: document.getElementById("docContent")?.value || "",
+      charIds: checkedChars,
+      factionIds: checkedFactions
+    });
+  } else if (modalId === "visualNovelEditorModal") {
+    editorModalSnapshots.visualNovelEditorModal = JSON.stringify({
+      scriptText: document.getElementById("vnScriptText")?.value || "",
+      settings: collectVisualNovelSettings()
+    });
+  }
+}
+
+function isEditorModalDirty(modalId) {
+  const snapshot = editorModalSnapshots[modalId];
+  if (!snapshot) return false;
+  if (modalId === "documentModal") {
+    const checkedChars = Array.from(document.querySelectorAll("#docCharCheckboxes input:checked")).map(cb => cb.value).sort().join(",");
+    const checkedFactions = Array.from(document.querySelectorAll("#docFactionCheckboxes input:checked")).map(cb => cb.value).sort().join(",");
+    const current = JSON.stringify({
+      title: document.getElementById("docTitle")?.value || "",
+      bookId: document.getElementById("docBelongingBookId")?.value || "",
+      tags: document.getElementById("docTags")?.value || "",
+      content: document.getElementById("docContent")?.value || "",
+      charIds: checkedChars,
+      factionIds: checkedFactions
+    });
+    return current !== snapshot;
+  } else if (modalId === "visualNovelEditorModal") {
+    const current = JSON.stringify({
+      scriptText: document.getElementById("vnScriptText")?.value || "",
+      settings: collectVisualNovelSettings()
+    });
+    return current !== snapshot;
+  }
+  return false;
+}
+
+function closeModal(modalId, force = false) {
+  if (!force && isEditorModalDirty(modalId)) {
+    if (!confirm("內容尚未儲存，確定要關閉視窗嗎？未儲存的變更將會遺失。")) {
+      return false;
+    }
+  }
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.remove("active");
+  if (editorModalSnapshots[modalId]) editorModalSnapshots[modalId] = null;
+  return true;
+}
 
 function setupEventListeners() {
   window.onclick = function(event) {
     if (event.target.classList.contains("modal-backdrop")) {
-      event.target.classList.remove("active");
+      const modalId = event.target.id;
+      if (modalId) closeModal(modalId);
+      else event.target.classList.remove("active");
     }
   };
 }
