@@ -601,6 +601,22 @@
               <input type="text" id="charTags" placeholder="自訂標籤 (用逗號隔開)">
             </div>
           </div>
+
+          <!-- Custom Dynamic Fields Section -->
+          <div class="form-group mt-3" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:0.9rem; border-radius:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem; flex-wrap:wrap; gap:0.4rem;">
+              <label style="margin:0;"><i class="fa-solid fa-sliders"></i> 自訂屬性與大段敘述 (如：武器、家庭背景故事)</label>
+              <div style="display:flex; gap:0.4rem;">
+                <button type="button" class="btn btn-xs btn-outline" onclick="addCharCustomFieldRow('single')">
+                  <i class="fa-solid fa-plus"></i> 新增單行屬性
+                </button>
+                <button type="button" class="btn btn-xs btn-outline" onclick="addCharCustomFieldRow('paragraph')">
+                  <i class="fa-solid fa-align-left"></i> 新增大段敘述
+                </button>
+              </div>
+            </div>
+            <div id="charCustomFieldsContainer" style="display:flex; flex-direction:column; gap:0.65rem;"></div>
+          </div>
         </form>
       </div>
 
@@ -908,12 +924,13 @@
         <div class="vn-setting-grid">
           <label>UI 主色<input type="color" id="vnPrimaryColor" value="#d97706"></label>
           <label>漸層副色<input type="color" id="vnSecondaryColor" value="#7c3aed"></label>
-          <label>畫面模式<select id="vnThemeMode" onchange="updateVisualNovelThemeModeDefaults()"><option value="dark">深色</option><option value="light">淺色</option></select></label>
+<label>畫面模式<select id="vnThemeMode" onchange="updateVisualNovelThemeModeDefaults()"><option value="dark">深色</option><option value="light">淺色</option></select></label>
           <label>底色<input type="color" id="vnBackgroundColor" value="#17130f"></label>
           <label>文字色<input type="color" id="vnTextColor" value="#fffaf0"></label>
           <label>旁白邊條色<input type="color" id="vnNarratorBorderColor" value="#b8aa98"></label>
           <label>旁白文字色<input type="color" id="vnNarratorTextColor" value="#fffaf0"></label>
           <label>BGM 音量 <span id="vnBgmVolumeLabel">70%</span><input type="range" id="vnBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="updateVisualNovelVolumeLabel(this.value)"></label>
+          <label>文字大小<select id="vnFontSizeSelect"><option value="0.9">小 (0.9rem)</option><option value="1.0">標準 (1.0rem)</option><option value="1.15">大 (1.15rem)</option><option value="1.3">特大 (1.3rem)</option></select></label>
         </div>
         <div class="form-group">
           <label><i class="fa-solid fa-music"></i> 全局 BGM 網址</label>
@@ -963,22 +980,37 @@
   <div class="modal-backdrop vn-player-backdrop" id="visualNovelPlayerModal">
     <div class="vn-player" id="vnPlayer">
       <div class="vn-chapter-transition" id="vnChapterTransition"></div>
-      <header class="vn-player-header">
-        <div class="vn-player-audio-controls">
-          <button class="vn-audio-status" id="vnAudioStatus" onclick="toggleVisualNovelMute(event)"><i class="fa-solid fa-volume-high"></i><span>背景音樂</span></button>
-          <label class="vn-live-volume" title="調整 BGM 音量" onclick="event.stopPropagation()"><i class="fa-solid fa-sliders"></i><input type="range" id="vnPlayerBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="setVisualNovelBgmVolume(this.value, event)"></label>
+
+      <!-- Centered Bookmark Popup Overlay Modal -->
+      <div class="vn-bookmark-prompt-overlay" id="vnBookmarkPrompt" style="display:none;" onclick="event.stopPropagation()">
+        <div class="vn-bookmark-card">
+          <div class="vn-bookmark-card-icon"><i class="fa-solid fa-bookmark"></i></div>
+          <h4 class="vn-bookmark-card-title">發現上次閱讀書籤</h4>
+          <p class="vn-bookmark-card-sub">章節閱讀紀錄已儲存在 <strong id="vnBookmarkPromptIndex">第 1 句</strong></p>
+          <div class="vn-bookmark-card-actions">
+            <button class="btn btn-primary btn-block" onclick="resumeVisualNovelBookmark(event)">
+              <i class="fa-solid fa-bookmark"></i> 從書籤繼續閱讀
+            </button>
+            <button class="btn btn-outline btn-block" onclick="clearVisualNovelBookmarkPrompt(event)">
+              <i class="fa-solid fa-rotate-left"></i> 從頭閱讀 (清除書籤)
+            </button>
+          </div>
         </div>
+      </div>
+
+      <header class="vn-player-header">
         <div class="vn-player-title"><strong id="vnPlayerBookTitle"></strong><small id="vnPlayerChapterTitle"></small></div>
         <div class="vn-player-header-actions">
-          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelPanel('history', event)"><i class="fa-solid fa-scroll"></i> 回顧</button>
-          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelPanel('chapters', event)"><i class="fa-solid fa-layer-group"></i> 章節</button>
-          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelTypeSound(event)" id="vnTypeSoundBtn"><i class="fa-solid fa-keyboard"></i> 滴滴聲</button>
-          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelAutoPlay()" id="vnAutoPlayBtn"><i class="fa-solid fa-forward"></i> 自動</button>
-          <button class="btn btn-xs vn-ghost-btn" onclick="openCurrentVisualNovelEditor()"><i class="fa-solid fa-pen"></i> 腳本</button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelBookmark(event)" id="vnBookmarkBtn" title="加入/取消書籤"><i class="fa-regular fa-bookmark"></i> <span>書籤</span></button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelAutoPlay(event)" id="vnAutoPlayBtn" title="開啟/關閉自動播放"><i class="fa-solid fa-forward"></i> <span>自動</span></button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelPanel('history', event)" title="對話回顧"><i class="fa-solid fa-scroll"></i> <span>回顧</span></button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelPanel('chapters', event)" title="選擇章節"><i class="fa-solid fa-layer-group"></i> <span>章節</span></button>
+          <button class="btn btn-xs vn-ghost-btn" onclick="toggleVisualNovelPanel('settings', event)" id="vnSettingsBtn" title="閱讀與播放設定"><i class="fa-solid fa-gear"></i> <span>設定</span></button>
           <button class="close-btn" onclick="closeVisualNovelPlayer()">&times;</button>
         </div>
       </header>
       <main class="vn-stage" id="vnStage" onclick="advanceVisualNovel(event)">
+        <div class="vn-floating-toast" id="vnFloatingToast" style="display:none;"></div>
         <div class="vn-visual-area">
           <div class="vn-story-color" id="vnStoryColor"></div>
           <div class="vn-cg" id="vnCg"></div>
@@ -995,6 +1027,47 @@
       <aside class="vn-side-panel" id="vnChapterPanel">
         <div class="vn-side-panel-head"><strong><i class="fa-solid fa-layer-group"></i> 章節選擇</strong><button onclick="toggleVisualNovelPanel('chapters', event)">&times;</button></div>
         <div class="vn-chapter-list" id="vnChapterList"></div>
+      </aside>
+      <aside class="vn-side-panel" id="vnSettingsPanel">
+        <div class="vn-side-panel-head"><strong><i class="fa-solid fa-gear"></i> 閱讀與播放設定</strong><button onclick="toggleVisualNovelPanel('settings', event)">&times;</button></div>
+        <div class="vn-settings-body">
+          <div class="vn-setting-control-group">
+            <label class="vn-setting-label">
+              <span><i class="fa-solid fa-volume-high"></i> 背景音樂音量</span>
+              <span id="vnSettingsBgmLabel">70%</span>
+            </label>
+            <div class="vn-setting-input-row">
+              <button class="vn-audio-status" id="vnAudioStatus" onclick="toggleVisualNovelMute(event)"><i class="fa-solid fa-volume-high"></i><span>靜音</span></button>
+              <input type="range" id="vnPlayerBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="setVisualNovelBgmVolume(this.value, event)">
+            </div>
+          </div>
+
+          <div class="vn-setting-control-group">
+            <label class="vn-setting-label">
+              <span><i class="fa-solid fa-text-height"></i> 文字字體大小</span>
+              <span id="vnSettingsFontSizeLabel">1.05rem</span>
+            </label>
+            <div class="vn-setting-input-row">
+              <button class="btn btn-xs vn-ghost-btn" onclick="changeVisualNovelFontSize(-1, event)">A−</button>
+              <input type="range" id="vnFontSizeRange" min="0.8" max="1.5" step="0.05" value="1.05" oninput="setVisualNovelFontSizeFromRange(this.value, event)">
+              <button class="btn btn-xs vn-ghost-btn" onclick="changeVisualNovelFontSize(1, event)">A＋</button>
+            </div>
+          </div>
+
+          <div class="vn-setting-control-group">
+            <label class="vn-setting-label">
+              <span><i class="fa-solid fa-gauge-high"></i> 自動播放速度</span>
+              <span id="vnSettingsAutoSpeedLabel">1.5x</span>
+            </label>
+            <div class="vn-setting-input-row">
+              <input type="range" id="vnAutoSpeedRange" min="0.5" max="3.0" step="0.25" value="1.5" oninput="setVisualNovelAutoSpeedFromRange(this.value, event)">
+            </div>
+          </div>
+
+          <div class="vn-setting-control-group mt-2">
+            <label class="checkbox-label"><input type="checkbox" id="vnTypewriterSoundCheck" onchange="toggleVisualNovelTypeSound(event)"> 打字音效與下一句提示音</label>
+          </div>
+        </div>
       </aside>
       <footer class="vn-player-controls">
         <button onclick="navigateVisualNovelChapter(-1)"><i class="fa-solid fa-backward-step"></i><span>上一章</span></button>
