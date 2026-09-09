@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#17120f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OC 人設卡工坊">
   <title>OC 原創人物設定與關係管理系統</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="app-icon-180.png">
   
   <!-- Web Favicon -->
   <link rel="icon" type="image/png" href="https://file.garden/aWe99vhwaGcNwkok/_icon/item_2%20(7).png">
@@ -19,7 +26,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=20260904-vn10">
+  <link rel="stylesheet" href="style.css?v=20260909-app11">
 </head>
 <body>
 
@@ -36,6 +43,12 @@
     </div>
     
     <div class="header-actions">
+      <button class="btn btn-outline" id="fullscreenToggleBtn" onclick="toggleAppFullscreen()" title="切換網頁全螢幕">
+        <i class="fa-solid fa-expand"></i> <span class="desktop-only">全螢幕</span>
+      </button>
+      <button class="btn btn-outline" onclick="openApiKeyModal()" title="手動設定 DeepSeek API Key">
+        <i class="fa-solid fa-key"></i> <span class="desktop-only">AI 設定</span>
+      </button>
       <!-- Theme Switcher Button -->
       <button class="btn btn-outline" id="themeToggleBtn" onclick="toggleThemeMode()">
         <i class="fa-solid fa-moon"></i> 模式切換
@@ -930,6 +943,7 @@
           <label>旁白邊條色<input type="color" id="vnNarratorBorderColor" value="#b8aa98"></label>
           <label>旁白文字色<input type="color" id="vnNarratorTextColor" value="#fffaf0"></label>
           <label>BGM 音量 <span id="vnBgmVolumeLabel">70%</span><input type="range" id="vnBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="updateVisualNovelVolumeLabel(this.value)"></label>
+          <label>打字音效音量 <span id="vnTypewriterSoundVolumeLabel">40%</span><input type="range" id="vnTypewriterSoundVolume" min="0" max="1" step="0.05" value="0.4" oninput="updateVisualNovelTypeSoundVolumeLabel(this.value)"></label>
           <label>文字大小<select id="vnFontSizeSelect"><option value="0.9">小 (0.9rem)</option><option value="1.0">標準 (1.0rem)</option><option value="1.15">大 (1.15rem)</option><option value="1.3">特大 (1.3rem)</option></select></label>
         </div>
         <div class="form-group">
@@ -1071,6 +1085,15 @@
           <div class="vn-setting-control-group mt-2">
             <label class="checkbox-label"><input type="checkbox" id="vnTypewriterSoundCheck" onchange="toggleVisualNovelTypeSound(event)"> 打字音效與下一句提示音</label>
           </div>
+          <div class="vn-setting-control-group">
+            <label class="vn-setting-label">
+              <span><i class="fa-solid fa-keyboard"></i> 打字音效音量</span>
+              <span id="vnSettingsTypeSoundLabel">40%</span>
+            </label>
+            <div class="vn-setting-input-row">
+              <input type="range" id="vnPlayerTypeSoundVolume" min="0" max="1" step="0.05" value="0.4" oninput="setVisualNovelTypeSoundVolume(this.value, event)">
+            </div>
+          </div>
         </div>
       </aside>
       <footer class="vn-player-controls">
@@ -1199,7 +1222,11 @@
       <div class="modal-body">
         <div class="form-group">
           <label>DeepSeek API Key：</label>
-          <input type="password" id="deepseekApiKey" value="sk-af4ffa206b844a3fb2a0b2575602fa23">
+          <div class="input-with-action">
+            <input type="password" id="deepseekApiKey" value="" autocomplete="off" placeholder="可輸入其他 DeepSeek API Key 覆蓋預設值">
+            <button type="button" class="btn btn-outline" id="toggleApiKeyBtn" onclick="toggleApiKeyVisibility()" title="顯示 API Key"><i class="fa-solid fa-eye"></i></button>
+          </div>
+          <small class="form-help">API Key 只在目前頁面暫時使用，不會寫入瀏覽器儲存空間或備份檔；重新載入後需再次輸入。</small>
         </div>
         <div class="form-group">
           <label>API Base URL：</label>
@@ -1299,6 +1326,6 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=20260904-vn10"></script>
+  <script src="app.js?v=20260909-app13"></script>
 </body>
 </html>
