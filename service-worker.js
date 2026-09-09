@@ -1,5 +1,5 @@
-const CACHE_NAME = "oc-profile-app-v3";
-const APP_SHELL = ["./", "./index.html", "./style.css", "./data.js", "./app.js", "./manifest.webmanifest", "./app-icon-192.png", "./app-icon-512.png"];
+const CACHE_NAME = "oc-profile-app-v6-cloud-ui";
+const APP_SHELL = ["./", "./index.html", "./style.css", "./data.js", "./app.js", "./forum.css", "./forum-core.js", "./forum.js", "./cloud-sync-core.js", "./cloud-sync.js", "./cloud-sync.css", "./manifest.webmanifest", "./app-icon-192.png", "./app-icon-512.png"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
