@@ -1,0 +1,92 @@
+/* Paired, opaque surfaces keep form text readable in both workshop themes. */
+.oc-cloud-overlay {
+  --cloud-surface: #292524;
+  --cloud-raised: #332e2a;
+  --cloud-input: #1c1917;
+  --cloud-text: #f5f0e9;
+  --cloud-muted: #c9beb2;
+  --cloud-border: #776452;
+  --cloud-accent: #f4bc73;
+  --cloud-action: #f4bc73;
+  --cloud-action-text: #302014;
+  color-scheme: dark;
+  position: fixed; inset: 0; z-index: 5000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: #100d0bcc; backdrop-filter: blur(8px);
+}
+[data-theme="light"] .oc-cloud-overlay {
+  --cloud-surface: #fffdf9;
+  --cloud-raised: #f5eee5;
+  --cloud-input: #ffffff;
+  --cloud-text: #30271f;
+  --cloud-muted: #685747;
+  --cloud-border: #a38c75;
+  --cloud-accent: #8b480b;
+  --cloud-action: #8b480b;
+  --cloud-action-text: #ffffff;
+  color-scheme: light;
+}
+.oc-cloud-overlay[hidden] { display: none; }
+.oc-cloud-panel {
+  background: var(--cloud-surface); color: var(--cloud-text);
+  border: 1px solid var(--cloud-border); border-radius: 22px;
+  width: 100%; max-width: 1000px; max-height: 90dvh;
+  overflow: auto; overscroll-behavior: contain; padding: 28px;
+  box-shadow: 0 24px 80px #0006; box-sizing: border-box;
+  line-height: 1.65;
+}
+.oc-cloud-panel header { display: flex; justify-content: space-between; gap: 16px; align-items: center; border-bottom: 1px solid var(--cloud-border); margin-bottom: 22px; padding-bottom: 12px; }
+.oc-cloud-panel header small { letter-spacing: .12em; font-size: 11px; color: var(--cloud-accent); }
+.oc-cloud-panel h2 { margin: 6px 0 4px; color: var(--cloud-text); }
+.oc-cloud-panel h3 { margin: 20px 0 8px; color: var(--cloud-text); }
+.oc-cloud-panel p { margin: 12px 0; }
+.oc-cloud-panel small, .oc-cloud-info { color: var(--cloud-muted); }
+.oc-cloud-panel a { color: var(--cloud-accent); text-decoration: underline; text-underline-offset: 3px; }
+.oc-cloud-panel label { display: grid; gap: 8px; color: var(--cloud-text); font-size: 14px; font-weight: 600; }
+.oc-cloud-panel form { display: grid; gap: 18px; max-width: 480px; margin: 24px 0; }
+.oc-cloud-panel input, .oc-cloud-panel select {
+  width: 100%; min-width: 0; min-height: 46px;
+  background: var(--cloud-input); color: var(--cloud-text);
+  border: 1px solid var(--cloud-border); border-radius: 10px;
+  padding: 11px 12px; max-width: 100%; box-sizing: border-box;
+  font: inherit; font-weight: 400; font-size: 16px;
+}
+.oc-cloud-panel option, .oc-cloud-panel optgroup { background: var(--cloud-input); color: var(--cloud-text); }
+.oc-cloud-panel input::placeholder { color: var(--cloud-muted); opacity: 1; }
+.oc-cloud-panel input:autofill { -webkit-text-fill-color: var(--cloud-text); box-shadow: 0 0 0 1000px var(--cloud-input) inset; caret-color: var(--cloud-text); }
+.oc-cloud-panel button {
+  min-height: 44px; white-space: normal; padding: 10px 16px;
+  background: var(--cloud-raised); color: var(--cloud-text);
+  border: 1px solid var(--cloud-border); border-radius: 10px;
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.oc-cloud-panel button:hover { background: var(--cloud-input); border-color: var(--cloud-accent); transform: none; }
+.oc-cloud-panel .btn-primary, .oc-cloud-panel [data-cloud="upload"] { background: var(--cloud-action); color: var(--cloud-action-text); border-color: var(--cloud-action); }
+.oc-cloud-panel .btn-primary:hover, .oc-cloud-panel [data-cloud="upload"]:hover { filter: brightness(1.08); background: var(--cloud-action); color: var(--cloud-action-text); }
+.oc-cloud-panel :is(input, select, button, a, summary):focus-visible { outline: 3px solid var(--cloud-accent); outline-offset: 3px; }
+.oc-cloud-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 18px; border-radius: 14px; background: var(--cloud-raised); }
+.oc-cloud-info { overflow-wrap: anywhere; }
+.oc-cloud-row { border: 1px solid var(--cloud-border); background: var(--cloud-surface); padding: 18px; border-radius: 14px; margin: 14px 0; display: grid; gap: 14px; }
+.oc-cloud-row strong { overflow-wrap: anywhere; }
+.oc-cloud-row span { display: block; font-size: 13px; color: var(--cloud-muted); margin-top: 5px; }
+.oc-cloud-row label { max-width: 320px; }
+.oc-cloud-panel summary { cursor: pointer; padding: 8px 0; min-height: 44px; color: var(--cloud-accent); }
+.oc-cloud-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; min-width: 0; }
+.oc-cloud-compare > div { min-width: 0; color: var(--cloud-muted); }
+.oc-cloud-compare pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; background: var(--cloud-raised); color: var(--cloud-text); border: 1px solid var(--cloud-border); padding: 14px; border-radius: 10px; font-size: 13px; line-height: 1.7; margin-top: 8px; }
+.oc-cloud-confirm { display: flex; flex-wrap: wrap; gap: 12px; position: sticky; bottom: 0; background: var(--cloud-surface); padding: 16px 0; border-top: 1px solid var(--cloud-border); }
+.oc-cloud-panel [role="status"] { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--cloud-accent); background: var(--cloud-raised); padding: 12px 16px; border-radius: 10px; border-left: 3px solid var(--cloud-accent); }
+.oc-cloud-panel [role="status"]:empty { display: none; }
+.oc-cloud-overlay[aria-busy="true"] { cursor: progress; }
+.oc-cloud-overlay[aria-busy="true"] button, .oc-cloud-overlay[aria-busy="true"] select { pointer-events: none; cursor: progress; }
+@media (max-width: 600px) {
+  .oc-cloud-overlay { padding: 8px; }
+  .oc-cloud-panel { padding: 18px; border-radius: 16px; max-height: 96dvh; }
+  .oc-cloud-compare { grid-template-columns: 1fr; }
+  .oc-cloud-tools { padding: 12px; }
+  .oc-cloud-tools > * { flex: 1 1 45%; }
+  .oc-cloud-confirm button { width: 100%; }
+  .oc-cloud-panel header h2 { font-size: 22px; }
+  .oc-cloud-panel header button { flex-shrink: 0; }
+}
