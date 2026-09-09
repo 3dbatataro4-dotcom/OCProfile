@@ -184,8 +184,7 @@ function loadStateFromLocalStorage() {
   const savedSettings = localStorage.getItem("oc_deepseek_settings");
   if (savedSettings) {
     try {
-      const { apiKey: discardedApiKey, ...safeSettings } = JSON.parse(savedSettings);
-      deepseekSettings = { ...deepseekSettings, ...safeSettings, apiKey:"" };
+      deepseekSettings = { ...deepseekSettings, ...JSON.parse(savedSettings) };
     } catch (e) {}
   }
 
@@ -209,8 +208,7 @@ function saveStateToLocalStorage() {
   localStorage.setItem("oc_collapsed_books", JSON.stringify(collapsedBooks));
   localStorage.setItem("oc_visual_novel_templates", JSON.stringify(visualNovelTemplates));
   localStorage.setItem("oc_perspective_targets", JSON.stringify(perspectiveTargets));
-  const { apiKey: unsavedApiKey, ...safeDeepseekSettings } = deepseekSettings;
-  localStorage.setItem("oc_deepseek_settings", JSON.stringify(safeDeepseekSettings));
+  localStorage.setItem("oc_deepseek_settings", JSON.stringify(deepseekSettings));
 }
 
 function resetDefaultCharacters() {
@@ -4111,8 +4109,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const { apiKey: excludedApiKey, ...safeDeepseekSettings } = deepseekSettings;
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, deepseekSettings:safeDeepseekSettings };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, deepseekSettings };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -4157,6 +4154,7 @@ function handleImportJson(event) {
       if (data.documents) documents = data.documents;
       if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
       if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
+      if (data.deepseekSettings) deepseekSettings = { ...deepseekSettings, ...data.deepseekSettings };
       saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
       closeModal("importOptionsModal");
       alert("JSON 資料匯入成功！");
@@ -4478,7 +4476,7 @@ function saveApiKeySettings() {
   deepseekSettings.baseUrl = document.getElementById("deepseekBaseUrl").value.trim();
   deepseekSettings.ocrPrompt = document.getElementById("deepseekOcrPrompt").value.trim();
   saveStateToLocalStorage(); closeModal("apiKeyModal");
-  alert("DeepSeek API 設定已套用！API Key 僅保留到本頁重新載入前，不會寫入瀏覽器或備份檔。");
+  alert("DeepSeek API 設定已套用！API Key 已保存在此瀏覽器，並會隨備份匯出，重新整理後不用重填。請妥善保管備份。");
 }
 function captureEditorModalSnapshot(modalId) {
   if (modalId === "documentModal") {
