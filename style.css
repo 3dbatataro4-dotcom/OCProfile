@@ -507,6 +507,9 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .import-mode-toggle input:checked + .import-toggle-track span { transform:translateX(20px); }
 .import-mode-note, .import-summary { margin-top:.8rem; padding:.75rem .9rem; border-left:3px solid var(--accent-gold); background:var(--bg-secondary); border-radius:0 var(--radius-sm) var(--radius-sm) 0; line-height:1.6; }
 .form-help { margin-top:.7rem; color:var(--text-muted); font-size:.82rem; }
+.input-with-action { display:flex; align-items:stretch; gap:.4rem; }
+.input-with-action input { flex:1; min-width:0; }
+.input-with-action .btn { flex:0 0 42px; justify-content:center; padding:.48rem; }
 .import-conflict-modal { max-width:960px; }
 .import-conflict-card { margin-top:1rem; padding:1rem; border:1px solid var(--border-color); border-radius:var(--radius-sm); }
 .import-conflict-card h4 { margin:0 0 .75rem; }
@@ -577,7 +580,7 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .char-custom-field-badge strong { color:var(--primary); }
 .char-custom-field-row { display:flex; align-items:center; gap:.4rem; width:100%; }
 .char-custom-field-row input,.char-custom-field-row textarea { flex:1; min-width:0; }
-.char-custom-paragraph-box { margin-top:.6rem; padding:.65rem .85rem; border:1px solid color-mix(in srgb,var(--primary) 28%,transparent); border-left:3px solid var(--primary); border-radius:4px; background:color-mix(in srgb,var(--primary) 5%,var(--bg-tertiary)); }
+.char-custom-paragraph-box { margin:0; }
 .vn-stage { position:relative; min-height:0; overflow:hidden; cursor:pointer; margin:.35rem; border:1px solid color-mix(in srgb,var(--vn-primary) 26%,transparent); background:var(--vn-bg); display:flex; flex-direction:column; }
 .vn-stage::before { content:""; position:absolute; z-index:3; inset:10px; pointer-events:none; border-top:1px solid color-mix(in srgb,var(--vn-primary) 22%,transparent); border-bottom:1px solid color-mix(in srgb,var(--vn-primary) 22%,transparent); }
 .vn-cg,.vn-story-color { position:absolute; inset:0; transition:opacity .75s ease,transform 1.1s ease; }
