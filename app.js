@@ -16,7 +16,7 @@ let articleTags = new Set();
 let visualNovelTemplates = [];
 
 let deepseekSettings = {
-  apiKey: "sk-af4ffa206b844a3fb2a0b2575602fa23",
+  apiKey: "",
   baseUrl: "https://api.deepseek.com",
   ocrPrompt: "請詳細分析這張原創人物圖片的外貌特徵，包括髮型髮色、眼睛特徵與眼神、服裝飾品、體型與氣質描述，輸出為繁體中文條列說明。"
 };
@@ -59,6 +59,7 @@ let visualNovelHistory = [];
 let currentVisualNovelSettings = {};
 let visualNovelTyping = null;
 let visualNovelAudioContext = null;
+let visualNovelTypeGain = null;
 let visualNovelBgmFadeToken = 0;
 let visualNovelBgmChannelIndex = 0;
 let visualNovelFastForwardDelay = null;
@@ -76,7 +77,32 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
   syncGlobalTags();
   renderAllViews();
+  updateFullscreenButton();
+  document.addEventListener("fullscreenchange", updateFullscreenButton);
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    navigator.serviceWorker.register("./service-worker.js").catch(error => console.warn("Service Worker 註冊失敗：", error));
+  }
 });
+
+async function toggleAppFullscreen() {
+  try {
+    if (!document.fullscreenElement) {
+      if (!document.documentElement.requestFullscreen) throw new Error("此瀏覽器不支援網頁全螢幕；iPhone／iPad 請先『加入主畫面』後開啟。 ");
+      await document.documentElement.requestFullscreen();
+    } else if (document.exitFullscreen) {
+      await document.exitFullscreen();
+    }
+  } catch (error) {
+    alert(error.message || "無法切換全螢幕，請檢查瀏覽器權限。");
+  }
+}
+
+function updateFullscreenButton() {
+  const button = document.getElementById("fullscreenToggleBtn");
+  if (!button) return;
+  const active = Boolean(document.fullscreenElement);
+  button.innerHTML = `<i class="fa-solid fa-${active ? "compress" : "expand"}"></i> <span class="desktop-only">${active ? "離開全螢幕" : "全螢幕"}</span>`;
+}
 
 // ========== 1. 本地存儲與備份恢復 ==========
 function loadStateFromLocalStorage() {
@@ -156,7 +182,12 @@ function loadStateFromLocalStorage() {
   if (savedTargets) { try { perspectiveTargets = JSON.parse(savedTargets); } catch (e) {} }
 
   const savedSettings = localStorage.getItem("oc_deepseek_settings");
-  if (savedSettings) { try { deepseekSettings = { ...deepseekSettings, ...JSON.parse(savedSettings) }; } catch (e) {} }
+  if (savedSettings) {
+    try {
+      const { apiKey: discardedApiKey, ...safeSettings } = JSON.parse(savedSettings);
+      deepseekSettings = { ...deepseekSettings, ...safeSettings, apiKey:"" };
+    } catch (e) {}
+  }
 
   document.getElementById("deepseekApiKey").value = deepseekSettings.apiKey;
   document.getElementById("deepseekBaseUrl").value = deepseekSettings.baseUrl;
@@ -178,7 +209,8 @@ function saveStateToLocalStorage() {
   localStorage.setItem("oc_collapsed_books", JSON.stringify(collapsedBooks));
   localStorage.setItem("oc_visual_novel_templates", JSON.stringify(visualNovelTemplates));
   localStorage.setItem("oc_perspective_targets", JSON.stringify(perspectiveTargets));
-  localStorage.setItem("oc_deepseek_settings", JSON.stringify(deepseekSettings));
+  const { apiKey: unsavedApiKey, ...safeDeepseekSettings } = deepseekSettings;
+  localStorage.setItem("oc_deepseek_settings", JSON.stringify(safeDeepseekSettings));
 }
 
 function resetDefaultCharacters() {
@@ -889,6 +921,43 @@ function selectAvatarFromGallery(url) {
 }
 
 // ========== 6. DeepSeek AI 視覺辨識 ==========
+function getDeepSeekChatEndpoint() {
+  const baseUrl = String(deepseekSettings.baseUrl || "https://api.deepseek.com").trim().replace(/\/+$/, "");
+  return /\/chat\/completions$/i.test(baseUrl) ? baseUrl : `${baseUrl}/chat/completions`;
+}
+
+async function requestDeepSeek(payload, timeoutMs = 120000, retryCount = 1) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(getDeepSeekChatEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${deepseekSettings.apiKey}` },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : {}; } catch (error) { data = {}; }
+    if (!response.ok) {
+      const apiMessage = data?.error?.message || raw.slice(0, 300);
+      const hints = { 400:"請檢查模型名稱或請求格式", 401:"API Key 無效或已失效", 402:"帳戶額度不足", 403:"API Key 沒有權限", 429:"請求過於頻繁或已達用量限制" };
+      throw new Error(`DeepSeek API ${response.status}：${apiMessage || hints[response.status] || "請求失敗"}${hints[response.status] && !apiMessage ? "" : hints[response.status] ? `（${hints[response.status]}）` : ""}`);
+    }
+    if (!data?.choices?.[0]?.message) throw new Error("DeepSeek API 回應缺少 choices[0].message");
+    return data;
+  } catch (error) {
+    if ((error.name === "AbortError" || error instanceof TypeError) && retryCount > 0) {
+      return requestDeepSeek(payload, timeoutMs, retryCount - 1);
+    }
+    if (error.name === "AbortError") throw new Error(`DeepSeek API 連續兩次超過 ${Math.round(timeoutMs / 1000)} 秒未回應`);
+    if (error instanceof TypeError) throw new Error("連續兩次無法連線 DeepSeek API；請檢查網路、Base URL，或瀏覽器 CORS 限制");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function handleAiImageOcr(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -900,45 +969,19 @@ async function handleAiImageOcr(event) {
 
     showToast("【2/3 步驟】發送請求至 DeepSeek API...");
 
-    let aiOutput = null;
-    if (deepseekSettings.apiKey) {
-      try {
-        const response = await fetch(`${deepseekSettings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${deepseekSettings.apiKey}`
-          },
-          body: JSON.stringify({
-            model: "deepseek-chat",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: deepseekSettings.ocrPrompt },
-                  { type: "image_url", image_url: { url: base64Data } }
-                ]
-              }
-            ]
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.choices && data.choices[0] && data.choices[0].message) {
-            aiOutput = data.choices[0].message.content;
-          }
-        }
-      } catch (err) {
-        console.log("DeepSeek multimodal Direct API bypass fallback trigger:", err);
-      }
-    }
+    if (!deepseekSettings.apiKey) throw new Error("請先設定 DeepSeek API Key。");
+    const data = await requestDeepSeek({
+      model: "deepseek-v4-flash-vision-exp",
+      messages: [{ role:"user", content:[
+        { type:"text", text:deepseekSettings.ocrPrompt },
+        { type:"image_url", image_url:{ url:base64Data } }
+      ] }]
+    });
+    const aiOutput = data.choices[0].message.content;
 
     showToast("【3/3 步驟】整理特徵並填入...");
 
-    if (!aiOutput) {
-      aiOutput = "✦ 髮型髮色：長髮/短髮線條流暢，質感細緻\n✦ 眼睛與表情：眼神明亮深邃，帶有特色眼神與溫和表情\n✦ 服裝氣質：精緻飾品與服裝細節描繪";
-    }
+    if (!aiOutput) throw new Error("AI 沒有回傳外貌辨識內容。");
 
     hideToast();
     const appearanceArea = document.getElementById("charAppearance");
@@ -947,7 +990,7 @@ async function handleAiImageOcr(event) {
 
   } catch (error) {
     hideToast();
-    alert(`分析完成：已將基礎外貌範本填入文字框。`);
+    alert(`圖片外貌辨識失敗：${error.message}\n\n請確認 API Key、額度與 Vision 模型使用權限。`);
   }
 }
 
@@ -2485,7 +2528,7 @@ function getDefaultVisualNovelSettings(doc) {
     primaryColor: firstCharacter?.themeColor?.primary || book?.iconColor || "#d97706",
     secondaryColor: firstCharacter?.themeColor?.secondary || "#7c3aed",
     themeMode: "dark", backgroundColor: "#17130f", textColor: "#fffaf0",
-    narratorBorderColor: "#b8aa98", narratorTextColor: "#fffaf0", globalBgm: "", bgmVolume: 0.7,
+    narratorBorderColor: "#b8aa98", narratorTextColor: "#fffaf0", globalBgm: "", bgmVolume: 0.7, typewriterSoundVolume: 0.4,
     useCharacterColors: true, typewriterEnabled: true, typewriterSound: false
   };
 }
@@ -2501,6 +2544,7 @@ function collectVisualNovelSettings() {
     narratorTextColor: document.getElementById("vnNarratorTextColor").value,
     globalBgm: document.getElementById("vnGlobalBgm").value.trim(),
     bgmVolume: Number(document.getElementById("vnBgmVolume").value),
+    typewriterSoundVolume: Number(document.getElementById("vnTypewriterSoundVolume").value),
     fontSize: Number(document.getElementById("vnFontSizeSelect")?.value) || 1.05,
     useCharacterColors: document.getElementById("vnUseCharacterColors").checked,
     typewriterEnabled: document.getElementById("vnTypewriterEnabled").checked,
@@ -2520,6 +2564,9 @@ function fillVisualNovelSettings(settings) {
   const bgmVolume = Number.isFinite(Number(settings.bgmVolume)) ? Number(settings.bgmVolume) : 0.7;
   document.getElementById("vnBgmVolume").value = bgmVolume;
   updateVisualNovelVolumeLabel(bgmVolume);
+  const typeSoundVolume = Number.isFinite(Number(settings.typewriterSoundVolume)) ? Number(settings.typewriterSoundVolume) : 0.4;
+  document.getElementById("vnTypewriterSoundVolume").value = typeSoundVolume;
+  updateVisualNovelTypeSoundVolumeLabel(typeSoundVolume);
   if (document.getElementById("vnFontSizeSelect")) {
     document.getElementById("vnFontSizeSelect").value = String(settings.fontSize || 1.05);
   }
@@ -2537,6 +2584,11 @@ function updateVisualNovelThemeModeDefaults() {
 
 function updateVisualNovelVolumeLabel(value) {
   const label = document.getElementById("vnBgmVolumeLabel");
+  if (label) label.textContent = `${Math.round(Number(value) * 100)}%`;
+}
+
+function updateVisualNovelTypeSoundVolumeLabel(value) {
+  const label = document.getElementById("vnTypewriterSoundVolumeLabel");
   if (label) label.textContent = `${Math.round(Number(value) * 100)}%`;
 }
 
@@ -2775,7 +2827,7 @@ function createVisualNovelAiBatches(segments) {
   const batches = [];
   let batch = [], characterCount = 0;
   segments.filter(segment => segment.text !== "").forEach(segment => {
-    if (batch.length && (batch.length >= 90 || characterCount + segment.text.length > 12000)) {
+    if (batch.length && (batch.length >= 40 || characterCount + segment.text.length > 5000)) {
       batches.push(batch); batch = []; characterCount = 0;
     }
     batch.push(segment); characterCount += segment.text.length;
@@ -2830,15 +2882,10 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
     for (let index = 0; index < batches.length; index++) {
       document.getElementById("toastMessage").textContent = `AI 正在辨識說話者（${index + 1} / ${batches.length}）…原文由程式鎖定，不交給 AI 改寫`;
       const batch = batches[index];
-      const response = await fetch(`${deepseekSettings.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-        method:"POST", headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${deepseekSettings.apiKey}` },
-        body:JSON.stringify({ model:"deepseek-chat", temperature:0, messages:[
+      const result = await requestDeepSeek({ model:"deepseek-v4-flash", thinking:{ type:"disabled" }, temperature:0, max_tokens:3000, response_format:{ type:"json_object" }, messages:[
           { role:"system", content:`你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isDialogue=true 才是角色對話；isDialogue=false 一律標旁白。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物（包含「尤佩特羅斯」等完整名稱），並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。可用角色：\n${characterContext || "（無已關聯角色）"}${customPromptInstruction}` },
           { role:"user", content:JSON.stringify(batch) }
-        ]})
-      });
-      if (!response.ok) throw new Error(`第 ${index + 1} 批 API 回應 ${response.status}`);
-      const result = await response.json();
+        ]});
       try {
         const mapping = parseVisualNovelSpeakerResponse(result.choices?.[0]?.message?.content);
         batch.forEach(segment => { if (mapping[segment.id]) speakerMap.set(segment.id, mapping[segment.id]); });
@@ -2849,7 +2896,7 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
     if (!visualNovelScriptPreservesSegments(script, segments)) throw new Error("完整性驗證未通過，沒有覆蓋目前腳本");
     document.getElementById("vnScriptText").value = script;
     if (fallbackBatchCount) alert(`AI 辨識完成。共有 ${fallbackBatchCount} 批存在漏標行，這些行已由本機規則補上說話者；所有原文字句仍完整保留。`);
-  } catch (error) { alert("AI 視覺小說化失敗：" + error.message); }
+  } catch (error) { alert(`AI 視覺小說化失敗：${error.message}\n\n已保留原本腳本，您也可以先使用「本機製作基礎腳本」。`); }
   finally { hideToast(); }
 }
 
@@ -2926,6 +2973,7 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   if (!preserveHistory) visualNovelHistory = [];
   const settings = { ...getDefaultVisualNovelSettings(doc), ...(doc.visualNovel.settings || {}) };
   currentVisualNovelSettings = settings;
+  ensureVisualNovelAudioContext();
   if (settings.fontSize) visualNovelFontSize = Number(settings.fontSize);
   finishVisualNovelTyping(false);
   applyVisualNovelTheme(settings);
@@ -3053,6 +3101,24 @@ function setVisualNovelBgmVolume(value, event) {
   }
 }
 
+function setVisualNovelTypeSoundVolume(value, event) {
+  event?.stopPropagation?.();
+  const volume = Math.min(1, Math.max(0, Number(value)));
+  currentVisualNovelSettings.typewriterSoundVolume = volume;
+  if (visualNovelTypeGain && visualNovelAudioContext) {
+    visualNovelTypeGain.gain.setValueAtTime(volume, visualNovelAudioContext.currentTime);
+  }
+  const label = document.getElementById("vnSettingsTypeSoundLabel");
+  if (label) label.textContent = `${Math.round(volume * 100)}%`;
+  const range = document.getElementById("vnPlayerTypeSoundVolume");
+  if (range) range.value = volume;
+  const doc = documents.find(item => item.id === currentVisualNovelDocId);
+  if (doc?.visualNovel) {
+    doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), typewriterSoundVolume:volume };
+    saveStateToLocalStorage();
+  }
+}
+
 function toggleVisualNovelAudioMute(event) {
   event?.stopPropagation?.();
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
@@ -3081,19 +3147,35 @@ function playVisualNovelAudio(type, src) {
   se.play().catch(error => console.warn("SE 播放失敗", error));
 }
 
+function ensureVisualNovelAudioContext() {
+  try {
+    if (!visualNovelAudioContext) visualNovelAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (!visualNovelTypeGain) {
+      visualNovelTypeGain = visualNovelAudioContext.createGain();
+      visualNovelTypeGain.connect(visualNovelAudioContext.destination);
+    }
+    const volume = Number.isFinite(Number(currentVisualNovelSettings.typewriterSoundVolume)) ? Number(currentVisualNovelSettings.typewriterSoundVolume) : 0.4;
+    visualNovelTypeGain.gain.setValueAtTime(volume, visualNovelAudioContext.currentTime);
+    if (visualNovelAudioContext.state === "suspended") visualNovelAudioContext.resume().catch(() => {});
+    return visualNovelAudioContext;
+  } catch (error) {
+    console.warn("打字音效初始化失敗", error);
+    return null;
+  }
+}
+
 function playVisualNovelTypeBeep() {
   if (!currentVisualNovelSettings.typewriterSound) return;
   try {
-    if (!visualNovelAudioContext) visualNovelAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-    if (visualNovelAudioContext.state === "suspended") visualNovelAudioContext.resume();
+    if (!ensureVisualNovelAudioContext() || visualNovelAudioContext.state !== "running") return;
     const oscillator = visualNovelAudioContext.createOscillator();
     const gain = visualNovelAudioContext.createGain();
     oscillator.type = "triangle";
     oscillator.frequency.setValueAtTime(820, visualNovelAudioContext.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(540, visualNovelAudioContext.currentTime + 0.04);
-    gain.gain.setValueAtTime(0.012, visualNovelAudioContext.currentTime);
+    gain.gain.setValueAtTime(0.03, visualNovelAudioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.00001, visualNovelAudioContext.currentTime + 0.045);
-    oscillator.connect(gain); gain.connect(visualNovelAudioContext.destination);
+    oscillator.connect(gain); gain.connect(visualNovelTypeGain);
     oscillator.start(); oscillator.stop(visualNovelAudioContext.currentTime + 0.05);
   } catch (error) {}
 }
@@ -3101,16 +3183,15 @@ function playVisualNovelTypeBeep() {
 function playVisualNovelAdvanceSound() {
   if (!currentVisualNovelSettings.typewriterSound) return;
   try {
-    if (!visualNovelAudioContext) visualNovelAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-    if (visualNovelAudioContext.state === "suspended") visualNovelAudioContext.resume();
+    if (!ensureVisualNovelAudioContext() || visualNovelAudioContext.state !== "running") return;
     const oscillator = visualNovelAudioContext.createOscillator();
     const gain = visualNovelAudioContext.createGain();
     oscillator.type = "sine";
     oscillator.frequency.setValueAtTime(620, visualNovelAudioContext.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(390, visualNovelAudioContext.currentTime + 0.09);
-    gain.gain.setValueAtTime(0.035, visualNovelAudioContext.currentTime);
+    gain.gain.setValueAtTime(0.0875, visualNovelAudioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.00001, visualNovelAudioContext.currentTime + 0.1);
-    oscillator.connect(gain); gain.connect(visualNovelAudioContext.destination);
+    oscillator.connect(gain); gain.connect(visualNovelTypeGain);
     oscillator.start(); oscillator.stop(visualNovelAudioContext.currentTime + 0.105);
   } catch (error) {}
 }
@@ -3370,6 +3451,12 @@ function updateVisualNovelSettingsUI() {
   const bgmVol = document.getElementById("vnPlayerBgmVolume");
   if (bgmVol) bgmVol.value = bgmVal;
 
+  const typeSoundVal = Number.isFinite(Number(currentVisualNovelSettings.typewriterSoundVolume)) ? Number(currentVisualNovelSettings.typewriterSoundVolume) : 0.4;
+  const typeSoundLabel = document.getElementById("vnSettingsTypeSoundLabel");
+  if (typeSoundLabel) typeSoundLabel.textContent = `${Math.round(typeSoundVal * 100)}%`;
+  const typeSoundRange = document.getElementById("vnPlayerTypeSoundVolume");
+  if (typeSoundRange) typeSoundRange.value = typeSoundVal;
+
   const fontLabel = document.getElementById("vnSettingsFontSizeLabel");
   if (fontLabel) fontLabel.textContent = `${visualNovelFontSize}rem`;
   const fontRange = document.getElementById("vnFontSizeRange");
@@ -3548,7 +3635,10 @@ function toggleVisualNovelTypeSound(event) {
     doc.visualNovel.settings = { ...(doc.visualNovel.settings || {}), typewriterSound: currentVisualNovelSettings.typewriterSound };
     saveStateToLocalStorage();
   }
-  if (currentVisualNovelSettings.typewriterSound) playVisualNovelTypeBeep();
+  if (currentVisualNovelSettings.typewriterSound) {
+    ensureVisualNovelAudioContext();
+    playVisualNovelTypeBeep();
+  }
   showVnFloatingToast(currentVisualNovelSettings.typewriterSound ? "打字音效：開啟" : "打字音效：關閉");
 }
 
@@ -3631,7 +3721,7 @@ async function runAiDocumentSummary(docArray, titlePrefix) {
         "Authorization": `Bearer ${deepseekSettings.apiKey}`
       },
       body: JSON.stringify({
-        model: "deepseek-chat",
+          model: "deepseek-v4-flash",
         messages: [
           {
             role: "system",
@@ -3768,13 +3858,14 @@ async function generateExportText() {
   } else if (mode === 'paros_only') {
     text = `# 【Paro 平行世界獨立設定】\n生成時間：${new Date().toLocaleString()}\n\n`;
     targetParos.forEach(p => {
-      text += `## Paro: ${p.name}\n${p.description || ''}\n`;
+      text += `## Paro: ${p.name}\n`;
+      text += `✦ Paro 介紹：${p.description || '未填寫'}\n`;
       const memberChars = characters.filter(c => !c.isHidden && (p.members || []).includes(c.id));
       memberChars.forEach(c => {
         text += `\n### 角色: ${c.name}\n`;
         const valObj = (c.paroValues && c.paroValues[p.id]) || {};
         (p.fields || []).forEach(f => {
-          text += `- ${f.name}: ${valObj[f.id] || '未填寫'}\n`;
+          text += `- ${f.name}${f.description ? `（${f.description}）` : ''}: ${valObj[f.id] || '未填寫'}\n`;
         });
       });
       text += `\n-----------------------------------\n\n`;
@@ -3893,12 +3984,13 @@ async function generateExportText() {
       text += `## 【Paro 平行世界設定 (所選角色)】\n\n`;
       targetParos.forEach(p => {
         text += `### Paro: ${p.name}\n`;
+        text += `✦ Paro 介紹：${p.description || '未填寫'}\n`;
         const memberChars = targetChars.filter(c => (p.members || []).includes(c.id));
         memberChars.forEach(c => {
           text += `- 角色 ${c.name}:\n`;
           const valObj = (c.paroValues && c.paroValues[p.id]) || {};
           (p.fields || []).forEach(f => {
-            text += `   * ${f.name}: ${valObj[f.id] || '未填寫'}\n`;
+            text += `   * ${f.name}${f.description ? `（${f.description}）` : ''}: ${valObj[f.id] || '未填寫'}\n`;
           });
         });
         text += `\n`;
@@ -3916,7 +4008,7 @@ async function generateExportText() {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${deepseekSettings.apiKey}` },
           body: JSON.stringify({
-            model: "deepseek-chat",
+            model: "deepseek-v4-flash",
             messages: [
               { role: "system", content: "你是一位精通同人創作的 AI 提示詞專家。請將資料重構成極度精簡、骨架清晰的同人 Prompt 文件。" },
               { role: "user", content: text }
@@ -4019,7 +4111,8 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, deepseekSettings };
+  const { apiKey: excludedApiKey, ...safeDeepseekSettings } = deepseekSettings;
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, deepseekSettings:safeDeepseekSettings };
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -4366,13 +4459,26 @@ function cancelAdvancedImport() {
   if (input) input.value = "";
 }
 
-function openApiKeyModal() { document.getElementById("apiKeyModal").classList.add("active"); }
+function openApiKeyModal() {
+  document.getElementById("deepseekApiKey").value = deepseekSettings.apiKey || "";
+  document.getElementById("deepseekBaseUrl").value = deepseekSettings.baseUrl || "https://api.deepseek.com";
+  document.getElementById("deepseekOcrPrompt").value = deepseekSettings.ocrPrompt || "";
+  document.getElementById("apiKeyModal").classList.add("active");
+}
+function toggleApiKeyVisibility() {
+  const input = document.getElementById("deepseekApiKey");
+  const button = document.getElementById("toggleApiKeyBtn");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  button.innerHTML = `<i class="fa-solid fa-eye${show ? "-slash" : ""}"></i>`;
+  button.title = show ? "隱藏 API Key" : "顯示 API Key";
+}
 function saveApiKeySettings() {
   deepseekSettings.apiKey = document.getElementById("deepseekApiKey").value.trim();
   deepseekSettings.baseUrl = document.getElementById("deepseekBaseUrl").value.trim();
   deepseekSettings.ocrPrompt = document.getElementById("deepseekOcrPrompt").value.trim();
   saveStateToLocalStorage(); closeModal("apiKeyModal");
-  alert("DeepSeek API 設定已儲存！");
+  alert("DeepSeek API 設定已套用！API Key 僅保留到本頁重新載入前，不會寫入瀏覽器或備份檔。");
 }
 function captureEditorModalSnapshot(modalId) {
   if (modalId === "documentModal") {
