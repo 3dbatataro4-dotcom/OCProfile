@@ -2,7 +2,7 @@
 <html lang="zh-TW" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#17120f">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,6 +27,8 @@
 
   <!-- Main Stylesheet -->
   <link rel="stylesheet" href="style.css?v=20260909-app11">
+  <link rel="stylesheet" href="forum.css?v=1">
+  <link rel="stylesheet" href="cloud-sync.css?v=2">
 </head>
 <body>
 
@@ -60,7 +62,7 @@
       </button>
 
       <!-- Cloud Sync & Backup Buttons -->
-      <button class="btn btn-outline" onclick="openCloudSyncModal()" title="線上與跨裝置同步">
+      <button class="btn btn-outline" onclick="OCCloud.open('workshop')" title="手動雲端同步與衝突檢查">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span class="desktop-only">雲端快照</span>
       </button>
 
@@ -81,6 +83,7 @@
 
   <!-- Navigation Bar -->
   <nav class="app-nav">
+    <button class="nav-tab" data-tab="tab-forum" onclick="OCForum.open()"><i class="fa-solid fa-comments"></i> 同人論壇</button>
     <button class="nav-tab active" data-tab="tab-cards" onclick="switchTab('tab-cards')">
       <i class="fa-solid fa-address-card"></i> 人物卡庫 <span class="badge" id="activeCharBadge">0</span>
     </button>
@@ -112,6 +115,7 @@
 
   <!-- Main Content Container -->
   <main class="app-main">
+    <section id="tab-forum" class="tab-content"><div id="forum-root"></div></section>
 
     <!-- TAB 1: 人物卡片庫 -->
     <section id="tab-cards" class="tab-content active">
@@ -463,10 +467,14 @@
     <button onclick="switchTab('tab-factions')"><i class="fa-solid fa-sitemap"></i><br>陣營</button>
     <button onclick="openCharacterModal()"><i class="fa-solid fa-plus-circle" style="color:var(--accent-gold); font-size:1.4rem;"></i><br>新建</button>
     <button onclick="switchTab('tab-paros')"><i class="fa-solid fa-hat-wizard"></i><br>Paro</button>
-    <button onclick="switchTab('tab-export')"><i class="fa-solid fa-file-export"></i><br>導出</button>
+    <button id="mobileExportMenuButton" onclick="OCForum.toggleEntry()" aria-expanded="false" aria-controls="mobileExportSubmenu"><i class="fa-solid fa-file-export"></i><br>導出／論壇</button>
   </div>
 
   <!-- Mobile Submenu Drawer for 卡庫 -->
+  <div class="mobile-submenu-drawer" id="mobileExportSubmenu" style="left:auto;right:10px">
+    <button onclick="switchTab('tab-export'); OCForum.toggleEntry(false)"><i class="fa-solid fa-file-export"></i> 資料輸出</button>
+    <button onclick="OCForum.open()"><i class="fa-solid fa-comments"></i> 虛擬同人論壇</button>
+  </div>
   <div class="mobile-submenu-drawer" id="mobileCardSubmenu">
     <button onclick="switchTab('tab-cards'); hideMobileCardSubmenu();"><i class="fa-solid fa-address-card"></i> 人物卡庫</button>
     <button onclick="switchTab('tab-cps'); hideMobileCardSubmenu();"><i class="fa-solid fa-heart"></i> CP 關係細節</button>
@@ -1226,7 +1234,7 @@
             <input type="password" id="deepseekApiKey" value="" autocomplete="off" placeholder="可輸入其他 DeepSeek API Key 覆蓋預設值">
             <button type="button" class="btn btn-outline" id="toggleApiKeyBtn" onclick="toggleApiKeyVisibility()" title="顯示 API Key"><i class="fa-solid fa-eye"></i></button>
           </div>
-          <small class="form-help">API Key 只在目前頁面暫時使用，不會寫入瀏覽器儲存空間或備份檔；重新載入後需再次輸入。</small>
+          <small class="form-help">API Key 會保存在此瀏覽器並隨備份匯出，重新載入後不用重填。備份含金鑰，請妥善保管。</small>
         </div>
         <div class="form-group">
           <label>API Base URL：</label>
@@ -1327,5 +1335,9 @@
   <!-- Scripts -->
   <script src="data.js"></script>
   <script src="app.js?v=20260909-app13"></script>
+  <script src="forum-core.js?v=1"></script>
+  <script src="forum.js?v=1"></script>
+  <script src="cloud-sync-core.js?v=1"></script>
+  <script src="cloud-sync.js?v=1"></script>
 </body>
 </html>
