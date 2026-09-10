@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','accounts','users','posts','comments','tagCatalog','favoriteFolders']};
+  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
   const mapFields=new Set(['collapsedBooks','perspectiveTargets']);
   const banned=new Set(['apikey','apikeys','key','authorization','accesstoken','refreshtoken','password','secret','servicekey','servicerole','profiles','activeprofile','deepseeksettings','generation','session','sessions']);
   const clone=x=>JSON.parse(JSON.stringify(x));
@@ -18,6 +18,7 @@
   }
   function validate(payload){
     if(!payload||payload.format!=='oc-cloud-save'||payload.version!==1||!collections[payload.scope]||!payload.data)throw new Error('雲端存檔格式不正確。');
+    if(payload.scope==='forum'){payload={...payload,data:{...payload.data}};for(const key of ['chatContacts','chats','chatMessages'])if(payload.data[key]===undefined)payload.data[key]=[];}
     if(payload.scope==='forum'&&payload.data.favoriteFolders===undefined)payload={...payload,data:{...payload.data,favoriteFolders:[]}};
     if(payload.scope==='forum'&&payload.data.tagCatalog===undefined)payload={...payload,data:{...payload.data,tagCatalog:[]}};
     for(const k of collections[payload.scope]){if(!Array.isArray(payload.data[k]))throw new Error('雲端資料缺少 '+k);const ids=new Set();for(const r of payload.data[k]){if(!r||!['string','number'].includes(typeof r.id)||!String(r.id)||ids.has(String(r.id)))throw new Error(k+' 存在重複或無效 ID。');ids.add(String(r.id));}}
@@ -58,9 +59,10 @@
     const remap=(group,id)=>maps[group]?.get(String(id))??id;
     const identity=id=>maps.accounts?.get(String(id))??maps.users?.get(String(id))??id;
     function rewrite(value,key=''){
-      const targets={boardId:'boards',bookId:'books',charId:'characters',postId:'posts',parentId:'comments',commentId:'comments'};
-      if(['authorId','userId','partnerId'].includes(key))return identity(value);
+      const targets={replyTo:'chatMessages',chatId:'chats',senderId:'chatContacts',boardId:'boards',bookId:'books',charId:'characters',postId:'posts',parentId:'comments',commentId:'comments'};
+      if(['authorId','userId','partnerId','accountId'].includes(key))return identity(value);
       if(targets[key]&&value!==null&&typeof value!=='object')return remap(targets[key],value);
+      if((key==='contactIds'||key==='mentionIds')&&Array.isArray(value))return value.map(id=>remap('chatContacts',id));
       if(key==='likedBy'&&Array.isArray(value))return value.map(identity);
       if(key==='folderIds'&&Array.isArray(value))return value.map(id=>remap('favoriteFolders',id));
       if(key==='charIds'||key==='factionIds')return value.map(id=>remap(key==='charIds'?'characters':'factions',id));
@@ -71,6 +73,9 @@
     }
     for(const [group,row]of adopted){const mapped=rewrite(row);Object.assign(row,mapped);}
     if(local.scope==='forum'){
+      const rooms=new Map(out.data.chats.map(r=>[r.id,r])),contacts=new Set(out.data.chatContacts.map(c=>c.id));
+      for(const r of rooms.values())if(!Array.isArray(r.contactIds)||r.contactIds.length<1||r.contactIds.length>11||r.contactIds.some(id=>!contacts.has(id)))throw new Error('請一併保留對話中的聯絡人；群組上限為12人（含你）。');
+      for(const m of out.data.chatMessages)if(!rooms.has(m.chatId)||(m.senderId!=='self'&&!contacts.has(m.senderId)))throw new Error('請一併保留聊天訊息所屬的對話與聯絡人。');
       const posts=new Set(out.data.posts.map(p=>p.id));
       for(const c of out.data.comments){if(!posts.has(c.postId))throw new Error('有保留的留言仍屬於被刪除的文章。請保留該文章，或同時採用相關留言的刪除。');if(c.parentId&&!out.data.comments.some(p=>p.id===c.parentId&&p.postId===c.postId))c.parentId=null;}
       const byId=new Map(out.data.comments.map(c=>[c.id,c]));
