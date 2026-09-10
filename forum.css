@@ -33,6 +33,7 @@ button.ff-avatar{padding:0;border:0;cursor:pointer;font:inherit;flex-shrink:0}
 button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offset:3px}
 .ff-reply-target{font-size:.82rem;color:var(--text-muted);margin:8px 0;overflow-wrap:anywhere}
 .ff-long-content summary{cursor:pointer;color:var(--accent-gold);min-height:44px;padding:10px 0;font-size:.85rem}
+.ff-rest-content[open]>summary{display:none}
 .ff-long-content .ff-text{margin-top:8px}
 .ff-retry-notice .ff-actions{margin-top:10px}
 #ff-social-dialog{max-width:min(92vw,620px);max-height:85dvh;overflow:auto}
@@ -190,3 +191,23 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
   .ff-comment-sort-control{display:grid;grid-template-columns:minmax(0,1fr) auto;margin-left:0}
   .ff-comment-sort-control select{min-width:0!important;max-width:none!important;width:100%!important}
 }
+
+/* Interaction polish and new media/chat surfaces. */
+#forum-root .ff-btn,#forum-root .ff-card,#forum-root .ff-tag,#forum-root .ff-avatar{transition:transform .18s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease,opacity .18s ease}
+#forum-root .ff-btn:hover,#forum-root .ff-tag:hover{transform:translateY(-1px)}
+#forum-root .ff-feed-card:hover,.ff-user-tile:hover{transform:translateY(-2px);box-shadow:0 8px 20px #00000012!important}
+#forum-root .ff-avatar:hover{transform:scale(1.04)}
+#forum-root .ff-feed-card,.ff-comment,.ff-user-tile,.ff-dm-msg{animation:ff-soft-enter .22s ease both}
+@keyframes ff-soft-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.ff-post-image{margin:8px 0 7px;border-radius:8px;overflow:hidden;background:var(--bg-secondary);border:1px solid var(--ff-line)}
+.ff-post-image img{display:block;width:100%;max-height:220px;object-fit:cover}
+.ff-post-heading .ff-post-image img{max-height:420px;object-fit:contain}
+.ff-dm-panel{display:grid;gap:14px}
+.ff-dm-log{display:flex;flex-direction:column;gap:10px;max-height:58dvh;overflow:auto;padding:4px}
+.ff-dm-msg{max-width:min(78%,640px);padding:10px 12px;border:1px solid var(--ff-line);border-radius:10px;background:var(--bg-secondary)}
+.ff-dm-msg.mine{align-self:flex-end;background:color-mix(in srgb,var(--accent-gold) 12%,var(--bg-card));border-color:color-mix(in srgb,var(--accent-gold) 45%,var(--ff-line))}
+.ff-dm-msg.theirs{align-self:flex-start}
+.ff-dm-msg div{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;font-size:14px}
+.ff-dm-msg small{display:block;margin-top:6px;color:var(--ff-muted);font-size:10px}
+.ff-dm-compose textarea{min-height:110px}
+@media(prefers-reduced-motion:reduce){#forum-root .ff-feed-card,.ff-comment,.ff-user-tile,.ff-dm-msg{animation:none}}
