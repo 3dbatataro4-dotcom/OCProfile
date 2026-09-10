@@ -8,7 +8,7 @@
   let modal,selected=new Set(['workshop','forum']),session=null,preview=null,working=false;
   const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
-  const labels={tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'作品板塊',relationships:'關係',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
+  const labels={favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'作品板塊',relationships:'關係',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
   const baselineKey=scope=>`oc_cloud_base_${session.user.id}_${scope}`;
   function workshop(){return {characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,collapsedBooks,perspectiveTargets};}
   function snapshot(scope){return scope==='forum'?OCForum.cloudSnapshot():C.snapshot(scope,workshop());}
@@ -27,7 +27,7 @@
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
     try{
       const response=await fetch(URL+path,{method:body?'POST':'GET',headers:{apikey:KEY,'Content-Type':'application/json',...(auth?{Authorization:'Bearer '+session.access_token}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:controller.signal});
-      const result=await response.json();
+      const result=response.status===204?{}:await response.json();
       if(!response.ok){const reason=result.message||result.error_description||result.msg||result.error||'連線失敗';if(String(reason).includes('SYNC_CONFLICT'))throw new Error('雲端已被另一台裝置更新，請重新刷新檢查。');if(['PGRST205','PGRST202','42P01'].includes(result.code))throw new Error('雲端資料表尚未建立。請先在 Supabase SQL Editor 執行 supabase/setup.sql。');throw new Error(reason);}
       return result;
     }finally{clearTimeout(timer);}
@@ -72,7 +72,7 @@
       for(const p of results){
         if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+'的本機資料已改變，請重新同步。');
         const upload=pending.direction==='upload';let uploaded=false;
-        if(upload&&!C.equal(p.merged,p.remote)){await request('/rest/v1/rpc/oc_push_snapshot',{p_scope:p.scope,p_expected_revision:p.revision,p_payload:p.merged});uploaded=true;}
+        if(upload&&!C.equal(p.merged,p.remote)){await request('/rest/v1/rpc/oc_push_snapshot',{p_scope:p.scope,p_expected_revision:p.revision,p_payload:p.merged});uploaded=true;const saved=await head(p.scope);if(!C.equal(saved.payload,p.merged))throw new Error(scopeNames[p.scope]+'上傳後的雲端內容與預期不同，未更動本機。若資料表設定較舊，請重新執行最新 supabase/setup.sql，再同步。');}
         if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+(uploaded?'已上傳，但本機有新修改，未覆蓋本機。':'的本機資料已改變。'));
         try{apply(p.merged);}catch(err){throw new Error(scopeNames[p.scope]+(uploaded?'已上傳，但本機套用失敗：':'套用失敗：')+err.message);}
         try{localStorage.setItem(baselineKey(p.scope),JSON.stringify(upload?p.merged:p.remote));}catch{}
