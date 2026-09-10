@@ -8,7 +8,7 @@
   let modal,selected=new Set(['workshop','forum']),session=null,preview=null,working=false;
   const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
-  const labels={favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'作品板塊',relationships:'關係',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
+  const labels={chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'作品板塊',relationships:'關係',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
   const baselineKey=scope=>`oc_cloud_base_${session.user.id}_${scope}`;
   function workshop(){return {characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,collapsedBooks,perspectiveTargets};}
   function snapshot(scope){return scope==='forum'?OCForum.cloudSnapshot():C.snapshot(scope,workshop());}
