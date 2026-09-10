@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','accounts','users','posts','comments','tagCatalog']};
+  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','accounts','users','posts','comments','tagCatalog','favoriteFolders']};
   const mapFields=new Set(['collapsedBooks','perspectiveTargets']);
   const banned=new Set(['apikey','apikeys','key','authorization','accesstoken','refreshtoken','password','secret','servicekey','servicerole','profiles','activeprofile','deepseeksettings','generation','session','sessions']);
   const clone=x=>JSON.parse(JSON.stringify(x));
@@ -18,6 +18,7 @@
   }
   function validate(payload){
     if(!payload||payload.format!=='oc-cloud-save'||payload.version!==1||!collections[payload.scope]||!payload.data)throw new Error('雲端存檔格式不正確。');
+    if(payload.scope==='forum'&&payload.data.favoriteFolders===undefined)payload={...payload,data:{...payload.data,favoriteFolders:[]}};
     if(payload.scope==='forum'&&payload.data.tagCatalog===undefined)payload={...payload,data:{...payload.data,tagCatalog:[]}};
     for(const k of collections[payload.scope]){if(!Array.isArray(payload.data[k]))throw new Error('雲端資料缺少 '+k);const ids=new Set();for(const r of payload.data[k]){if(!r||!['string','number'].includes(typeof r.id)||!String(r.id)||ids.has(String(r.id)))throw new Error(k+' 存在重複或無效 ID。');ids.add(String(r.id));}}
     return {format:'oc-cloud-save',version:1,scope:payload.scope,data:Object.fromEntries(collections[payload.scope].map(k=>[k,scrub(payload.data[k])]))};
@@ -60,6 +61,8 @@
       const targets={boardId:'boards',bookId:'books',charId:'characters',postId:'posts',parentId:'comments',commentId:'comments'};
       if(['authorId','userId','partnerId'].includes(key))return identity(value);
       if(targets[key]&&value!==null&&typeof value!=='object')return remap(targets[key],value);
+      if(key==='likedBy'&&Array.isArray(value))return value.map(identity);
+      if(key==='folderIds'&&Array.isArray(value))return value.map(id=>remap('favoriteFolders',id));
       if(key==='charIds'||key==='factionIds')return value.map(id=>remap(key==='charIds'?'characters':'factions',id));
       if(key==='paroValues'&&value)return Object.fromEntries(Object.entries(value).map(([id,v])=>[remap(local.scope==='forum'?'worlds':'paros',id),v]));
       if(Array.isArray(value))return value.map(v=>key==='members'&&typeof v==='string'?remap('characters',v):rewrite(v));
