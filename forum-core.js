@@ -5,17 +5,18 @@
   const id = () => globalThis.crypto.randomUUID();
   const list = value => Array.isArray(value) ? value : [];
   const tags = value => [...new Set((Array.isArray(value) ? value : String(value || '').split(/[,，\n]/)).map(x => String(x).trim()).filter(Boolean))];
-  const groups = ['boards', 'characters', 'worlds', 'factions', 'relationships', 'accounts', 'users', 'posts', 'comments', 'tagCatalog', 'profiles'];
+  const groups = ['boards', 'characters', 'worlds', 'factions', 'relationships', 'accounts', 'users', 'posts', 'comments', 'tagCatalog', 'favoriteFolders', 'profiles'];
   function initial() {
     const official = id(), fan = id();
     return { format: 'oc-fandom-forum', version: 1, boards: [{ id: id(), name: '綜合交流', description: '跨作品同好交流' }], characters: [], worlds: [], factions: [], relationships: [],
       accounts: [{ id: official, name: '官方編輯部', owned: true, official: true, gender: '女', color: '#d9ae70', color2: '#9c78c9' }, { id: fan, name: '我的同人帳號', owned: true, official: false, gender: '女', color: '#ad87c5', color2: '#709cac' }], users: [],
-      posts: [], comments: [], tagCatalog: [], activeUser: fan, profiles: [], activeProfile: 'inherit',
+      posts: [], comments: [], tagCatalog: [], favoriteFolders: [], activeUser: fan, profiles: [], activeProfile: 'inherit',
       generation: { boardId: '', tags: '', type: '隨機', min: 1, max: 3, comments: 3, interval: 15, allowNew: true, enabled: false, nextAt: 0, prompt: '', atmosphere: '允許逆 CP、拆官配、角色爭議與對家拌嘴；不同用戶有各自立場。' } };
   }
   function validate(data) {
     if (!data || data.format !== 'oc-fandom-forum' || data.version !== 1) throw new Error('不是支援的同人論壇備份（版本 1）。');
     if (!data.accounts && Array.isArray(data.users)) { data.accounts = data.users.filter(x => x.owned); data.users = data.users.filter(x => !x.owned); }
+    if(data.favoriteFolders===undefined)data.favoriteFolders=[];
     if(data.tagCatalog===undefined)data.tagCatalog=tags(list(data.posts).flatMap(p=>list(p.tags))).map(name=>({id:id(),name}));
     if (data.profiles === undefined) data.profiles = [];
     for (const key of groups) {
@@ -46,6 +47,8 @@
     while (changed) {
       changed = false;
       for (const p of data.posts.filter(x => chosen.has('posts:' + x.id))) {
+        for(const id of list(p.folderIds))add('favoriteFolders',id);
+        for(const liker of list(p.likedBy)){add('users',liker);add('accounts',liker);}
         for(const name of list(p.tags))for(const tag of data.tagCatalog.filter(t=>t.name===name))add('tagCatalog',tag.id);
         add('users', p.authorId); add('accounts', p.authorId); add('boards', p.boardId); list(p.charIds).forEach(x => add('characters', x));
         data.comments.filter(x => x.postId === p.id).forEach(x => add('comments', x.id));
@@ -84,7 +87,8 @@
       const index = out[key].findIndex(x => x.id === source.id);
       if (index >= 0 && action === 'keep') continue;
       const row = clone(source); row.id = ref(key, source.id);
-      if (key === 'posts' || key === 'comments') row.authorId = identity(row.authorId);
+      if (key === 'posts' || key === 'comments') {row.authorId = identity(row.authorId);row.likedBy=list(row.likedBy).map(identity);}
+      if(key==='posts')row.folderIds=list(row.folderIds).map(id=>ref('favoriteFolders',id));
       if (key === 'posts') { row.boardId = ref('boards', row.boardId); row.charIds = list(row.charIds).map(x => ref('characters', x)); }
       if (key === 'comments') { row.postId = ref('posts', row.postId); row.parentId = ref('comments', row.parentId); }
       if (key === 'users' || key === 'accounts') {
