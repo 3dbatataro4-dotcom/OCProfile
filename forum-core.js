@@ -1,21 +1,23 @@
 /* Independent forum model. No references to the character editor's storage. */
 (function (root) {
   'use strict';
+  const Chat=root.ForumChatCore||(typeof require==='function'?require('./forum-chat-core.js'):null);
   const clone = value => JSON.parse(JSON.stringify(value));
   const id = () => globalThis.crypto.randomUUID();
   const list = value => Array.isArray(value) ? value : [];
   const tags = value => [...new Set((Array.isArray(value) ? value : String(value || '').split(/[,，\n]/)).map(x => String(x).trim()).filter(Boolean))];
-  const groups = ['boards', 'characters', 'worlds', 'factions', 'relationships', 'accounts', 'users', 'posts', 'comments', 'tagCatalog', 'favoriteFolders', 'profiles'];
+  const groups = ['boards', 'characters', 'worlds', 'factions', 'relationships', 'accounts', 'users', 'posts', 'comments', 'tagCatalog', 'favoriteFolders', 'chatContacts', 'chats', 'chatMessages', 'profiles'];
   function initial() {
     const official = id(), fan = id();
     return { format: 'oc-fandom-forum', version: 1, boards: [{ id: id(), name: '綜合交流', description: '跨作品同好交流' }], characters: [], worlds: [], factions: [], relationships: [],
       accounts: [{ id: official, name: '官方編輯部', owned: true, official: true, gender: '女', color: '#d9ae70', color2: '#9c78c9' }, { id: fan, name: '我的同人帳號', owned: true, official: false, gender: '女', color: '#ad87c5', color2: '#709cac' }], users: [],
-      posts: [], comments: [], tagCatalog: [], favoriteFolders: [], activeUser: fan, profiles: [], activeProfile: 'inherit',
+      posts: [], comments: [], tagCatalog: [], favoriteFolders: [], chatContacts: [], chats: [], chatMessages: [], activeUser: fan, profiles: [], activeProfile: 'inherit',
       generation: { boardId: '', tags: '', type: '隨機', min: 1, max: 3, comments: 3, interval: 15, allowNew: true, enabled: false, nextAt: 0, prompt: '', atmosphere: '允許逆 CP、拆官配、角色爭議與對家拌嘴；不同用戶有各自立場。' } };
   }
   function validate(data) {
     if (!data || data.format !== 'oc-fandom-forum' || data.version !== 1) throw new Error('不是支援的同人論壇備份（版本 1）。');
     if (!data.accounts && Array.isArray(data.users)) { data.accounts = data.users.filter(x => x.owned); data.users = data.users.filter(x => !x.owned); }
+    Chat.migrate(data);
     if(data.favoriteFolders===undefined)data.favoriteFolders=[];
     if(data.tagCatalog===undefined)data.tagCatalog=tags(list(data.posts).flatMap(p=>list(p.tags))).map(name=>({id:id(),name}));
     if (data.profiles === undefined) data.profiles = [];
@@ -34,7 +36,7 @@
     const identities = new Set(data.accounts.map(x => x.id));
     if (data.users.some(x => identities.has(x.id))) throw new Error('我的帳號與同好帳號不能共用 ID。');
     data.accounts.forEach(x => x.owned = true); data.users.forEach(x => { x.owned = false; x.official = false; });
-    return data;
+    return Chat.validate(data);
   }
   // User-requested portable API settings include credentials; schedules remain local.
   function portable(state) {
@@ -46,6 +48,9 @@
     const add = (key, ref) => { if (ref && data[key].some(x => x.id === ref) && !chosen.has(key + ':' + ref)) { chosen.add(key + ':' + ref); changed = true; } };
     while (changed) {
       changed = false;
+      for(const r of data.chats.filter(r=>chosen.has('chats:'+r.id))){add('accounts',r.accountId);list(r.contactIds).forEach(id=>add('chatContacts',id));data.chatMessages.filter(m=>m.chatId===r.id).forEach(m=>add('chatMessages',m.id));}
+      for(const m of data.chatMessages.filter(m=>chosen.has('chatMessages:'+m.id))){add('chats',m.chatId);add('chatContacts',m.senderId);list(m.mentionIds).forEach(id=>add('chatContacts',id));}
+      for(const c of data.chatContacts.filter(c=>chosen.has('chatContacts:'+c.id)))if(c.kind==='user')add('users',c.userId);
       for (const p of data.posts.filter(x => chosen.has('posts:' + x.id))) {
         for(const id of list(p.folderIds))add('favoriteFolders',id);
         for(const liker of list(p.likedBy)){add('users',liker);add('accounts',liker);}
@@ -87,6 +92,9 @@
       const index = out[key].findIndex(x => x.id === source.id);
       if (index >= 0 && action === 'keep') continue;
       const row = clone(source); row.id = ref(key, source.id);
+      if(key==='chatContacts'&&row.kind==='user')row.userId=identity(row.userId);
+      if(key==='chats'){row.accountId=identity(row.accountId);row.contactIds=list(row.contactIds).map(id=>ref('chatContacts',id));}
+      if(key==='chatMessages'){row.chatId=ref('chats',row.chatId);if(row.senderId!=='self')row.senderId=ref('chatContacts',row.senderId);row.mentionIds=list(row.mentionIds).map(id=>ref('chatContacts',id));if(row.replyTo)row.replyTo=ref('chatMessages',row.replyTo);}
       if (key === 'posts' || key === 'comments') {row.authorId = identity(row.authorId);row.likedBy=list(row.likedBy).map(identity);}
       if(key==='posts')row.folderIds=list(row.folderIds).map(id=>ref('favoriteFolders',id));
       if (key === 'posts') { row.boardId = ref('boards', row.boardId); row.charIds = list(row.charIds).map(x => ref('characters', x)); }
