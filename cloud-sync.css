@@ -74,6 +74,7 @@
 .oc-cloud-scopes input[type="checkbox"] { width:20px;min-height:20px;height:20px;flex:0 0 20px;accent-color:var(--cloud-action); }
 .oc-cloud-main-actions { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0 12px; }
 .oc-cloud-main-actions button { min-height:66px;font-size:18px; }
+.oc-cloud-main-actions [data-cloud="restore"] { grid-column:1 / -1;min-height:52px;font-size:15px; }
 .oc-cloud-panel [data-cloud="confirm"] { background:var(--cloud-action);color:var(--cloud-action-text); }
 .oc-cloud-overlay[aria-busy="true"] input { pointer-events:none; }
 .oc-cloud-row { border: 1px solid var(--cloud-border); background: var(--cloud-surface); padding: 18px; border-radius: 14px; margin: 14px 0; display: grid; gap: 14px; }
@@ -98,4 +99,7 @@
   .oc-cloud-confirm button { width: 100%; }
   .oc-cloud-panel header h2 { font-size: 22px; }
   .oc-cloud-panel header button { flex-shrink: 0; }
+  .oc-cloud-main-actions { grid-template-columns:1fr 1fr;gap:8px; }
+  .oc-cloud-main-actions button { min-height:56px;font-size:16px;padding-inline:8px; }
+  .oc-cloud-main-actions [data-cloud="restore"] { min-height:48px;font-size:14px; }
 }
