@@ -85,6 +85,12 @@
 .oc-cloud-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; min-width: 0; }
 .oc-cloud-compare > div { min-width: 0; color: var(--cloud-muted); }
 .oc-cloud-compare pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; background: var(--cloud-raised); color: var(--cloud-text); border: 1px solid var(--cloud-border); padding: 14px; border-radius: 10px; font-size: 13px; line-height: 1.7; margin-top: 8px; }
+.oc-cloud-sticky-actions { position: sticky; top: -28px; z-index: 20; background: var(--cloud-surface); padding: 12px 0; border-bottom: 1px solid var(--cloud-border); margin: 12px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.oc-cloud-group { border: 1px solid var(--cloud-border); border-radius: 12px; background: var(--cloud-raised); margin: 14px 0; overflow: hidden; }
+.oc-cloud-group summary { padding: 12px 16px; background: var(--cloud-raised); color: var(--cloud-text); font-weight: 600; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
+.oc-cloud-group summary span { font-size: 13px; color: var(--cloud-accent); font-weight: normal; }
+.oc-cloud-group summary::-webkit-details-marker { display: none; }
+.oc-cloud-group-body { padding: 12px; border-top: 1px solid var(--cloud-border); }
 .oc-cloud-confirm { display: flex; flex-wrap: wrap; gap: 12px; position: sticky; bottom: 0; background: var(--cloud-surface); padding: 16px 0; border-top: 1px solid var(--cloud-border); }
 .oc-cloud-panel [role="status"] { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--cloud-accent); background: var(--cloud-raised); padding: 12px 16px; border-radius: 10px; border-left: 3px solid var(--cloud-accent); }
 .oc-cloud-panel [role="status"]:empty { display: none; }
