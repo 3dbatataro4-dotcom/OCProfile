@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const list=v=>Array.isArray(v)?v:[],id=()=>globalThis.crypto.randomUUID();
+  const list=v=>Array.isArray(v)?v:[],id=()=>(typeof globalThis.crypto?.randomUUID==='function'?globalThis.crypto.randomUUID():'fc'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
   function migrate(s){
     for(const key of ['chatContacts','chats','chatMessages'])if(s[key]===undefined)s[key]=[];
     if(!['chatContacts','chats','chatMessages'].every(k=>Array.isArray(s[k])))throw new Error('聊天資料表格式不正確。');
