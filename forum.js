@@ -38,6 +38,7 @@
     if(typeof Intl!=='undefined'&&Intl.Segmenter)return [...new Intl.Segmenter('zh-TW',{granularity:'grapheme'}).segment(value)].map(x=>x.segment);
     return [...value];
   };
+  const clip = (text,max) => graphemes(String(text??'')).slice(0,max).join('');
   const shortName = (text, max=20) => { const parts=graphemes(text); return parts.length>max?parts.slice(0,max).join('')+'…':parts.join(''); };
   const displayName = (text, cls='') => `<span class="ff-display-name ${cls}" title="${e(text)}">${e(shortName(text))}</span>`;
   const nameButton = (u, action, extra='ff-small') => u.roleplay?`<span class="ff-name-btn" title="${e(u.name)}">${displayName(u.name)}</span>`:`<button type="button" class="ff-btn ${extra} ff-name-btn" data-action="${e(action)}" title="${e(u.name)}" aria-label="查看 ${e(u.name)}">${displayName(u.name)}</button>`;
@@ -56,7 +57,7 @@
   }
   function authorSnapshot(u,suffix) {
     const base=String(u.name||'同好').split(/[｜|]/)[0];
-    if(u.dynamicName){const favorite=state.characters.find(c=>c.id===C.list(u.charIds)[0]);u.dynamicSuffix=String(suffix||u.dynamicSuffix||(favorite?'今天也在為'+favorite.name+'打摳':'今天也在快樂追更')).replace(/[｜|\r\n]/g,' ').trim().slice(0,60);}
+    if(u.dynamicName){const favorite=state.characters.find(c=>c.id===C.list(u.charIds)[0]);u.dynamicSuffix=clip(String(suffix||u.dynamicSuffix||(favorite?'今天也在為'+favorite.name+'打摳':'今天也在快樂追更')).replace(/[｜|\r\n]/g,' ').trim(),60);}
     return {name:u.dynamicName?base+'｜'+u.dynamicSuffix:u.name,handle:handle(u),signature:u.signature||'',official:!!u.official,avatar:u.avatar||'',gender:u.gender,color:u.color,color2:u.color2};
   }
   const cleanHandle = text => String(text||'').trim().replace(/^@+/,'').replace(/[^\p{L}\p{N}_-]/gu,'_').slice(0,36);
@@ -310,24 +311,24 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
   function candidates(lore,targetId) {
     const boardId=lore.board?.id||activeBoardId(),all=boardUsers(boardId).filter(x=>!x.owned), target=all.find(x=>x.id===targetId);
     const matches=all.filter(u=>C.list(u.charIds).some(id=>lore.selectedIds.includes(id)));
-    return [...new Map([...(target?[target]:[]),...sample(matches,5),...sample(all,5)].map(u=>[u.id,u])).values()].slice(0,9).map(u=>({id:u.id,name:u.name,handle:handle(u),signature:u.signature,abstractStyle:!!u.abstractStyle,dynamicName:!!u.dynamicName,dynamicSuffix:u.dynamicSuffix,role:u.role,forumRole:u.forumRoles?.[boardId]||u.role,personality:u.personality,supports:u.supports,charIds:u.charIds,shortReplies:!!u.shortReplies,memory:String(u.memory||'').slice(0,360),links:C.list(u.links).slice(-5).map(l=>({userId:l.userId,note:String(l.note||'').slice(0,80)})),recentHistory:C.list(u.history).slice(-3).map(h=>({postId:h.postId,partnerId:h.partnerId,note:String(h.note||'').slice(0,90)}))}));
+    return [...new Map([...(target?[target]:[]),...sample(matches,5),...sample(all,5)].map(u=>[u.id,u])).values()].slice(0,9).map(u=>({id:u.id,name:u.name,handle:handle(u),signature:u.signature,abstractStyle:!!u.abstractStyle,dynamicName:!!u.dynamicName,dynamicSuffix:u.dynamicSuffix,role:u.role,forumRole:u.forumRoles?.[boardId]||u.role,personality:u.personality,supports:u.supports,charIds:u.charIds,shortReplies:!!u.shortReplies,memory:clip(u.memory,360),links:C.list(u.links).slice(-5).map(l=>({userId:l.userId,note:clip(l.note,80)})),recentHistory:C.list(u.history).slice(-3).map(h=>({postId:h.postId,partnerId:h.partnerId,note:clip(h.note,90)}))}));
   }
   function newUser(raw={},owned=false,boardId=activeBoardId()) {
     const colors=()=> '#'+Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
     const charIds=C.list(raw.charIds).filter(x=>state.characters.some(c=>c.id===x));
     const id=C.id(),favorite=state.characters.find(c=>c.id===charIds[0]);
-    return {id,abstractStyle:typeof raw.abstractStyle==='boolean'?raw.abstractStyle:undefined,handle:uniqueHandle(raw.handle||((favorite?.name||raw.name||'同好')+'_應援中'),id),signature:String(raw.signature||'').slice(0,160),name:String(raw.name||'新同好').slice(0,80),owned,official:false,gender:raw.gender==='男'?'男':'女',role:String(raw.role||'作品廚'),forumIds:owned?[]:[boardId],forumRoles:owned?{}:{[boardId]:String(raw.worldRole||raw.forumRole||raw.role||'世界居民')},personality:String(raw.personality||''),supports:String(raw.supports||''),charIds,color:favorite?.themeColor?.primary||colors(),color2:raw.avatarStyle==='角色漸層'?(favorite?.themeColor?.secondary||colors()):colors(),memory:'',links:[],history:[]};
+    return {id,abstractStyle:typeof raw.abstractStyle==='boolean'?raw.abstractStyle:undefined,handle:uniqueHandle(raw.handle||((favorite?.name||raw.name||'同好')+'_應援中'),id),signature:clip(raw.signature,160),name:clip(raw.name||'新同好',80),owned,official:false,gender:raw.gender==='男'?'男':'女',role:String(raw.role||'作品廚'),forumIds:owned?[]:[boardId],forumRoles:owned?{}:{[boardId]:String(raw.worldRole||raw.forumRole||raw.role||'世界居民')},personality:String(raw.personality||''),supports:String(raw.supports||''),charIds,color:favorite?.themeColor?.primary||colors(),color2:raw.avatarStyle==='角色漸層'?(favorite?.themeColor?.secondary||colors()):colors(),memory:'',links:[],history:[]};
   }
   function applyMemory(raw,participants,p,commentId) {
     for(const m of C.list(raw.memories).slice(0,20)) {
       const u=state.users.find(x=>x.id===m.userId&&!x.owned&&participants.has(x.id)); if(!u)continue;
-      if(typeof m.summary==='string')u.memory=m.summary.slice(0,360);
+      if(typeof m.summary==='string')u.memory=clip(m.summary,360);
       for(const l of C.list(m.links).slice(0,8)) {
         if(!participants.has(l.userId)||l.userId===u.id||typeof l.note!=='string')continue;
         u.links=C.list(u.links); const prior=u.links.find(x=>x.userId===l.userId);
         if(prior)prior.note=l.note.slice(0,600);else u.links.push({userId:l.userId,note:l.note.slice(0,600)});
       }
-      u.history=C.list(u.history);u.history.push({at:Date.now(),postId:p.id,commentId,note:String(m.event||'參與討論：'+p.title).slice(0,600)});
+      u.history=C.list(u.history);u.history.push({at:Date.now(),postId:p.id,commentId,note:clip(m.event||'參與討論：'+p.title,600)});
     }
   }
   function purgeUserHistory(postIds=[],commentIds=[]) {
@@ -370,7 +371,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     if(!replies.length||replies.some(x=>!x||!allowed.has(x.authorId)||(targetId&&x.authorId!==targetId)||typeof x.content!=='string'||!x.content.trim()))throw new Error('AI 留言格式或作者不正確，未寫入本批留言。');
     if(stopped||!state.posts.some(x=>x.id===p.id))return;
     const participants=new Set([p.authorId,...chain.map(x=>x.authorId),...replies.map(x=>x.authorId)]);
-    for(const r of replies){if(user(r.authorId).shortReplies){r.content=[...((r.content.match(/[^。！？!?]+[。！？!?]?/g)||[r.content]).slice(0,2).join(''))].slice(0,80).join('');}const item={id:C.id(),postId:p.id,parentId,authorId:r.authorId,authorSnapshot:authorSnapshot(user(r.authorId),r.displaySuffix),content:r.content,createdAt:Date.now()};simulateLikes(item,p);state.comments.push(item);const u=user(r.authorId);u.history=C.list(u.history);u.history.push({at:item.createdAt,postId:p.id,commentId:item.id,partnerId:targetId||chain.at(-1)?.authorId||p.authorId,note:'回覆：'+r.content.slice(0,180)});}
+    for(const r of replies){if(user(r.authorId).shortReplies){r.content=clip((r.content.match(/[^。！？!?]+[。！？!?]?/g)||[r.content]).slice(0,2).join(''),80);}const item={id:C.id(),postId:p.id,parentId,authorId:r.authorId,authorSnapshot:authorSnapshot(user(r.authorId),r.displaySuffix),content:r.content,createdAt:Date.now()};simulateLikes(item,p);state.comments.push(item);const u=user(r.authorId);u.history=C.list(u.history);u.history.push({at:item.createdAt,postId:p.id,commentId:item.id,partnerId:targetId||chain.at(-1)?.authorId||p.authorId,note:'回覆：'+clip(r.content,180)});}
     applyMemory(raw,participants,p);save();refreshLive();
   }
   function likelyReplyTarget(p,parentId=null) {
@@ -390,12 +391,12 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       const boardId=source.post?.boardId||activeBoardId();
       const lore=context(boardId,C.list(u.charIds)),persona=candidates(lore,id).find(x=>x.id===id);
       if(roll<.28||!boardId){
-        const raw=await callAI({task:'這位虛擬同好剛和使用者互動完，受觸動後發布一則公開小廢推。可以是感想、碎念、抱怨、追更喊話或突然想更文的心情。100 字內，不要透露私訊隱私，不要替使用者說話。',lore,users:[persona],source:{kind:source.kind,postTitle:source.post?.title||'',message:String(source.text||'').slice(0,500),reply:String(source.reply||'').slice(0,500)},recentUpdates:C.list(u.updates).slice(-3).map(x=>x.content),schema:{update:{content:'100字內的小廢推正文'}}},SYSTEM);
+        const raw=await callAI({task:'這位虛擬同好剛和使用者互動完，受觸動後發布一則公開小廢推。可以是感想、碎念、抱怨、追更喊話或突然想更文的心情。100 字內，不要透露私訊隱私，不要替使用者說話。',lore,users:[persona],source:{kind:source.kind,postTitle:source.post?.title||'',message:clip(source.text,500),reply:clip(source.reply,500)},recentUpdates:C.list(u.updates).slice(-3).map(x=>x.content),schema:{update:{content:'100字內的小廢推正文'}}},SYSTEM);
         const content=String(raw.update?.content||raw.content||raw.text||'').trim();if(!content||stopped)return;
         u.updates=C.list(u.updates);u.updates.push({id:C.id(),content:[...content].slice(0,100).join(''),createdAt:Date.now()});save();refreshLive();return;
       }
       const g=generationFor(boardId),profile=g.creationProfile?creationProfile(g.creationProfile):undefined;
-      const raw=await callAI({task:'這位虛擬同好剛和使用者互動完，受到啟發後額外發一篇公開論壇貼文。內容可以是感想、抱怨、追更碎念、同人腦洞或想繼續更文的宣言；必須符合自己的 forumRole 與目前世界觀。',lore,users:[persona],source:{kind:source.kind,postTitle:source.post?.title||'',postContent:String(source.post?.content||'').slice(0,1200),message:String(source.text||'').slice(0,500),reply:String(source.reply||'').slice(0,500)},recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'這位虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'貼文標題',content:'公開貼文正文',type:'閒聊、感想、抱怨或創作',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'本次受互動啟發發布貼文'}]}},SYSTEM,profile);
+      const raw=await callAI({task:'這位虛擬同好剛和使用者互動完，受到啟發後額外發一篇公開論壇貼文。內容可以是感想、抱怨、追更碎念、同人腦洞或想繼續更文的宣言；必須符合自己的 forumRole 與目前世界觀。',lore,users:[persona],source:{kind:source.kind,postTitle:source.post?.title||'',postContent:clip(source.post?.content,1200),message:clip(source.text,500),reply:clip(source.reply,500)},recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'這位虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'貼文標題',content:'公開貼文正文',type:'閒聊、感想、抱怨或創作',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'本次受互動啟發發布貼文'}]}},SYSTEM,profile);
       const r=raw.post;if(!r||r.authorId!==id||typeof r.title!=='string'||!r.title.trim()||typeof r.content!=='string'||!r.content.trim()||stopped)return;
       const p={id:C.id(),authorId:id,authorSnapshot:authorSnapshot(u,r.displaySuffix),boardId,title:r.title,content:r.content,tags:C.tags(r.tags),charIds:C.list(r.charIds).filter(x=>lore.selectedIds.includes(x)),type:String(r.type||'閒聊'),kind:'post',fan:true,canon:false,starred:false,createdAt:Date.now()};
       simulateLikes(p,p);state.posts.push(p);u.history=C.list(u.history);u.history.push({at:p.createdAt,postId:p.id,note:'受互動啟發發表 '+p.type+'：'+p.title});applyMemory(raw,new Set([id]),p);save();refreshLive();
@@ -630,7 +631,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     }
     if(a==='save-user'){
       const u=user(editingUser);if(!val('ff-user-name').trim())throw new Error('請填寫暱稱。');
-      Object.assign(u,{name:val('ff-user-name').trim(),abstractStyle:!u.owned&&val('ff-user-style')==='abstract',handle:uniqueHandle(val('ff-user-handle'),u.id),signature:val('ff-user-signature').trim().slice(0,160),owned:val('ff-user-kind')!=='virtual',official:val('ff-user-kind')==='official',gender:val('ff-user-gender'),avatar:safeImage(val('ff-user-avatar')),color:val('ff-user-color'),color2:val('ff-user-color2'),role:val('ff-user-role'),supports:val('ff-user-supports'),charIds:picks('ff-user-chars'),personality:val('ff-user-personality'),memory:val('ff-user-memory')});if(!u.owned){u.forumIds=C.tags([...C.list(u.forumIds),activeBoardId()]);u.forumRoles={...u.forumRoles,[activeBoardId()]:val('ff-user-forum-role').trim()||u.role||'世界居民'};}save();note('用戶設定已保存。');return render();
+      Object.assign(u,{name:val('ff-user-name').trim(),abstractStyle:!u.owned&&val('ff-user-style')==='abstract',handle:uniqueHandle(val('ff-user-handle'),u.id),signature:clip(val('ff-user-signature').trim(),160),owned:val('ff-user-kind')!=='virtual',official:val('ff-user-kind')==='official',gender:val('ff-user-gender'),avatar:safeImage(val('ff-user-avatar')),color:val('ff-user-color'),color2:val('ff-user-color2'),role:val('ff-user-role'),supports:val('ff-user-supports'),charIds:picks('ff-user-chars'),personality:val('ff-user-personality'),memory:val('ff-user-memory')});if(!u.owned){u.forumIds=C.tags([...C.list(u.forumIds),activeBoardId()]);u.forumRoles={...u.forumRoles,[activeBoardId()]:val('ff-user-forum-role').trim()||u.role||'世界居民'};}save();note('用戶設定已保存。');return render();
     }
     if(a==='generate-user-style'){
       const u=state.users.find(x=>x.id===editingUser);if(!u)throw new Error('請選擇一位虛擬同好。');
@@ -704,7 +705,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     // A cross-tab lock prevents duplicate automatic batches on the same origin.
     if(navigator.locks)await navigator.locks.request('oc-forum-auto',{ifAvailable:true},async lock=>{if(lock)await run();});else await run();
   }
-  const chatUI=ForumChat.create({state:()=>state,portrait:u=>avatar(u).replace(/^<button[^>]*data-initial=/,'<span data-initial=').replace('class="ff-avatar ','class="fc-avatar ff-avatar ').replace('</button>','</span>'),save,render,go,job,ai:callAI,compact,characters:()=>characters,view:()=>view,busy:()=>busy,stopped:()=>stopped,stop:()=>action('stop'),persona:id=>{const u=state.users.find(u=>u.id===id);return u?{id:u.id,name:u.name,handle:u.handle,role:u.role,personality:u.personality,supports:u.supports,memory:String(u.memory||'').slice(0,360),characters:context('',C.list(u.charIds)).characters}:null;}});
+  const chatUI=ForumChat.create({state:()=>state,portrait:u=>avatar(u).replace(/^<button[^>]*data-initial=/,'<span data-initial=').replace('class="ff-avatar ','class="fc-avatar ff-avatar ').replace('</button>','</span>'),save,render,go,job,ai:callAI,compact,characters:()=>characters,view:()=>view,busy:()=>busy,stopped:()=>stopped,stop:()=>action('stop'),persona:id=>{const u=state.users.find(u=>u.id===id);return u?{id:u.id,name:u.name,handle:u.handle,role:u.role,personality:u.personality,supports:u.supports,memory:clip(u.memory,360),characters:context('',C.list(u.charIds)).characters}:null;}});
   document.addEventListener('DOMContentLoaded',()=>{
     try {
       const stored=localStorage.getItem(KEY);state=stored?C.validate(JSON.parse(stored)):C.initial();
