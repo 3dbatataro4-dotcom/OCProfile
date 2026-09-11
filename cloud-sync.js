@@ -26,9 +26,23 @@
     if(auth){if(!session?.access_token)throw new Error('請先登入雲端帳號。');if(session.expires_at<Date.now()/1000+60){const renewed=await request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token},false);keepSession(renewed);}}
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
     try{
-      const response=await fetch(URL+path,{method:body?'POST':'GET',headers:{apikey:KEY,'Content-Type':'application/json',...(auth?{Authorization:'Bearer '+session.access_token}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:controller.signal});
-      const result=response.status===204?{}:await response.json();
-      if(!response.ok){const reason=result.message||result.error_description||result.msg||result.error||'連線失敗';if(String(reason).includes('SYNC_CONFLICT'))throw new Error('雲端已被另一台裝置更新，請重新刷新檢查。');if(['PGRST205','PGRST202','42P01'].includes(result.code))throw new Error('雲端資料表尚未建立。請先在 Supabase SQL Editor 執行 supabase/setup.sql。');throw new Error(reason);}
+      const hasBody=body!==undefined&&body!==null,serialized=hasBody?JSON.stringify(body):'';
+      if(hasBody&&!serialized)throw new Error('無法建立雲端同步內容。');
+      // Parsing locally catches damaged serialization before anything is sent.
+      if(hasBody)JSON.parse(serialized);
+      const send=async asBlob=>{
+        const response=await fetch(URL+path,{method:hasBody?'POST':'GET',headers:{apikey:KEY,'Content-Type':'application/json;charset=UTF-8','Accept':'application/json',...(auth?{Authorization:'Bearer '+session.access_token}:{})},...(hasBody?{body:asBlob?new Blob([serialized],{type:'application/json;charset=UTF-8'}):serialized}:{}),signal:controller.signal});
+        const raw=response.status===204?'':await response.text();
+        let result={};
+        if(raw)try{result=JSON.parse(raw);}catch{throw new Error(`Supabase 回傳了無法解析的內容（HTTP ${response.status}）。`);}
+        return {response,result};
+      };
+      let {response,result}=await send(false);
+      // PGRST102 means PostgREST could not see a valid JSON request body. A few
+      // mobile WebViews mishandle a large string body; Blob uses a separate and
+      // reliable upload path. PGRST102 is safe to retry because the RPC did not run.
+      if(!response.ok&&result.code==='PGRST102'&&hasBody)({response,result}=await send(true));
+      if(!response.ok){const reason=result.message||result.error_description||result.msg||result.error||'連線失敗';if(String(reason).includes('SYNC_CONFLICT'))throw new Error('雲端已被另一台裝置更新，請重新刷新檢查。');if(['PGRST205','PGRST202','42P01'].includes(result.code))throw new Error('雲端資料表尚未建立。請先在 Supabase SQL Editor 執行 supabase/setup.sql。');if(result.code==='PGRST102')throw new Error(`手機未能完整送出同步內容（${new Blob([serialized]).size} bytes）。請重新開啟網站後再試；若仍失敗，請改用論壇 JSON 備份搬移資料。`);throw new Error(reason);}
       return result;
     }finally{clearTimeout(timer);}
   }
