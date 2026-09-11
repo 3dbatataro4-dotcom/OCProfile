@@ -72,7 +72,7 @@ let visualNovelFontSize = 1.05;
 const editorModalSnapshots = { documentModal:null, visualNovelEditorModal:null };
 
 // 初始化
-document.addEventListener("DOMContentLoaded", () => {
+function bootApp() {
   loadStateFromLocalStorage();
   setupEventListeners();
   syncGlobalTags();
@@ -82,7 +82,13 @@ document.addEventListener("DOMContentLoaded", () => {
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     navigator.serviceWorker.register("./service-worker.js").catch(error => console.warn("Service Worker 註冊失敗：", error));
   }
-});
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootApp);
+} else {
+  bootApp();
+}
 
 async function toggleAppFullscreen() {
   try {
@@ -119,6 +125,15 @@ function loadStateFromLocalStorage() {
       if (!Array.isArray(characters) || characters.length === 0) characters = [...INITIAL_CHARACTERS];
     } catch (e) { characters = [...INITIAL_CHARACTERS]; }
   } else { characters = [...INITIAL_CHARACTERS]; }
+
+  // Ensure relationship migration: legacy relationships default to isMainline: true
+  characters.forEach(c => {
+    if (Array.isArray(c.relationships)) {
+      c.relationships.forEach(r => {
+        if (r.isMainline === undefined) r.isMainline = true;
+      });
+    }
+  });
 
   const savedParos = localStorage.getItem("oc_paros");
   if (savedParos) {
@@ -212,7 +227,27 @@ function saveStateToLocalStorage() {
 }
 
 function resetDefaultCharacters() {
-  if (confirm("確定要恢復預設角色與設定資料嗎？")) {
+  const msg = "確定要恢復全部預設資料嗎？\n\n此操作將會重置所有【角色人設卡、PARO 平行世界、陣營、CP 關係、同人文檔與獨立論壇】至初始預設狀態！\n\n（註：重置前會自動建立本機快照，且不會清除您的 Supabase 登入、雲端備份或 API 金鑰。）";
+  if (confirm(msg)) {
+    // 1. Create pre-reset local backup snapshot
+    try {
+      const backupData = {
+        timestamp: Date.now(),
+        characters: characters,
+        paros: paros,
+        factions: factions,
+        rankings: rankings,
+        cps: cps,
+        books: books,
+        documents: documents,
+        forum: window.OCForum?.cloudSnapshot ? window.OCForum.cloudSnapshot().data : null
+      };
+      localStorage.setItem(`oc_snapshot_before_reset_${Date.now()}`, JSON.stringify(backupData));
+    } catch (e) {
+      console.warn("建立重置前快照失敗：", e);
+    }
+
+    // 2. Reset workshop data
     characters = [...INITIAL_CHARACTERS];
     paros = [...PRESET_PAROS];
     factions = [...PRESET_FACTIONS];
@@ -223,8 +258,18 @@ function resetDefaultCharacters() {
     collapsedBooks = {};
     saveStateToLocalStorage();
     syncGlobalTags();
+
+    // 3. Reset forum data using public OCForum.resetToInitial()
+    if (window.OCForum && typeof window.OCForum.resetToInitial === 'function') {
+      try {
+        window.OCForum.resetToInitial();
+      } catch (err) {
+        console.warn("論壇重置發生異常：", err);
+      }
+    }
+
     renderAllViews();
-    alert("已成功恢復所有預設資料！");
+    alert("已成功恢復所有預設資料！\n\n本機重置前快照已安全保存。若需要取回重置前的內容，您隨時可按『從雲端完整復原』或由 JSON 備份檔恢復。");
   }
 }
 
@@ -774,6 +819,10 @@ function collectCharCustomFields() {
 }
 
 function openCharacterModal(charId = null) {
+  if (!charId) {
+    openNewCharacterWizard();
+    return;
+  }
   const modal = document.getElementById("characterModal");
   const form = document.getElementById("characterForm");
   form.reset();
@@ -782,46 +831,290 @@ function openCharacterModal(charId = null) {
   const fieldsContainer = document.getElementById("charCustomFieldsContainer");
   if (fieldsContainer) fieldsContainer.replaceChildren();
 
-  if (charId) {
-    const char = characters.find(c => c.id === charId);
-    if (char) {
-      document.getElementById("charModalTitle").innerText = `編輯角色：${char.name}`;
-      document.getElementById("charId").value = char.id;
-      document.getElementById("charName").value = char.name || '';
-      document.getElementById("charEnglishName").value = char.englishName || '';
-      document.getElementById("charAvatarUrl").value = char.avatar || '';
-      updateModalAvatarPreview(char.avatar);
-      document.getElementById("charGender").value = char.gender || '';
-      document.getElementById("charHeight").value = char.height || '';
-      document.getElementById("charZodiac").value = char.zodiac || '';
-      document.getElementById("charOrientation").value = char.orientation || '';
-      document.getElementById("charOccupation").value = char.occupation || '';
-      document.getElementById("charFixedCp").value = char.fixedCp || '';
-      document.getElementById("charIsHidden").value = char.isHidden ? "true" : "false";
-      document.getElementById("charAppearance").value = char.appearance || '';
-      document.getElementById("charPersonality").value = char.personality || '';
-      document.getElementById("charExtraNotes").value = char.extraNotes || '';
-      document.getElementById("charTags").value = (char.tags || []).join(', ');
+  const char = characters.find(c => c.id === charId);
+  if (char) {
+    document.getElementById("charModalTitle").innerText = `編輯角色：${char.name}`;
+    document.getElementById("charId").value = char.id;
+    document.getElementById("charName").value = char.name || '';
+    document.getElementById("charEnglishName").value = char.englishName || '';
+    document.getElementById("charAvatarUrl").value = char.avatar || '';
+    updateModalAvatarPreview(char.avatar);
+    document.getElementById("charGender").value = char.gender || '';
+    document.getElementById("charHeight").value = char.height || '';
+    document.getElementById("charZodiac").value = char.zodiac || '';
+    document.getElementById("charOrientation").value = char.orientation || '';
+    document.getElementById("charOccupation").value = char.occupation || '';
+    document.getElementById("charFixedCp").value = char.fixedCp || '';
+    document.getElementById("charIsHidden").value = char.isHidden ? "true" : "false";
+    document.getElementById("charAppearance").value = char.appearance || '';
+    document.getElementById("charPersonality").value = char.personality || '';
+    document.getElementById("charExtraNotes").value = char.extraNotes || '';
+    document.getElementById("charTags").value = (char.tags || []).join(', ');
 
-      const theme = char.themeColor || { primary: "#d97706", secondary: "#78350f", mode: "gradient" };
-      document.getElementById("charPrimaryColor").value = theme.primary;
-      document.getElementById("charSecondaryColor").value = theme.secondary;
-      document.getElementById("charColorMode").value = theme.mode;
+    const theme = char.themeColor || { primary: "#d97706", secondary: "#78350f", mode: "gradient" };
+    document.getElementById("charPrimaryColor").value = theme.primary;
+    document.getElementById("charSecondaryColor").value = theme.secondary;
+    document.getElementById("charColorMode").value = theme.mode;
 
-      if (Array.isArray(char.customFields)) {
-        char.customFields.forEach(f => addCharCustomFieldRow(f.type || 'single', f.name, f.value));
-      }
+    if (Array.isArray(char.customFields)) {
+      char.customFields.forEach(f => addCharCustomFieldRow(f.type || 'single', f.name, f.value));
     }
-  } else {
-    document.getElementById("charModalTitle").innerText = "新建角色人設卡";
-    document.getElementById("charId").value = "";
-    const defaultAvatar = PRESET_AVATARS[0].url;
-    document.getElementById("charAvatarUrl").value = defaultAvatar;
-    updateModalAvatarPreview(defaultAvatar);
   }
 
   updateColorPreview();
   modal.classList.add("active");
+}
+
+/* ========== Batch 6: New Character Creation Wizard ========== */
+let wizardCurrentStep = 1;
+
+function openNewCharacterWizard() {
+  wizardCurrentStep = 1;
+  const defaultAvatar = PRESET_AVATARS[0].url;
+  document.getElementById("wizName").value = "";
+  document.getElementById("wizEnglishName").value = "";
+  document.getElementById("wizGender").value = "";
+  document.getElementById("wizHeight").value = "";
+  document.getElementById("wizZodiac").value = "";
+  document.getElementById("wizOrientation").value = "";
+  document.getElementById("wizAvatarUrl").value = defaultAvatar;
+  updateWizAvatarPreview(defaultAvatar);
+  
+  document.getElementById("wizPrimaryColor").value = "#d97706";
+  document.getElementById("wizSecondaryColor").value = "#78350f";
+  document.getElementById("wizColorMode").value = "gradient";
+  updateWizColorPreview();
+  
+  document.getElementById("wizOccupation").value = "";
+  document.getElementById("wizFixedCp").value = "";
+  document.getElementById("wizTags").value = "";
+  document.getElementById("wizAppearance").value = "";
+  document.getElementById("wizPersonality").value = "";
+  document.getElementById("wizExtraNotes").value = "";
+
+  renderWizTagChips();
+  updateWizardStepUI();
+  document.getElementById("newCharWizardModal").classList.add("active");
+}
+
+function updateWizardStepUI() {
+  document.querySelectorAll(".wizard-step-panel").forEach((panel, i) => {
+    panel.classList.toggle("active", i + 1 === wizardCurrentStep);
+  });
+  document.querySelectorAll(".wizard-step-dot").forEach((dot, i) => {
+    const stepNum = i + 1;
+    dot.classList.toggle("active", stepNum === wizardCurrentStep);
+    dot.classList.toggle("completed", stepNum < wizardCurrentStep);
+  });
+
+  const percent = (wizardCurrentStep / 5) * 100;
+  const fill = document.getElementById("wizardProgressFill");
+  if (fill) fill.style.width = percent + "%";
+
+  const prevBtn = document.getElementById("wizPrevBtn");
+  const nextBtn = document.getElementById("wizNextBtn");
+  const finishBtn = document.getElementById("wizFinishBtn");
+
+  if (prevBtn) prevBtn.style.display = wizardCurrentStep > 1 ? "inline-flex" : "none";
+  if (nextBtn) nextBtn.style.display = wizardCurrentStep < 5 ? "inline-flex" : "none";
+  if (finishBtn) finishBtn.style.display = wizardCurrentStep === 5 ? "inline-flex" : "none";
+
+  if (wizardCurrentStep === 5) renderWizFinalCardPreview();
+}
+
+function wizStep(delta) {
+  if (delta === 1) {
+    if (wizardCurrentStep === 1) {
+      const name = document.getElementById("wizName").value.trim();
+      if (!name) {
+        alert("請輸入角色姓名！");
+        document.getElementById("wizName").focus();
+        return;
+      }
+    }
+  }
+  wizardCurrentStep = Math.max(1, Math.min(5, wizardCurrentStep + delta));
+  updateWizardStepUI();
+}
+
+function updateWizAvatarPreview(url) {
+  const img = document.getElementById("wizAvatarPreview");
+  if (img) img.src = url || PRESET_AVATARS[0].url;
+}
+
+function handleWizAvatarUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result;
+    document.getElementById("wizAvatarUrl").value = dataUrl;
+    updateWizAvatarPreview(dataUrl);
+  };
+  reader.readAsDataURL(file);
+}
+
+function openWizGalleryModal() {
+  const originalSelect = selectAvatarFromGallery;
+  selectAvatarFromGallery = (url) => {
+    document.getElementById("wizAvatarUrl").value = url;
+    updateWizAvatarPreview(url);
+    closeModal("avatarGalleryModal");
+    selectAvatarFromGallery = originalSelect;
+  };
+  openAvatarGalleryModal();
+}
+
+function renderWizTagChips() {
+  const container = document.getElementById("wizExistingTagChips");
+  if (!container) return;
+  const chipNames = [...new Set([...(paros || []).map(p => p.name), ...(factions || []).map(f => f.name)])].filter(Boolean);
+  if (!chipNames.length) {
+    container.innerHTML = `<span style="font-size:11px; color:var(--text-muted);">尚無現有世界觀或陣營</span>`;
+    return;
+  }
+  const currentTags = (document.getElementById("wizTags")?.value || '').split(',').map(x => x.trim()).filter(Boolean);
+  container.innerHTML = chipNames.map(name => {
+    const selected = currentTags.includes(name);
+    return `<button type="button" class="btn btn-xs ${selected ? 'btn-primary' : 'btn-outline'}" onclick="toggleWizTagChip('${escapeHtml(name)}')" style="border-radius:12px; font-size:11px; padding:2px 8px;">${selected ? '✓ ' : '+ '}${escapeHtml(name)}</button>`;
+  }).join('');
+}
+
+function toggleWizTagChip(name) {
+  const input = document.getElementById("wizTags");
+  if (!input) return;
+  let currentTags = input.value.split(',').map(x => x.trim()).filter(Boolean);
+  if (currentTags.includes(name)) {
+    currentTags = currentTags.filter(x => x !== name);
+  } else {
+    currentTags.push(name);
+  }
+  input.value = currentTags.join(', ');
+  renderWizTagChips();
+}
+
+function openWizAvatarChoiceModal() {
+  document.getElementById("wizAvatarChoiceModal").classList.add("active");
+}
+
+function applyWizAvatarUrlInput(url) {
+  if (!url || !url.trim()) return;
+  const cleanUrl = url.trim();
+  document.getElementById("wizAvatarUrl").value = cleanUrl;
+  updateWizAvatarPreview(cleanUrl);
+}
+
+function updateWizColorPreview() {
+  const primary = document.getElementById("wizPrimaryColor")?.value || '#d97706';
+  const secondary = document.getElementById("wizSecondaryColor")?.value || '#78350f';
+  const mode = document.getElementById("wizColorMode")?.value || 'gradient';
+  const bar = document.getElementById("wizColorPreviewBar");
+  const ring = document.getElementById("wizAvatarRingBox");
+
+  const bgStyle = mode === 'gradient' ? `linear-gradient(135deg, ${primary}, ${secondary})` : primary;
+
+  if (bar) {
+    bar.style.background = bgStyle;
+    bar.innerText = mode === 'gradient' ? `雙色漸層 (主色: ${primary} / 輔色: ${secondary})` : `單色預覽: ${primary}`;
+  }
+
+  if (ring) {
+    ring.style.border = `3px solid ${primary}`;
+    ring.style.boxShadow = `0 0 16px ${primary}80, 0 4px 12px rgba(0,0,0,0.4)`;
+  }
+}
+
+function renderWizFinalCardPreview() {
+  const container = document.getElementById("wizFinalCardPreview");
+  if (!container) return;
+
+  const name = document.getElementById("wizName").value.trim() || "未命名角色";
+  const englishName = document.getElementById("wizEnglishName").value.trim();
+  const avatar = document.getElementById("wizAvatarUrl").value.trim() || PRESET_AVATARS[0].url;
+  const primary = document.getElementById("wizPrimaryColor").value;
+  const secondary = document.getElementById("wizSecondaryColor").value;
+  const mode = document.getElementById("wizColorMode").value;
+  const occupation = document.getElementById("wizOccupation").value.trim() || "角色";
+  const gender = document.getElementById("wizGender").value.trim();
+  const height = document.getElementById("wizHeight").value.trim();
+  const zodiac = document.getElementById("wizZodiac").value.trim();
+  const orientation = document.getElementById("wizOrientation").value.trim();
+  const tagsStr = document.getElementById("wizTags").value.trim();
+  const tagsList = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : ["原創角色"];
+  const appearance = document.getElementById("wizAppearance").value.trim();
+  const personality = document.getElementById("wizPersonality").value.trim();
+
+  const bgStyle = mode === 'gradient' ? `linear-gradient(135deg, ${primary}, ${secondary})` : primary;
+
+  container.innerHTML = `
+    <div class="char-card" style="border-top: 4px solid ${primary}; max-width: 320px; margin: 0 auto; background: var(--bg-card, #ffffff); color: var(--text-main, #292524); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
+      <div style="height: 60px; background: ${bgStyle};"></div>
+      <div style="padding: 0 1rem 1rem; position: relative; margin-top: -30px;">
+        <img src="${avatar}" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--bg-card, #ffffff); box-shadow: 0 4px 10px rgba(0,0,0,0.2);" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
+        <h4 style="margin: 0.5rem 0 0.2rem; font-size: 1.1rem; color:var(--text-main, #292524);">${escapeHtml(name)} <small style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(englishName)}</small></h4>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">${escapeHtml(occupation)} ｜ ${[gender, height, zodiac, orientation ? '偏好:' + orientation : ''].filter(Boolean).map(escapeHtml).join(' ｜ ')}</p>
+        <div style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.6rem;">
+          ${tagsList.map(t => `<span class="tag-badge" style="background:color-mix(in srgb, ${primary} 20%, transparent); color:var(--text-main); font-size:11px; padding:2px 6px; border-radius:4px;"># ${escapeHtml(t)}</span>`).join('')}
+        </div>
+        ${appearance ? `<p style="font-size: 0.8rem; color: var(--text-main); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">外貌：${escapeHtml(appearance)}</p>` : ''}
+        ${personality ? `<p style="font-size: 0.8rem; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">性格：${escapeHtml(personality)}</p>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function finishWizard() {
+  const name = document.getElementById("wizName").value.trim();
+  if (!name) {
+    alert("請輸入角色姓名！");
+    wizStep(1 - wizardCurrentStep);
+    return;
+  }
+
+  const charData = {
+    id: `char_${Date.now()}`,
+    name: name,
+    englishName: document.getElementById("wizEnglishName").value.trim(),
+    avatar: document.getElementById("wizAvatarUrl").value.trim() || PRESET_AVATARS[0].url,
+    gender: document.getElementById("wizGender").value.trim(),
+    height: document.getElementById("wizHeight").value.trim(),
+    zodiac: document.getElementById("wizZodiac").value.trim(),
+    orientation: document.getElementById("wizOrientation").value.trim(),
+    occupation: document.getElementById("wizOccupation").value.trim(),
+    fixedCp: document.getElementById("wizFixedCp").value.trim(),
+    isHidden: false,
+    appearance: document.getElementById("wizAppearance").value.trim(),
+    personality: document.getElementById("wizPersonality").value.trim(),
+    extraNotes: document.getElementById("wizExtraNotes").value.trim(),
+    tags: document.getElementById("wizTags").value.split(',').map(t => t.trim()).filter(Boolean),
+    customFields: [],
+    relationships: [],
+    paroValues: {},
+    themeColor: {
+      primary: document.getElementById("wizPrimaryColor").value,
+      secondary: document.getElementById("wizSecondaryColor").value,
+      mode: document.getElementById("wizColorMode").value
+    }
+  };
+
+  characters.push(charData);
+  saveStateToLocalStorage();
+  syncGlobalTags();
+  renderAllViews();
+  closeModal("newCharWizardModal");
+  switchTab("tab-cards");
+  alert(`人設卡「${name}」建立完成！✨`);
+}
+
+function cancelWizard() {
+  const name = document.getElementById("wizName").value.trim();
+  const appearance = document.getElementById("wizAppearance").value.trim();
+  const personality = document.getElementById("wizPersonality").value.trim();
+
+  if (name || appearance || personality) {
+    if (!confirm("確定要放棄新建角色？已輸入的內容將會遺失。")) return;
+  }
+  closeModal("newCharWizardModal");
 }
 
 function updateModalAvatarPreview(url) {
@@ -1054,7 +1347,8 @@ function renderCallNameMatrix() {
   const tbody = document.getElementById("callNameTableBody");
 
   tbody.innerHTML = targetChars.length ? targetChars.map(target => {
-    const relObj = (currentSubject.relationships || []).find(r => r.targetName === target.name) || { callName: "—", opinion: "（尚無記載）" };
+    const relObj = (currentSubject.relationships || []).find(r => r.targetName === target.name) || { callName: "—", opinion: "（尚無記載）", isMainline: true };
+    const isMain = relObj.isMainline !== false;
     return `
       <tr>
         <td>
@@ -1063,17 +1357,51 @@ function renderCallNameMatrix() {
             <strong>${target.name}</strong>
           </div>
         </td>
-        <td><span class="badge" style="background:var(--accent-gold);">${relObj.callName}</span></td>
+        <td><span class="badge" style="background:var(--accent-gold); color:#1c1815;">${relObj.callName}</span></td>
         <td>${relObj.opinion}</td>
+        <td>${isMain ? '' : '<span class="badge" style="background:#6b7280; color:#ffffff; font-size:11px; padding:2px 7px; border-radius:4px;">番外</span>'}</td>
         <td>
-          <button class="btn btn-xs btn-outline" onclick="openRelationshipModal('${currentSubject.id}', '${target.name}', '${relObj.callName !== '—' ? relObj.callName : ''}', '${relObj.opinion !== '（尚無記載）' ? relObj.opinion : ''}')">
+          <button class="btn btn-xs btn-outline" onclick="openRelationshipModal('${currentSubject.id}', '${target.name}', '${relObj.callName !== '—' ? relObj.callName : ''}', '${relObj.opinion !== '（尚無記載）' ? relObj.opinion : ''}', ${isMain})">
             <i class="fa-solid fa-pen"></i> 編輯
           </button>
           <button class="btn btn-xs btn-danger" onclick="removeCallNameTarget('${currentSubject.id}', '${target.name}')">&times;</button>
         </td>
       </tr>
     `;
-  }).join('') : `<tr><td colspan="4" style="color:var(--text-muted);">尚未添加稱呼目標。點擊「選擇要加入稱呼表的對象」新增對象！</td></tr>`;
+  }).join('') : `<tr><td colspan="5" style="color:var(--text-muted);">尚未添加稱呼目標。點擊「選擇要加入稱呼表的對象」新增對象！</td></tr>`;
+
+  // Render Mobile Pairwise Cards
+  const mobileContainer = document.getElementById("callNameMobileCards");
+  if (mobileContainer) {
+    mobileContainer.innerHTML = targetChars.length ? targetChars.map(target => {
+      const relA = (currentSubject.relationships || []).find(r => r.targetName === target.name) || { callName: "—", opinion: "（尚無記載）", isMainline: true };
+      const mainA = relA.isMainline !== false;
+
+      return `
+        <div class="rel-pair-card" style="margin-bottom:12px;">
+          <div class="rel-pair-header">
+            <div class="rel-pair-chars">
+              <img src="${target.avatar}" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
+              <div>
+                <strong style="font-size:1rem;">${target.name}</strong>
+                ${mainA ? '' : '<span class="badge" style="background:#6b7280; color:#ffffff; font-size:10px; margin-left:6px; padding:1px 6px; border-radius:4px;">番外</span>'}
+              </div>
+            </div>
+            <button class="btn btn-xs btn-outline" onclick="openRelationshipModal('${currentSubject.id}', '${target.name}', '${relA.callName !== '—' ? relA.callName : ''}', '${relA.opinion !== '（尚無記載）' ? relA.opinion : ''}', ${mainA})">
+              <i class="fa-solid fa-pen"></i> 編輯
+            </button>
+          </div>
+          <div class="rel-pair-body" style="font-size:0.88rem; line-height:1.6;">
+            <div class="rel-muted-label" style="margin-bottom:4px; font-size:0.8rem;">${currentSubject.name} 對 ${target.name} 的稱呼與印象：</div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+              <span class="badge" style="background:var(--accent-gold, #d9ae70); color:#1c1815; font-weight:600;">${relA.callName}</span>
+              <span class="rel-opinion-text">${relA.opinion}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('') : `<div class="empty-state" style="color:var(--text-muted);"><p>尚未添加稱呼目標。</p></div>`;
+  }
 }
 
 function openAddCallNameTargetModal() {
@@ -1119,11 +1447,13 @@ function removeCallNameTarget(sourceId, targetName) {
   }
 }
 
-function openRelationshipModal(sourceCharId, targetName, callName, opinion) {
+function openRelationshipModal(sourceCharId, targetName, callName, opinion, isMainline) {
   document.getElementById("relSourceCharId").value = sourceCharId;
   document.getElementById("relTargetCharName").value = targetName;
   document.getElementById("relCallName").value = callName || "";
   document.getElementById("relOpinion").value = opinion || "";
+  const cb = document.getElementById("relIsMainline");
+  if (cb) cb.checked = (isMainline !== false);
   document.getElementById("relationshipModal").classList.add("active");
 }
 
@@ -1132,15 +1462,16 @@ function saveRelationshipForm() {
   const targetName = document.getElementById("relTargetCharName").value;
   const callName = document.getElementById("relCallName").value.trim();
   const opinion = document.getElementById("relOpinion").value.trim();
+  const isMainline = document.getElementById("relIsMainline") ? document.getElementById("relIsMainline").checked : true;
 
   const sourceChar = characters.find(c => c.id === sourceId);
   if (sourceChar) {
     if (!sourceChar.relationships) sourceChar.relationships = [];
     const relIndex = sourceChar.relationships.findIndex(r => r.targetName === targetName);
     if (relIndex !== -1) {
-      sourceChar.relationships[relIndex] = { targetName, callName, opinion };
+      sourceChar.relationships[relIndex] = { targetName, callName, opinion, isMainline };
     } else {
-      sourceChar.relationships.push({ targetName, callName, opinion });
+      sourceChar.relationships.push({ targetName, callName, opinion, isMainline });
     }
     saveStateToLocalStorage();
     renderCallNameMatrix();
@@ -1491,7 +1822,7 @@ function renderRankingModule() {
 
         return `
           ${cutoff ? `<div class="cutoff-divider"><i class="fa-solid fa-bookmark"></i> 切點等級：${cutoff.label}（從 ${char.name} 開始）</div>` : ''}
-          <div class="ranking-item-row">
+          <div class="ranking-item-row" draggable="true" ondragstart="handleRankingDragStart(event, ${idx})" ondragover="handleRankingDragOver(event, ${idx})" ondrop="handleRankingDrop(event, ${idx}, '${currentRanking.id}')" ondragend="handleRankingDragEnd(event)" style="cursor:grab;">
             <span style="font-weight:700; color:var(--accent-gold); width:24px;">#${idx + 1}</span>
             <img src="${char.avatar}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
             <strong style="flex:1;">${char.name}</strong>
@@ -1518,6 +1849,39 @@ function renderRankingModule() {
       }).join('')}
     </div>
   `;
+}
+
+let draggedRankingIdx = null;
+
+function handleRankingDragStart(e, idx) {
+  draggedRankingIdx = idx;
+  e.dataTransfer.effectAllowed = "move";
+  e.currentTarget.classList.add("dragging");
+}
+
+function handleRankingDragOver(e, idx) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+}
+
+function handleRankingDrop(e, targetIdx, rankId) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (draggedRankingIdx === null || draggedRankingIdx === targetIdx) return;
+  const rank = rankings.find(r => r.id === rankId);
+  if (!rank || !rank.items) return;
+  
+  const [movedItem] = rank.items.splice(draggedRankingIdx, 1);
+  rank.items.splice(targetIdx, 0, movedItem);
+  
+  draggedRankingIdx = null;
+  saveStateToLocalStorage();
+  renderRankingModule();
+}
+
+function handleRankingDragEnd(e) {
+  draggedRankingIdx = null;
+  if (e.currentTarget) e.currentTarget.classList.remove("dragging");
 }
 
 function switchRankingSubject(id) { currentRankingSubjectId = id; renderRankingModule(); }
@@ -3900,12 +4264,22 @@ async function generateExportText() {
       }
 
       if (incRel && (c.relationships || []).length) {
-        text += `✦ 社交關係視角 (僅導出所選角色):\n`;
-        c.relationships.forEach(rel => {
-          if (selectedCharNames.includes(rel.targetName)) {
+        const incExtraRel = document.getElementById("expIncExtraRelationships")?.checked || false;
+        const mainlineRels = (c.relationships || []).filter(rel => rel.isMainline !== false && selectedCharNames.includes(rel.targetName));
+        const extraRels = (c.relationships || []).filter(rel => rel.isMainline === false && selectedCharNames.includes(rel.targetName));
+
+        if (mainlineRels.length) {
+          text += `✦ 社交關係視角 (主線):\n`;
+          mainlineRels.forEach(rel => {
             text += `  * 對 ${rel.targetName} 稱呼『${rel.callName}』: ${rel.opinion}\n`;
-          }
-        });
+          });
+        }
+        if (incExtraRel && extraRels.length) {
+          text += `✦ 社交關係視角 (番外／PARO 關係):\n`;
+          extraRels.forEach(rel => {
+            text += `  * 對 ${rel.targetName} 稱呼『${rel.callName}』: ${rel.opinion}\n`;
+          });
+        }
       }
       text += `\n`;
     });
@@ -4109,7 +4483,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, deepseekSettings };
+  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -4154,7 +4528,11 @@ function handleImportJson(event) {
       if (data.documents) documents = data.documents;
       if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
       if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
+      if (data.perspectiveTargets && typeof data.perspectiveTargets === 'object') perspectiveTargets = data.perspectiveTargets;
+      if (data.currentTheme === 'light' || data.currentTheme === 'dark') { currentTheme = data.currentTheme; document.documentElement.setAttribute('data-theme', currentTheme); }
+      if (data.currentRelViewMode) currentRelViewMode = data.currentRelViewMode;
       if (data.deepseekSettings) deepseekSettings = { ...deepseekSettings, ...data.deepseekSettings };
+      if (data.forum) window.OCForum?.importState?.(data.forum);
       saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
       closeModal("importOptionsModal");
       alert("JSON 資料匯入成功！");
@@ -4308,6 +4686,18 @@ function renderAdvancedImportConflicts(fileName, importedCharacters, importedFac
     `${fileName}：將自動合併缺少的資料（含 ${missingChars} 張人物卡、${missingFactions} 個陣營及其餘 ${incomingTotal} 筆設定）；有 ${pendingImportConflicts.length} 筆同名差異需要確認。`;
   const container = document.getElementById("advancedImportConflicts");
   container.replaceChildren();
+
+  const stickyBar = document.createElement("div");
+  stickyBar.className = "import-sticky-bar";
+  stickyBar.innerHTML = `
+    <div><strong>待確認差異：</strong>${pendingImportConflicts.length} 筆</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline" onclick="cancelAdvancedImport()">取消</button>
+      <button class="btn btn-primary" onclick="applyAdvancedImport()"><i class="fa-solid fa-check"></i> 套用挑選結果</button>
+    </div>
+  `;
+  container.appendChild(stickyBar);
+
   if (!pendingImportConflicts.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state compact";
@@ -4315,6 +4705,17 @@ function renderAdvancedImportConflicts(fileName, importedCharacters, importedFac
     container.appendChild(empty);
     return;
   }
+
+  const detailsGroup = document.createElement("details");
+  detailsGroup.className = "import-group-details";
+  detailsGroup.open = false;
+  const summary = document.createElement("summary");
+  summary.innerHTML = `<strong>修改項／同名差異項（${pendingImportConflicts.length} 筆）</strong> <span>點擊展開比對選擇</span>`;
+  detailsGroup.appendChild(summary);
+
+  const groupBody = document.createElement("div");
+  groupBody.className = "import-group-body";
+
   pendingImportConflicts.forEach(conflict => {
     const differences = collectImportDifferences(conflict.current, conflict.imported);
     const card = document.createElement("section");
@@ -4352,8 +4753,10 @@ function renderAdvancedImportConflicts(fileName, importedCharacters, importedFac
       });
       option.append(radio, heading, preview); grid.appendChild(option);
     });
-    card.appendChild(grid); container.appendChild(card);
+    card.appendChild(grid); groupBody.appendChild(card);
   });
+  detailsGroup.appendChild(groupBody);
+  container.appendChild(detailsGroup);
 }
 
 function makeUniqueImportId(preferred, prefix, usedIds) {
@@ -4500,6 +4903,28 @@ function captureEditorModalSnapshot(modalId) {
 
 function isEditorModalDirty(modalId) {
   const snapshot = editorModalSnapshots[modalId];
+  if (modalId === "newCharWizardModal") {
+    const name = document.getElementById("wizName")?.value.trim() || "";
+    const appearance = document.getElementById("wizAppearance")?.value.trim() || "";
+    const personality = document.getElementById("wizPersonality")?.value.trim() || "";
+    const notes = document.getElementById("wizExtraNotes")?.value.trim() || "";
+    const occupation = document.getElementById("wizOccupation")?.value.trim() || "";
+    return !!(name || appearance || personality || notes || occupation);
+  } else if (modalId === "characterModal") {
+    const name = document.getElementById("charName")?.value.trim() || "";
+    const appearance = document.getElementById("charAppearance")?.value.trim() || "";
+    const personality = document.getElementById("charPersonality")?.value.trim() || "";
+    if (snapshot) {
+      const current = JSON.stringify({
+        name,
+        appearance,
+        personality,
+        notes: document.getElementById("charNotes")?.value.trim() || ""
+      });
+      return current !== snapshot;
+    }
+    return !!(name || appearance || personality);
+  }
   if (!snapshot) return false;
   if (modalId === "documentModal") {
     const checkedChars = Array.from(document.querySelectorAll("#docCharCheckboxes input:checked")).map(cb => cb.value).sort().join(",");
