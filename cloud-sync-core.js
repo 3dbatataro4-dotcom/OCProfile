@@ -4,6 +4,11 @@
   const mapFields=new Set(['collapsedBooks','perspectiveTargets']);
   const banned=new Set(['apikey','apikeys','key','authorization','accesstoken','refreshtoken','password','secret','servicekey','servicerole','profiles','activeprofile','deepseeksettings','generation','session','sessions']);
   const clone=x=>JSON.parse(JSON.stringify(x));
+  function postgresSafeText(value){
+    const text=String(value);let out='';
+    for(let i=0;i<text.length;i++){const code=text.charCodeAt(i);if(code===0){out+='�';continue;}if(code>=0xD800&&code<=0xDBFF){const next=text.charCodeAt(i+1);if(next>=0xDC00&&next<=0xDFFF){out+=text[i]+text[++i];}else out+='�';continue;}out+=code>=0xDC00&&code<=0xDFFF?'�':text[i];}
+    return out;
+  }
   function encodeUtf8Chunks(value,maxBytes=36864){
     const bytes=new TextEncoder().encode(String(value)),chunks=[];
     for(let offset=0;offset<bytes.length;offset+=maxBytes){const part=bytes.subarray(offset,Math.min(bytes.length,offset+maxBytes));let binary='';for(let i=0;i<part.length;i+=8192)binary+=String.fromCharCode(...part.subarray(i,Math.min(part.length,i+8192)));chunks.push(btoa(binary));}
@@ -11,8 +16,8 @@
   }
   function scrub(value){
     if(Array.isArray(value))return value.map(scrub);
-    if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([k])=>!banned.has(k.toLowerCase().replace(/[^a-z]/g,''))).map(([k,v])=>[k,scrub(v)]));
-    return value;
+    if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([k])=>!banned.has(k.toLowerCase().replace(/[^a-z]/g,''))).map(([k,v])=>[postgresSafeText(k),scrub(v)]));
+    return typeof value==='string'?postgresSafeText(value):value;
   }
   function stable(x){if(Array.isArray(x))return '['+x.map(stable).join(',')+']';if(x&&typeof x==='object')return '{'+Object.keys(x).sort().map(k=>JSON.stringify(k)+':'+stable(x[k])).join(',')+'}';return JSON.stringify(x);}
   const equal=(a,b)=>stable(a)===stable(b);
@@ -90,5 +95,5 @@
     }
     return validate(out);
   }
-  const api={collections,mapFields,scrub,stable,equal,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  const api={collections,mapFields,scrub,stable,equal,postgresSafeText,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
