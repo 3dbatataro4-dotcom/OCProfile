@@ -60,7 +60,7 @@
   }
   function merge(local,remote,changes,decisions){
     const out=clone(validate(local)),maps=Object.fromEntries(collections[local.scope].map(k=>[k,new Map()])),adopted=[];
-    for(const change of changes){const choice=decisions[change.key]||change.choice;if(choice==='copy'&&change.remote&&!mapFields.has(change.group))maps[change.group].set(change.id,globalThis.crypto.randomUUID());}
+    for(const change of changes){const choice=decisions[change.key]||change.choice;if(choice==='copy'&&change.remote&&!mapFields.has(change.group))maps[change.group].set(change.id,(typeof globalThis.crypto?.randomUUID==='function'?globalThis.crypto.randomUUID():'cs'+Date.now().toString(36)+Math.random().toString(36).slice(2,9)));}
     for(const change of changes){const choice=decisions[change.key]||change.choice;if(choice==='local')continue;
       const rows=out.data[change.group],index=rows.findIndex(r=>String(r.id)===change.id);
       if(choice==='remote'&&index>=0)rows.splice(index,1);
