@@ -48,3 +48,12 @@ test('large cloud payloads split into small UTF-8-safe chunks', () => {
   const restored = Buffer.concat(chunks.map(chunk => Buffer.from(chunk, 'base64'))).toString('utf8');
   assert.equal(restored, source);
 });
+
+test('cloud snapshots replace PostgreSQL-invalid Unicode without damaging emoji', () => {
+  const data = ForumCore.initial(), board = data.boards[0];
+  data.users.push({id:'unicode-user',name:'完整🌟表情',owned:false,charIds:[],forumIds:[board.id],forumRoles:{[board.id]:'學生'},history:[{note:'截斷字元\uD83E'}],links:[]});
+  const cloud = CloudSyncCore.snapshot('forum', data);
+  assert.equal(cloud.data.users[0].name, '完整🌟表情');
+  assert.equal(cloud.data.users[0].history[0].note, '截斷字元�');
+  assert.doesNotMatch(JSON.stringify(cloud), /\\ud[89ab][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})/i);
+});
