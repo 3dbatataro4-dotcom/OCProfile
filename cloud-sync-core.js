@@ -1,9 +1,14 @@
 (function(root){
   'use strict';
-  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
+  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
   const mapFields=new Set(['collapsedBooks','perspectiveTargets']);
   const banned=new Set(['apikey','apikeys','key','authorization','accesstoken','refreshtoken','password','secret','servicekey','servicerole','profiles','activeprofile','deepseeksettings','generation','session','sessions']);
   const clone=x=>JSON.parse(JSON.stringify(x));
+  function encodeUtf8Chunks(value,maxBytes=36864){
+    const bytes=new TextEncoder().encode(String(value)),chunks=[];
+    for(let offset=0;offset<bytes.length;offset+=maxBytes){const part=bytes.subarray(offset,Math.min(bytes.length,offset+maxBytes));let binary='';for(let i=0;i<part.length;i+=8192)binary+=String.fromCharCode(...part.subarray(i,Math.min(part.length,i+8192)));chunks.push(btoa(binary));}
+    return chunks.length?chunks:[''];
+  }
   function scrub(value){
     if(Array.isArray(value))return value.map(scrub);
     if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).filter(([k])=>!banned.has(k.toLowerCase().replace(/[^a-z]/g,''))).map(([k,v])=>[k,scrub(v)]));
@@ -18,7 +23,7 @@
   }
   function validate(payload){
     if(!payload||payload.format!=='oc-cloud-save'||payload.version!==1||!collections[payload.scope]||!payload.data)throw new Error('雲端存檔格式不正確。');
-    if(payload.scope==='forum'){payload={...payload,data:{...payload.data}};for(const key of ['chatContacts','chats','chatMessages'])if(payload.data[key]===undefined)payload.data[key]=[];}
+    if(payload.scope==='forum'){payload={...payload,data:{...payload.data}};for(const key of ['chatContacts','chats','chatMessages','loreEntries'])if(payload.data[key]===undefined)payload.data[key]=[];}
     if(payload.scope==='forum'&&payload.data.favoriteFolders===undefined)payload={...payload,data:{...payload.data,favoriteFolders:[]}};
     if(payload.scope==='forum'&&payload.data.tagCatalog===undefined)payload={...payload,data:{...payload.data,tagCatalog:[]}};
     for(const k of collections[payload.scope]){if(!Array.isArray(payload.data[k]))throw new Error('雲端資料缺少 '+k);const ids=new Set();for(const r of payload.data[k]){if(!r||!['string','number'].includes(typeof r.id)||!String(r.id)||ids.has(String(r.id)))throw new Error(k+' 存在重複或無效 ID。');ids.add(String(r.id));}}
@@ -63,6 +68,8 @@
       if(['authorId','userId','partnerId','accountId'].includes(key))return identity(value);
       if(targets[key]&&value!==null&&typeof value!=='object')return remap(targets[key],value);
       if((key==='contactIds'||key==='mentionIds')&&Array.isArray(value))return value.map(id=>remap('chatContacts',id));
+      if(key==='forumIds'&&Array.isArray(value))return value.map(id=>remap('boards',id));
+      if(key==='forumRoles'&&value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([id,role])=>[remap('boards',id),role]));
       if(key==='likedBy'&&Array.isArray(value))return value.map(identity);
       if(key==='folderIds'&&Array.isArray(value))return value.map(id=>remap('favoriteFolders',id));
       if(key==='charIds'||key==='factionIds')return value.map(id=>remap(key==='charIds'?'characters':'factions',id));
@@ -83,5 +90,5 @@
     }
     return validate(out);
   }
-  const api={collections,mapFields,scrub,stable,equal,snapshot,validate,source,compare,plan,merge};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  const api={collections,mapFields,scrub,stable,equal,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
