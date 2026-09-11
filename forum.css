@@ -211,3 +211,29 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
 .ff-dm-msg small{display:block;margin-top:6px;color:var(--ff-muted);font-size:10px}
 .ff-dm-compose textarea{min-height:110px}
 @media(prefers-reduced-motion:reduce){#forum-root .ff-feed-card,.ff-comment,.ff-user-tile,.ff-dm-msg{animation:none}}
+
+/* World/PARO forum switcher, scoped management, and post pagination. */
+#forum-root .ff-forum-switch-label{display:grid;gap:2px;min-width:190px}
+#forum-root .ff-forum-switch-label>span{font:600 16px/1.2 Georgia,'Noto Serif TC',serif;letter-spacing:1px}
+#forum-root .ff-forum-switch-label select{width:min(260px,32vw);border:0;border-bottom:1px solid var(--ff-line);border-radius:0;background:transparent;color:var(--ff-text);font:500 13px/1.5 inherit;padding:3px 24px 3px 0;cursor:pointer}
+#forum-root .ff-forum-switch-label select:focus-visible{outline:2px solid var(--ff-accent);outline-offset:3px;border-radius:4px}
+#forum-root .ff-feed-pages{display:flex;align-items:center;justify-content:center;gap:12px;margin:18px 0;padding:10px;border-block:1px solid var(--ff-line)}
+#forum-root .ff-feed-pages>span{color:var(--ff-muted);font-size:12px;white-space:nowrap}
+#forum-root .ff-feed-pages .ff-btn{min-width:108px}
+#forum-root .ff-static-field{display:flex;align-items:center;min-height:44px;padding:9px 11px;border:1px solid var(--ff-line);border-radius:7px;background:color-mix(in srgb,var(--ff-accent) 5%,transparent);color:var(--ff-text)}
+#forum-root .ff-forum-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--ff-line)}
+#forum-root .ff-forum-row>span{min-width:0;display:grid;gap:3px}
+#forum-root .ff-forum-row small{color:var(--ff-muted);overflow-wrap:anywhere}
+#forum-root .ff-board-link.active{color:var(--ff-accent);background:color-mix(in srgb,var(--ff-accent) 7%,transparent)}
+#forum-root .ff-hero .ff-paper b{overflow-wrap:anywhere;letter-spacing:2px}
+@media(max-width:760px){
+  #forum-root .ff-brand-wrap{min-width:0;flex:1}
+  #forum-root .ff-forum-switch-label{min-width:0}
+  #forum-root .ff-forum-switch-label>span{font-size:14px}
+  #forum-root .ff-forum-switch-label select{width:min(190px,52vw);font-size:12px}
+  #forum-root .ff-feed-pages{gap:6px;justify-content:space-between}
+  #forum-root .ff-feed-pages .ff-btn{min-width:0;padding-inline:8px;font-size:11px}
+  #forum-root .ff-feed-pages>span{font-size:11px}
+  #forum-root .ff-forum-row{grid-template-columns:minmax(0,1fr) auto}
+  #forum-root .ff-forum-row>span{grid-column:1/-1}
+}
