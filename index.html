@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=20260912-button-motion">
-  <link rel="stylesheet" href="forum.css?v=20260912-multiforum">
-  <link rel="stylesheet" href="forum-chat.css?v=1">
-  <link rel="stylesheet" href="cloud-sync.css?v=4">
+  <link rel="stylesheet" href="style.css?v=19.1">
+  <link rel="stylesheet" href="forum.css?v=19.1">
+  <link rel="stylesheet" href="forum-chat.css?v=19.1">
+  <link rel="stylesheet" href="cloud-sync.css?v=19.1">
 </head>
 <body>
 
@@ -58,8 +58,8 @@
       </button>
 
       <!-- Reset Default Characters -->
-      <button class="btn btn-outline" onclick="resetDefaultCharacters()" title="恢復預設PDF角色">
-        <i class="fa-solid fa-rotate-left"></i> <span class="desktop-only">重置角色</span>
+      <button class="btn btn-outline" onclick="resetDefaultCharacters()" title="恢復全部預設資料">
+        <i class="fa-solid fa-rotate-left"></i> <span class="desktop-only">恢復全部預設資料</span>
       </button>
 
       <!-- Cloud Sync & Backup Buttons -->
@@ -208,13 +208,14 @@
           </button>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive rel-desktop-table">
           <table class="custom-table" id="callNameTable">
             <thead>
               <tr>
                 <th>目標角色</th>
                 <th>我的稱呼</th>
                 <th>我的關係 / 看法</th>
+                <th>關係類型</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -222,6 +223,9 @@
               <!-- Rendered by app.js -->
             </tbody>
           </table>
+        </div>
+        <div id="callNameMobileCards" class="rel-mobile-cards">
+          <!-- Rendered by app.js -->
         </div>
       </div>
 
@@ -410,6 +414,7 @@
             <label>3. 附加選項與單項選擇：</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncThemeColor" checked> 包含人物主題色</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncRelationships" checked> 包含人物關係與稱呼表</label>
+            <label class="checkbox-label"><input type="checkbox" id="expIncExtraRelationships"> 包含番外關係 (預設未勾選，獨立於主線外輸出)</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncCps" checked> 包含 CP 關係細節詞條</label>
             <label class="checkbox-label"><input type="checkbox" id="expIncFactions"> 一併導出所選人物所在的陣營／世界觀介紹</label>
           </div>
@@ -468,14 +473,10 @@
     <button onclick="switchTab('tab-factions')"><i class="fa-solid fa-sitemap"></i><br>陣營</button>
     <button onclick="openCharacterModal()"><i class="fa-solid fa-plus-circle" style="color:var(--accent-gold); font-size:1.4rem;"></i><br>新建</button>
     <button onclick="switchTab('tab-paros')"><i class="fa-solid fa-hat-wizard"></i><br>Paro</button>
-    <button id="mobileExportMenuButton" onclick="OCForum.toggleEntry()" aria-expanded="false" aria-controls="mobileExportSubmenu"><i class="fa-solid fa-file-export"></i><br>導出／論壇</button>
+    <button id="mobileExportMenuButton" onclick="switchTab('tab-export')"><i class="fa-solid fa-file-export"></i><br>導出</button>
   </div>
 
   <!-- Mobile Submenu Drawer for 卡庫 -->
-  <div class="mobile-submenu-drawer" id="mobileExportSubmenu" style="left:auto;right:10px">
-    <button onclick="switchTab('tab-export'); OCForum.toggleEntry(false)"><i class="fa-solid fa-file-export"></i> 資料輸出</button>
-    <button onclick="OCForum.open()"><i class="fa-solid fa-comments"></i> 虛擬同人論壇</button>
-  </div>
   <div class="mobile-submenu-drawer" id="mobileCardSubmenu">
     <button onclick="switchTab('tab-cards'); hideMobileCardSubmenu();"><i class="fa-solid fa-address-card"></i> 人物卡庫</button>
     <button onclick="switchTab('tab-cps'); hideMobileCardSubmenu();"><i class="fa-solid fa-heart"></i> CP 關係細節</button>
@@ -485,7 +486,196 @@
     <button onclick="switchTab('tab-documents'); hideMobileCardSubmenu();"><i class="fa-solid fa-book-bookmark"></i> 同人文檔書籍</button>
   </div>
 
-  <!-- ==================== MODALS ==================== -->
+  <!-- Modal 1.5: New Character Creation Wizard Modal -->
+  <!-- Modal: New Character Wizard -->
+  <div class="modal-backdrop" id="newCharWizardModal">
+    <div class="modal-box modal-lg wizard-modal">
+      <div class="wizard-header">
+        <div class="wizard-title-row">
+          <h3><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--accent-gold);"></i> 新建人設卡精靈</h3>
+          <button class="close-btn" onclick="cancelWizard()">&times;</button>
+        </div>
+        <div class="wizard-progress-bar">
+          <div class="wizard-progress-fill" id="wizardProgressFill" style="width: 20%;"></div>
+        </div>
+        <div class="wizard-steps-indicator" id="wizardStepsIndicator">
+          <div class="wizard-step-dot active" data-step="1"><span>1</span><small>身分</small></div>
+          <div class="wizard-step-dot" data-step="2"><span>2</span><small>色彩</small></div>
+          <div class="wizard-step-dot" data-step="3"><span>3</span><small>歸屬</small></div>
+          <div class="wizard-step-dot" data-step="4"><span>4</span><small>性格</small></div>
+          <div class="wizard-step-dot" data-step="5"><span>5</span><small>預覽</small></div>
+        </div>
+      </div>
+
+      <div class="wizard-body">
+        <!-- Persistent Top Avatar Box across all steps (Matches reference layout) -->
+        <div class="wizard-persistent-avatar-container" onclick="openWizAvatarChoiceModal()" title="點擊更換頭像圖片">
+          <div class="wizard-avatar-ring-box" id="wizAvatarRingBox">
+            <img id="wizAvatarPreview" src="https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png" alt="Avatar Preview">
+            <span class="wiz-avatar-sparkle">✧</span>
+            <div class="wiz-avatar-camera-overlay"><i class="fa-solid fa-camera"></i></div>
+          </div>
+          <span class="wiz-avatar-hint">點擊頭像更換圖片／網址</span>
+        </div>
+
+        <!-- Step 1: 身分 -->
+        <div class="wizard-step-panel active" id="wizardStep1">
+          <div class="wizard-step-title">
+            <span class="step-num">STEP 1</span>
+            <h4>基本身分與頭像</h4>
+            <p>填寫角色的基本姓名與頭像資訊。</p>
+          </div>
+          <input type="hidden" id="wizAvatarUrl" value="https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png">
+          <div class="form-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.8rem; margin-top:1rem;">
+            <div class="form-group">
+              <label>角色姓名 <span style="color:#ef4444;">*</span>：</label>
+              <input type="text" id="wizName" placeholder="例如：納希瑟斯" required>
+            </div>
+            <div class="form-group">
+              <label>英文名 / 拼音：</label>
+              <input type="text" id="wizEnglishName" placeholder="例如：Narcissus">
+            </div>
+            <div class="form-group">
+              <label>性別：</label>
+              <input type="text" id="wizGender" placeholder="例如：男 / 女 / 雙性">
+            </div>
+            <div class="form-group">
+              <label>身高：</label>
+              <input type="text" id="wizHeight" placeholder="例如：182cm">
+            </div>
+            <div class="form-group">
+              <label>星座：</label>
+              <input type="text" id="wizZodiac" placeholder="例如：天坪座">
+            </div>
+            <div class="form-group">
+              <label>定位：</label>
+              <input type="text" id="wizOrientation" placeholder="例如：攻 / 受 ">
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: 主題色彩 (NEW DEDICATED STEP!) -->
+        <div class="wizard-step-panel" id="wizardStep2">
+          <div class="wizard-step-title">
+            <span class="step-num">STEP 2</span>
+            <h4>主題色彩與外觀視覺</h4>
+            <p>挑選角色的專屬代表色調，常駐頭像框將即時動態呈現色彩光芒。</p>
+          </div>
+          <div class="form-group">
+            <label>主題色調：</label>
+            <div class="color-picker-row" style="display:flex; gap:1.2rem; align-items:center; flex-wrap:wrap; margin-top:0.5rem;">
+              <div><small>主色：</small><input type="color" id="wizPrimaryColor" value="#d97706" onchange="updateWizColorPreview()" style="cursor:pointer; width:48px; height:36px; border:0; border-radius:6px;"></div>
+              <div><small>副色：</small><input type="color" id="wizSecondaryColor" value="#78350f" onchange="updateWizColorPreview()" style="cursor:pointer; width:48px; height:36px; border:0; border-radius:6px;"></div>
+              <div>
+                <small>展示模式：</small>
+                <select id="wizColorMode" onchange="updateWizColorPreview()" style="padding:6px 10px; border-radius:6px;">
+                  <option value="gradient">漸層雙色</option>
+                  <option value="single">單色模式</option>
+                </select>
+              </div>
+            </div>
+            <div id="wizColorPreviewBar" class="color-preview-bar" style="margin-top:0.8rem; padding:10px; border-radius:8px; text-align:center; font-size:12px; font-weight:600; color:#fff;">漸層預覽</div>
+          </div>
+        </div>
+
+        <!-- Step 3: 歸屬與標籤 -->
+        <div class="wizard-step-panel" id="wizardStep3">
+          <div class="wizard-step-title">
+            <span class="step-num">STEP 3</span>
+            <h4>身分與分類 Tag</h4>
+            <p>設定角色的職業身分、固定 CP，並可一鍵點選現有世界觀與陣營 Tag。</p>
+          </div>
+          <div class="form-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:0.8rem;">
+            <div class="form-group">
+              <label>職業 / 身分定位：</label>
+              <input type="text" id="wizOccupation" placeholder="例如：旅行者 / 護衛">
+            </div>
+            <div class="form-group">
+              <label>固定 CP (選填)：</label>
+              <input type="text" id="wizFixedCp" placeholder="例如：維納托">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:0.8rem;">
+            <label>分類 Tag (逗號分隔，或點選下方標籤)：</label>
+            <input type="text" id="wizTags" placeholder="例如：天使,區民">
+            <div class="wiz-existing-chips-label" style="font-size:11px; color:var(--text-muted); margin:8px 0 4px;">✦ 快速點選現有世界觀與陣營 Tag：</div>
+            <div id="wizExistingTagChips" class="wiz-tag-chips-wrap" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+          </div>
+        </div>
+
+        <!-- Step 4: 性格與外貌 -->
+        <div class="wizard-step-panel" id="wizardStep4">
+          <div class="wizard-step-title">
+            <span class="step-num">STEP 4</span>
+            <h4>外貌與性格描繪</h4>
+            <p>描繪角色的髮型五官、服裝穿搭與性格語氣。</p>
+          </div>
+          <div class="form-group">
+            <label>外貌描述與特徵：</label>
+            <textarea id="wizAppearance" rows="4" placeholder="描述髮型髮色、眼睛特徵、穿著風格與標誌性飾品..."></textarea>
+          </div>
+          <div class="form-group" style="margin-top:0.8rem;">
+            <label>性格介紹與語氣：</label>
+            <textarea id="wizPersonality" rows="4" placeholder="描述性格特徵、喜惡偏好、處事態度與說話口吻..."></textarea>
+          </div>
+        </div>
+
+        <!-- Step 5: 預覽與完成 -->
+        <div class="wizard-step-panel" id="wizardStep5">
+          <div class="wizard-step-title">
+            <span class="step-num">STEP 5</span>
+            <h4>人設補充與卡片預覽</h4>
+            <p>確認人設卡最終效果，補充額外資訊，即可完成建立！</p>
+          </div>
+          <div class="form-group">
+            <label>補充備註：</label>
+            <textarea id="wizExtraNotes" rows="2" placeholder="其他補充細節或設定集背景..."></textarea>
+          </div>
+          <div class="wizard-card-preview-section">
+            <h5 style="margin-bottom:0.5rem; color:var(--text-muted);">✦ 建立後卡片呈現預覽</h5>
+            <div id="wizFinalCardPreview" class="wiz-card-preview">
+              <!-- Live character card template rendered by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wizard-footer">
+        <button class="btn btn-outline" style="color:var(--text-muted);" onclick="cancelWizard()">放棄新建</button>
+        <div class="wizard-footer-actions">
+          <button class="btn btn-outline" id="wizPrevBtn" onclick="wizStep(-1)" style="display:none;"><i class="fa-solid fa-arrow-left"></i> 上一步</button>
+          <button class="btn btn-primary" id="wizNextBtn" onclick="wizStep(1)">下一步 <i class="fa-solid fa-arrow-right"></i></button>
+          <button class="btn btn-primary wiz-finish-btn" id="wizFinishBtn" onclick="finishWizard()" style="display:none;"><i class="fa-solid fa-check"></i> 完成建立人設卡 ✨</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Avatar Choice Modal -->
+  <div class="modal-backdrop" id="wizAvatarChoiceModal" style="z-index: 1100;">
+    <div class="modal-box modal-sm" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-image" style="color:var(--accent-gold);"></i> 設定角色頭像</h3>
+        <button class="close-btn" onclick="closeModal('wizAvatarChoiceModal')">&times;</button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:12px; padding:1.2rem;">
+        <button class="btn btn-outline" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:10px;" onclick="openWizGalleryModal(); closeModal('wizAvatarChoiceModal');">
+          <i class="fa-solid fa-images"></i> 從預設圖庫挑選
+        </button>
+        <label class="btn btn-outline" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; cursor:pointer;">
+          <i class="fa-solid fa-upload"></i> 上傳本機圖片
+          <input type="file" accept="image/*" style="display:none" onchange="handleWizAvatarUpload(event); closeModal('wizAvatarChoiceModal');">
+        </label>
+        <div style="border-top:1px dashed var(--border-color, rgba(255,255,255,0.1)); padding-top:10px;">
+          <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:6px;">或貼上圖片網址 (https://...)：</label>
+          <input type="text" id="wizAvatarUrlInput" class="form-input" placeholder="✨ 貼上網址後按 Enter 或點擊確定" style="width:100%; border-radius:8px; padding:8px 12px;" onchange="applyWizAvatarUrlInput(this.value)">
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:flex-end;">
+        <button class="btn btn-primary btn-sm" onclick="applyWizAvatarUrlInput(document.getElementById('wizAvatarUrlInput').value); closeModal('wizAvatarChoiceModal');">確定套用</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal 1: Character Edit/Create Modal -->
   <div class="modal-backdrop" id="characterModal">
@@ -738,6 +928,10 @@
         <div class="form-group">
           <label>關係 / 看法：</label>
           <textarea id="relOpinion" rows="3" placeholder="請輸入關係看法..."></textarea>
+        </div>
+        <div class="form-group" style="display:flex; align-items:center; gap:0.5rem; margin-top:0.5rem;">
+          <input type="checkbox" id="relIsMainline" checked style="width:auto; cursor:pointer;">
+          <label for="relIsMainline" style="margin:0; cursor:pointer;">主線關係 (未勾選則標示為番外／PARO 關係)</label>
         </div>
       </div>
       <div class="modal-footer">
@@ -1335,12 +1529,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=20260909-app13"></script>
-  <script src="forum-chat-core.js?v=1"></script>
-  <script src="forum-core.js?v=3"></script>
-  <script src="forum-chat.js?v=1"></script>
-  <script src="forum.js?v=20260912-unicode-safe"></script>
-  <script src="cloud-sync-core.js?v=6"></script>
-  <script src="cloud-sync.js?v=20260912-chunked-upload"></script>
+  <script src="app.js?v=19.4"></script>
+  <script src="forum-chat-core.js?v=19.4"></script>
+  <script src="forum-core.js?v=19.4"></script>
+  <script src="forum-chat.js?v=19.4"></script>
+  <script src="forum.js?v=19.4"></script>
+  <script src="cloud-sync-core.js?v=19.4"></script>
+  <script src="cloud-sync.js?v=19.4"></script>
 </body>
 </html>
