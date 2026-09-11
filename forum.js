@@ -218,7 +218,7 @@
   }
   function updateModels() { if($('ff-model-options')) $('ff-model-options').innerHTML=(val('ff-profile-type')==='gemini'?presets.gemini.models:[...presets.openai.models,...presets.deepseek.models]).map(m=>`<option value="${m}"></option>`).join(''); }
   function backupView() {
-    return `<h2>論壇資料搬家</h2><button class="ff-btn" data-action="cloud">☁ 雲端同步（不含 AI 金鑰）</button><div class="ff-notice">備份包含論壇人物／世界觀副本、帳號、用戶記憶、文章、討論串、正史與收藏。與工坊備份分開，包含保存的 API 金鑰，不含自動排程。挑選貼文時會自動帶上必要作者、留言與角色資料。</div><div class="ff-actions">${btn('匯出全部論壇資料','export-all','ff-primary')}${btn('匯出勾選項目','export-selected')}${btn('選擇論壇備份並合併','choose-import')}</div><input hidden type="file" id="ff-import-file" accept=".json,application/json">${C.groups.map(k=>`<details class="ff-details"><summary>${labels[k]} · ${state[k].length}</summary>${checkList('ff-export-'+k,state[k])}</details>`).join('')}`;
+    return `<h2>論壇資料搬家</h2><button class="ff-btn" data-action="cloud">☁ 雲端同步（不含 AI 金鑰）</button><div class="ff-notice">備份包含論壇人物／世界觀副本、帳號、用戶記憶、文章、討論串、正史與收藏。與工坊備份分開，包含保存的 API 金鑰，不含自動排程。挑選貼文時會自動帶上必要作者、留言與角色資料。</div><div class="ff-actions">${btn('匯出全部論壇資料','export-all','ff-primary')}${btn('匯出勾選項目','export-selected')}${btn('選擇論壇備份並合併','choose-import')}</div><input hidden type="file" id="ff-import-file" accept=".json,.jason,application/json,text/json,text/plain">${C.groups.map(k=>`<details class="ff-details"><summary>${labels[k]} · ${state[k].length}</summary>${checkList('ff-export-'+k,state[k])}</details>`).join('')}`;
   }
   function importView() {
     if(!pendingImport) return '';
@@ -396,6 +396,33 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
   }
   function download(data) {
     const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='同人論壇-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);note('論壇備份已匯出。');
+  }
+  function readWithFileReader(file) {
+    return new Promise((resolve,reject)=>{
+      if(typeof FileReader==='undefined')return reject(new Error('這個瀏覽器不支援讀取檔案。'));
+      const reader=new FileReader();
+      reader.onload=()=>resolve(String(reader.result||''));
+      reader.onerror=()=>reject(reader.error||new Error('無法讀取檔案。'));
+      reader.onabort=()=>reject(new Error('檔案讀取已取消。'));
+      reader.readAsText(file,'utf-8');
+    });
+  }
+  async function readForumBackup(file) {
+    if(!file)throw new Error('沒有選到檔案。');
+    if(file.size>30*1024*1024)throw new Error('請選擇小於 30 MB 的論壇備份。');
+    let text='',firstError=null;
+    // Some mobile WebViews expose Blob.text() but return an empty string for files
+    // supplied by cloud document providers. FileReader gives those providers a
+    // second, better-supported path without changing the backup format.
+    if(typeof file.text==='function')try{text=await file.text();}catch(err){firstError=err;}
+    if(!String(text||'').trim())try{text=await readWithFileReader(file);}catch(err){firstError=firstError||err;}
+    text=String(text||'').replace(/^\uFEFF/,'').trim();
+    if(!text)throw new Error(file.size===0?'檔案是空的，或手機尚未把雲端檔案下載完成。請先將備份存到手機後再選取。':'沒有讀到 JSON 內容，請重新選取檔案。'+(firstError?'（'+firstError.message+'）':''));
+    try{return C.validate(JSON.parse(text));}
+    catch(err){
+      if(err instanceof SyntaxError)throw new Error('JSON 格式無效或檔案未完整下載。請選擇由「匯出全部論壇資料」產生的 .json 備份。');
+      throw err;
+    }
   }
   function sync() {
     const boardId=val('ff-sync-board');
@@ -630,7 +657,12 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     $('forum-root').addEventListener('change',async event=>{
       if(event.target.matches('[data-admin-post]'))$('ff-admin-count').textContent='已選 '+$('forum-root').querySelectorAll('[data-admin-post]:checked').length+' 項';
       if(event.target.id==='ff-profile-type')updateModels();
-      if(event.target.id==='ff-import-file')try{const file=event.target.files[0];if(!file)return;if(file.size>30*1024*1024)throw new Error('請選擇小於 30 MB 的論壇備份。');pendingImport=C.validate(JSON.parse(await file.text()));go('import');}catch(err){note('匯入失敗：'+err.message);}
+      if(event.target.id==='ff-import-file'){
+        const input=event.target;
+        try{const file=input.files[0];if(!file)return;pendingImport=await readForumBackup(file);go('import');}
+        catch(err){note('匯入失敗：'+err.message);}
+        finally{input.value='';}
+      }
     });
     window.addEventListener('storage',event=>{if(event.key===KEY&&event.newValue&&!busy){try{state=C.validate(JSON.parse(event.newValue));refreshLive();}catch{note('其他分頁的資料無法讀取。');}}});
     // Surface forum provider settings from the existing AI dialog too.
