@@ -274,3 +274,26 @@ test('AI resident invitation accepts count, type, and optional instructions', ()
   assert.match(source, /ff-invite-instruction/);
   assert.match(source, /seedUsers\(count,boardId,request\)/);
 });
+
+test('mobile forum search uses a compact icon control and preserves position for drawer tags', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(script, /class="ff-search-btn-icon"/);
+  assert.match(script, /function renderPreservingPosition\(\)/);
+  assert.match(script, /a==='toggle-drawer-tag'\?renderPreservingPosition\(\):render\(\)/);
+  assert.match(styles, /\.ff-search-btn-label\{display:none\}/);
+  assert.match(styles, /\.ff-search-bar-wrap\{width:min\(100%,330px\)/);
+});
+
+test('thread title is smaller and the mobile forum mark cannot be squeezed', () => {
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(styles, /\.ff-post-heading h3\{font-size:20px!important/);
+  assert.match(styles, /#forum-root \.ff-brand-mark\{flex:0 0 31px;width:31px;min-width:31px/);
+  assert.match(styles, /#forum-root \.ff-top\{flex-wrap:nowrap;display:grid/);
+});
+
+test('forum logo star mask uses exactly the same solid color as the themed header', () => {
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(styles, /#forum-root \.ff-top\{background:var\(--bg-primary\)\}/);
+  assert.match(styles, /#forum-root \.ff-brand-mark>span\{background:var\(--bg-primary\)\}/);
+});
