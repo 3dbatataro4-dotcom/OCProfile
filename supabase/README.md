@@ -7,4 +7,6 @@
 
 若手機或瀏覽器資料已被清除，重新登入同一個雲端帳號後，勾選要取回的區域並按「從雲端完整復原」。這會略過逐項合併，以雲端存檔恢復本機；操作前的本機版本仍會暫存為 `oc_cloud_before_workshop`／`oc_cloud_before_forum`。
 
+同步前會自動將被舊版截斷的 Emoji／Unicode 半字元替換成 `�`，避免 PostgreSQL 顯示 `invalid input syntax for type json`。完整 Emoji 與其他文字不受影響，原始論壇 JSON 也不需要手動修改。
+
 同步資料以登入使用者 ID 隔離。瀏覽器內的 Supabase publishable key 是公開用戶端金鑰；資料保護依靠登入權杖、資料列安全性與 RPC 內的使用者檢查。
