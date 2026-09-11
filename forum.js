@@ -284,6 +284,15 @@
     if (!['compose','edit-post','user','profile','snapshots','snapshot','board','forum-settings','forum-new','lore','import','backup'].includes(view)) render();
   }
   function go(next) { if(next===view&&view==='compose')return;if(next==='compose')bookDraft=[];if(['feed','fan','favorites'].includes(next)&&next!==view)feedPage=1; view = next; render(); document.getElementById('tab-forum')?.scrollTo({top:0}); }
+  function renderPreservingPosition() {
+    const panel=$('tab-forum'),panelTop=panel?.scrollTop||0,windowTop=window.scrollY||0,drawerTop=$('ff-search-drawer')?.scrollTop||0;
+    render();
+    requestAnimationFrame(()=>{
+      if(panel)panel.scrollTop=panelTop;
+      window.scrollTo({top:windowTop,left:window.scrollX||0,behavior:'instant'});
+      const drawer=$('ff-search-drawer');if(drawer)drawer.scrollTop=drawerTop;
+    });
+  }
   function showOcPickerModal() {
     const boardId = activeBoardId();
     const chars = state.characters.filter(c => c.boardId === boardId && !c.isHidden && !c.isDraft);
@@ -485,10 +494,10 @@
     const searchBarHtml = `<div class="ff-search-bar-wrap">
       <div class="ff-search-bar-inner">
         <div class="ff-search-input-box" data-action="toggle-search-drawer">
-          <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+          <span class="ff-search-leading-icon" aria-hidden="true">⌕</span>
           <input type="text" id="ff-search-compact" class="ff-search-compact-input" value="${e(filter.search)}" placeholder="搜尋文章、內容或作者…" readonly aria-label="展開搜尋與篩選" />
           ${hasActiveFilters ? '<span class="ff-filter-badge">已套用篩選</span>' : ''}
-          ${btn(searchDrawerOpen ? '收起面板 ▲' : '進階搜尋與篩選 ▼', 'toggle-search-drawer', 'ff-small ff-search-btn')}
+          <button type="button" class="ff-btn ff-small ff-search-btn" data-action="toggle-search-drawer" aria-label="${searchDrawerOpen?'收起搜尋與篩選':'展開搜尋與篩選'}"><span class="ff-search-btn-label">${searchDrawerOpen?'收起面板 ▲':'進階搜尋與篩選 ▼'}</span><span class="ff-search-btn-icon" aria-hidden="true">⌕</span></button>
         </div>
       </div>
       ${hasActiveFilters ? `<div class="ff-active-filters"><span class="ff-active-label">目前條件：</span>${filter.search ? `<span class="ff-filter-chip">關鍵字: ${e(filter.search)} <button type="button" data-action="clear-filter-search" aria-label="清除關鍵字">✕</button></span>` : ''}${filter.subBoard ? `<span class="ff-filter-chip">子版塊: ${e(filter.subBoard)} <button type="button" data-action="clear-filter-subboard" aria-label="清除子版塊">✕</button></span>` : ''}${activeTagsList.map(t => `<span class="ff-filter-chip">Tag: #${e(t)} <button type="button" data-action="remove-tag:${e(t)}" aria-label="清除 Tag">✕</button></span>`).join('')}${filter.dateRange && filter.dateRange !== 'all' ? `<span class="ff-filter-chip">時間: ${e(dateLabels[filter.dateRange] || filter.dateRange)} <button type="button" data-action="clear-filter-date" aria-label="清除時間">✕</button></span>` : ''}${filter.sort && filter.sort !== 'new' ? `<span class="ff-filter-chip">排序: ${filter.sort === 'hot' ? '熱門討論' : '最早發布'} <button type="button" data-action="clear-filter-sort" aria-label="清除排序">✕</button></span>` : ''}${btn('清除全部', 'clear-all-filters', 'ff-small ff-ghost')}</div>` : ''}
@@ -1198,7 +1207,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       filter.tag = filter.tags[0] || '';
       feedPage=1;
       $('forum-root')?.setAttribute('data-no-hero-anim', 'true');
-      return render();
+      return a==='toggle-drawer-tag'?renderPreservingPosition():render();
     }
     if(a==='remove-tag'||a.startsWith('remove-tag:')){
       const tag = arg || full.slice(11);
