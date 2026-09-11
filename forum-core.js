@@ -6,10 +6,11 @@
   const id = () => globalThis.crypto.randomUUID();
   const list = value => Array.isArray(value) ? value : [];
   const tags = value => [...new Set((Array.isArray(value) ? value : String(value || '').split(/[,，\n]/)).map(x => String(x).trim()).filter(Boolean))];
-  const groups = ['boards', 'characters', 'worlds', 'factions', 'relationships', 'accounts', 'users', 'posts', 'comments', 'tagCatalog', 'favoriteFolders', 'chatContacts', 'chats', 'chatMessages', 'profiles'];
+  const groups = ['boards', 'characters', 'worlds', 'factions', 'relationships', 'loreEntries', 'accounts', 'users', 'posts', 'comments', 'tagCatalog', 'favoriteFolders', 'chatContacts', 'chats', 'chatMessages', 'profiles'];
   function initial() {
     const official = id(), fan = id();
-    return { format: 'oc-fandom-forum', version: 1, boards: [{ id: id(), name: '綜合交流', description: '跨作品同好交流' }], characters: [], worlds: [], factions: [], relationships: [],
+    const boardId=id();
+    return { format: 'oc-fandom-forum', version: 1, activeBoardId:boardId, boards: [{ id: boardId, name: '綜合交流', englishName: 'Fandom Archive', slogan: 'Every story deserves an echo.', kind:'fandom', description: '跨作品同好交流', worldview:'' }], characters: [], worlds: [], factions: [], relationships: [], loreEntries: [],
       accounts: [{ id: official, name: '官方編輯部', owned: true, official: true, gender: '女', color: '#d9ae70', color2: '#9c78c9' }, { id: fan, name: '我的同人帳號', owned: true, official: false, gender: '女', color: '#ad87c5', color2: '#709cac' }], users: [],
       posts: [], comments: [], tagCatalog: [], favoriteFolders: [], chatContacts: [], chats: [], chatMessages: [], activeUser: fan, profiles: [], activeProfile: 'inherit',
       generation: { boardId: '', tags: '', type: '隨機', min: 1, max: 3, comments: 3, interval: 15, allowNew: true, enabled: false, nextAt: 0, prompt: '', atmosphere: '允許逆 CP、拆官配、角色爭議與對家拌嘴；不同用戶有各自立場。' } };
@@ -20,7 +21,17 @@
     Chat.migrate(data);
     if(data.favoriteFolders===undefined)data.favoriteFolders=[];
     if(data.tagCatalog===undefined)data.tagCatalog=tags(list(data.posts).flatMap(p=>list(p.tags))).map(name=>({id:id(),name}));
+    if(data.loreEntries===undefined)data.loreEntries=[];
     if (data.profiles === undefined) data.profiles = [];
+    if(!data.boards.length)data.boards.push({id:id(),name:'綜合交流',description:'跨作品同好交流'});
+    for(const [index,board] of data.boards.entries()){board.englishName=String(board.englishName||'Fandom Archive');board.slogan=String(board.slogan||'Every story deserves an echo.');board.kind=board.kind==='paro'?'paro':'fandom';board.description=String(board.description||'');board.worldview=String(board.worldview||'');if(index===0&&!board.generation&&data.generation)board.generation=clone(data.generation);}
+    if(!data.activeBoardId||!data.boards.some(b=>b.id===data.activeBoardId))data.activeBoardId=data.boards[0].id;
+    for(const user of list(data.users)){user.forumIds=list(user.forumIds);if(!user.forumIds.length){const ids=new Set(list(data.posts).filter(p=>p.authorId===user.id).map(p=>p.boardId));for(const charId of list(user.charIds)){const boardId=list(data.characters).find(c=>c.id===charId)?.boardId;if(boardId)ids.add(boardId);}user.forumIds=ids.size?[...ids]:[data.activeBoardId];}if(!user.forumRoles||typeof user.forumRoles!=='object'||Array.isArray(user.forumRoles))user.forumRoles={};}
+    if(list(data.tagCatalog).some(row=>row.boardId===undefined))data.tagCatalog=list(data.tagCatalog).flatMap(row=>row.boardId!==undefined?[row]:data.boards.map((board,index)=>({...row,id:index? id():row.id,boardId:board.id})));
+    if(list(data.favoriteFolders).some(row=>row.boardId===undefined)){
+      const maps=new Map();data.favoriteFolders=list(data.favoriteFolders).flatMap(row=>{if(row.boardId!==undefined)return [row];const copies=data.boards.map((board,index)=>({...row,id:index?id():row.id,boardId:board.id}));maps.set(row.id,new Map(copies.map(copy=>[copy.boardId,copy.id])));return copies;});
+      for(const post of list(data.posts))post.folderIds=list(post.folderIds).map(folderId=>maps.get(folderId)?.get(post.boardId)||folderId);
+    }
     for (const key of groups) {
       if (!Array.isArray(data[key])) throw new Error('備份缺少資料表：' + key);
       const seen = new Set();
@@ -40,7 +51,7 @@
   }
   // User-requested portable API settings include credentials; schedules remain local.
   function portable(state) {
-    return { format: state.format, version: 1, activeProfile:state.activeProfile, ...Object.fromEntries(groups.map(k => [k, clone(state[k])])) };
+    return { format: state.format, version: 1, activeBoardId:state.activeBoardId, activeProfile:state.activeProfile, ...Object.fromEntries(groups.map(k => [k, clone(state[k])])) };
   }
   function dependencies(data, selected) {
     const chosen = new Set(selected);
@@ -68,7 +79,12 @@
         list(row.members).forEach(x => add('characters', typeof x === 'string' ? x : x.charId));
       }
       // A selected story carries its board's world and relationship context too.
-      for (const b of data.boards.filter(x => chosen.has('boards:' + x.id))) for (const key of ['worlds','factions','relationships']) data[key].filter(x => x.boardId === b.id).forEach(x => add(key, x.id));
+      for (const b of data.boards.filter(x => chosen.has('boards:' + x.id))) {
+        for (const key of ['characters','worlds','factions','relationships','loreEntries','tagCatalog','favoriteFolders','posts']) data[key].filter(x => x.boardId === b.id).forEach(x => add(key, x.id));
+        data.users.filter(x=>list(x.forumIds).includes(b.id)).forEach(x=>add('users',x.id));
+      }
+      for(const row of data.loreEntries.filter(x=>chosen.has('loreEntries:'+x.id)))add('boards',row.boardId);
+      for(const u of data.users.filter(x=>chosen.has('users:'+x.id)))list(u.forumIds).forEach(id=>add('boards',id));
     }
     return chosen;
   }
@@ -101,10 +117,11 @@
       if (key === 'comments') { row.postId = ref('posts', row.postId); row.parentId = ref('comments', row.parentId); }
       if (key === 'users' || key === 'accounts') {
         row.charIds = list(row.charIds).map(x => ref('characters', x));
+        if(key==='users'){row.forumIds=list(row.forumIds).map(x=>ref('boards',x));row.forumRoles=Object.fromEntries(Object.entries(row.forumRoles||{}).map(([boardId,value])=>[ref('boards',boardId),value]));}
         row.links = list(row.links).map(x => ({ ...x, userId: identity(x.userId) }));
         row.history = list(row.history).map(x => ({ ...x, postId: ref('posts', x.postId), commentId: ref('comments', x.commentId), partnerId: identity(x.partnerId) }));
       }
-      if (['characters','worlds','factions','relationships'].includes(key)) {
+      if (['characters','worlds','factions','relationships','loreEntries','tagCatalog','favoriteFolders'].includes(key)) {
         row.boardId = ref('boards', row.boardId);
         if (Array.isArray(row.members)) row.members = row.members.map(x => typeof x === 'string' ? ref('characters', x) : {...x, charId: ref('characters', x.charId)});
         if (row.paroValues) row.paroValues = Object.fromEntries(Object.entries(row.paroValues).map(([k,v]) => [ref('worlds', k),v]));
