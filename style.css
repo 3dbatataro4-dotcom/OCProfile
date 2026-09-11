@@ -691,3 +691,28 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
   .import-conflict-modal .modal-body { padding:.75rem; }
   .import-conflict-card { padding:.75rem; }
 }
+
+/* Workshop-wide button motion: tactile but calm, with reduced-motion support. */
+:where(.btn,.nav-tab,.mobile-bottom-nav button,.mobile-submenu button,button.icon-btn):not(:disabled){
+  transition:transform .18s cubic-bezier(.2,.75,.25,1),box-shadow .18s ease,filter .18s ease,background-color .18s ease,border-color .18s ease;
+  transform-origin:center;
+}
+@media(hover:hover) and (pointer:fine){
+  :where(.btn,.nav-tab,.mobile-bottom-nav button,.mobile-submenu button,button.icon-btn):not(:disabled):hover{
+    transform:translateY(-2px);
+    box-shadow:0 7px 16px color-mix(in srgb,var(--accent-coffee) 17%,transparent);
+    filter:saturate(1.06);
+  }
+}
+:where(.btn,.nav-tab,.mobile-bottom-nav button,.mobile-submenu button,button.icon-btn):not(:disabled):active{
+  transform:translateY(1px) scale(.97);
+  box-shadow:0 2px 5px color-mix(in srgb,var(--accent-coffee) 12%,transparent);
+  transition-duration:.08s;
+}
+:where(.btn,.nav-tab,.mobile-bottom-nav button,.mobile-submenu button,button.icon-btn):focus-visible{
+  outline:2px solid var(--accent-gold);
+  outline-offset:3px;
+}
+@media(prefers-reduced-motion:reduce){
+  :where(.btn,.nav-tab,.mobile-bottom-nav button,.mobile-submenu button,button.icon-btn){transition:none!important;transform:none!important}
+}
