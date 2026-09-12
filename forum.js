@@ -735,11 +735,16 @@
     };
     return `${btn('← 返回動態','nav:feed')}<article class="ff-card" style="margin-top:15px">${card(p,true)}${p.deleted?'<div class="ff-notice">文章內容已刪除，討論串保留。</div>':''}${p.note?longText(p.note):''}${p.kind==='book'?'<div class="ff-book-index"><h3>章節目錄</h3>'+comments.filter(c=>c.kind==='chapter').map((c,i)=>'<p>'+btn((i+1)+'　'+e(c.chapterTitle),'chapter-jump:'+c.id,'ff-small')+'</p>').join('')+'</div>':''}${longText(p.content)}<div class="ff-footer">${p.deleted?'':btn('編輯文章','edit-post:'+p.id)}${btn('讓讀者新增留言','comments:'+p.id)}${btn('刪除貼文','delete-post:'+p.id,'ff-danger')}</div></article><div class="ff-toolbar ff-comment-toolbar"><h3>留言 · ${rows.length}</h3><div class="ff-comment-sort-control">${select('ff-comment-sort',[['asc','由舊到新'],['desc','由新到舊'],['hot','熱門留言']],commentSort)}${btn('套用排序','comment-sort')}</div></div>${pager()}<div id="ff-comment-list">${rows.slice((page-1)*15,page*15).map(c=>commentHtml(c,false)).join('')}</div>${pager()}<div class="ff-card" id="ff-reply-form">${field('回覆身分',select('ff-reply-author',replyIdentities,state.activeUser))}${roleplayCharacters.length?'<p class="ff-muted">選擇「扮演 OC」即可用角色身分進入這個世界觀回帖；內容仍由你親自撰寫。</p>':''}${field('回覆對象',select('ff-reply-parent',[['','文章作者'],...comments.filter(x=>!x.deleted).map(x=>[x.id,authorFor(x).name+'：'+x.content.slice(0,30)])],''))}${field('寫下你的回覆',area('ff-reply-content'))}<label class="ff-field"><input type="checkbox" id="ff-reply-auto" checked> 讓對方接著回覆我</label>${btn('送出回覆','send-reply','ff-primary')}</div>`;
   }
+  function aiQueuePanel(){
+    const rows=aiQueue.slice(-20).reverse(),waiting=aiQueue.filter(x=>x.status==='queued').length;
+    return `<div class="ff-card ff-ai-queue-card"><div class="ff-heading"><div><h3>本次 AI 工作排程</h3><p class="ff-heading-note">依序處理，最多同時保留 10 筆等待／執行中的請求。重新開啟網站後清空。</p></div><span class="ff-ai-queue-count">${busy?'執行中 · ':''}${waiting} 筆等待</span></div>${rows.length?`<div class="ff-ai-queue-list">${rows.map(x=>`<article class="ff-ai-queue-item is-${x.status}"><span class="ff-ai-queue-state">${x.status==='running'?'● 執行中':x.status==='queued'?'◷ 等待中':x.status==='done'?'✓ 已完成':x.status==='failed'?'! 失敗':'— 已取消'}</span><div><strong>${e(x.label)}</strong><small>${date(x.createdAt)}${x.finishedAt?' · '+date(x.finishedAt):''}${x.error?' · '+e(x.error):''}</small></div><div class="ff-actions">${x.status==='running'?btn('停止','queue-stop:'+x.id,'ff-small ff-danger'):''}${x.status==='queued'?btn('取消','queue-cancel:'+x.id,'ff-small'):''}${x.status==='failed'?btn('重試','queue-retry:'+x.id,'ff-small ff-primary'):''}${x.status==='done'&&x.resultPostId?btn('查看文章','queue-open-post:'+x.resultPostId,'ff-small'):''}</div></article>`).join('')}</div><div class="ff-actions">${btn('清除已完成紀錄','queue-clear-finished','ff-small ff-ghost')}</div>`:'<div class="ff-empty ff-ai-queue-empty">還沒有一次性 AI 工作。生成文章、留言、私訊與 AI 輔助都會列在這裡。</div>'}</div>`;
+  }
+  function updateAIQueuePanel(){const box=$('ff-ai-once-queue');if(box)box.innerHTML=aiQueuePanel();}
   function generation() {
     const board=activeBoard(),g=generationFor(board.id);
     const scopeLabel=board.mode==='world'?'目前世界觀／PARO':'目前作品／IP';
     const modeNotice=board.mode==='world'?'AI 會閱讀世界觀、人物副本與注意詞條，並依每位居民在此世界中的身分發言。':'AI 會閱讀作品設定、人物副本與注意詞條；所有用戶都會以作品外的讀者、粉絲或創作者視角發言。';
-    return `<div class="ff-heading"><div><h2>${e(board.name)} · 生成與排程</h2><p class="ff-heading-note">每個論壇各自保存生成範圍、氣氛與排程。</p></div>${btn(busy?'停止本次生成':'暫停此論壇生成','stop')}</div><div class="ff-card"><div class="ff-grid">${field(scopeLabel,`<div class="ff-static-field">${e(board.name)}</div>`)}${field('指定 Tag（留空隨機；逗號分隔）',input('ff-gen-tags',g.tags))}${field('貼文類型',select('ff-gen-type',['隨機','創作','閒聊','企劃','CP文','推薦','發癲'].map(x=>[x,x]),g.type))}${field('每篇／每次追加留言數',input('ff-gen-comments',g.comments,'number','min="1" max="20"'))}${field('每批最少篇數（與最多相同＝固定篇數）',input('ff-gen-min',g.min,'number','min="1" max="50"'))}${field('每批最多篇數',input('ff-gen-max',g.max,'number','min="1" max="50"'))}${field('自動生成間隔（分鐘）',input('ff-gen-interval',g.interval,'number','min="1" max="1440"'))}<label class="ff-field"><input type="checkbox" id="ff-gen-new" ${g.allowNew?'checked':''}> 允許逐步加入新用戶</label></div>${field('發帖專用模型（留言維持目前模型）',select('ff-gen-creation-profile',[['','沿用目前模型'],['inherit','工坊模型'],...state.profiles.map(p=>[p.id,p.name+' · '+p.model])],g.creationProfile||''))}${field('這一輪的創作方向／指示',area('ff-gen-prompt',g.prompt))}${field('圈內氣氛與禁止話題',area('ff-gen-atmosphere',g.atmosphere))}<div class="ff-notice">${modeNotice}</div><div class="ff-actions">${btn('保存生成設定','save-generation')}${btn('現在生成一批','generate','ff-primary')}${btn(g.enabled?'暫停自動排程':'啟用自動排程','toggle-schedule')}</div></div>`;
+    return `<div class="ff-heading"><div><h2>${e(board.name)} · 生成與排程</h2><p class="ff-heading-note">每個論壇各自保存生成範圍、氣氛與排程。</p></div>${btn(busy?'停止目前工作':'暫停此論壇生成','stop')}</div><div id="ff-ai-once-queue">${aiQueuePanel()}</div><div class="ff-card"><div class="ff-grid">${field(scopeLabel,`<div class="ff-static-field">${e(board.name)}</div>`)}${field('指定 Tag（留空隨機；逗號分隔）',input('ff-gen-tags',g.tags))}${field('貼文類型',select('ff-gen-type',['隨機','創作','閒聊','企劃','CP文','推薦','發癲'].map(x=>[x,x]),g.type))}${field('每篇／每次追加留言數',input('ff-gen-comments',g.comments,'number','min="1" max="20"'))}${field('每批最少篇數（與最多相同＝固定篇數）',input('ff-gen-min',g.min,'number','min="1" max="50"'))}${field('每批最多篇數',input('ff-gen-max',g.max,'number','min="1" max="50"'))}${field('自動生成間隔（分鐘）',input('ff-gen-interval',g.interval,'number','min="1" max="1440"'))}<label class="ff-field"><input type="checkbox" id="ff-gen-new" ${g.allowNew?'checked':''}> 允許逐步加入新用戶</label></div>${field('發帖專用模型（留言維持目前模型）',select('ff-gen-creation-profile',[['','沿用目前模型'],['inherit','工坊模型'],...state.profiles.map(p=>[p.id,p.name+' · '+p.model])],g.creationProfile||''))}${field('這一輪的創作方向／指示',area('ff-gen-prompt',g.prompt))}${field('圈內氣氛與禁止話題',area('ff-gen-atmosphere',g.atmosphere))}<div class="ff-notice">${modeNotice}</div><div class="ff-actions">${btn('保存生成設定','save-generation')}${btn('現在生成一批','generate','ff-primary')}${btn(g.enabled?'暫停自動排程':'啟用自動排程','toggle-schedule')}</div></div>`;
   }
   function usersView() {
     const rows=boardUsers(),board=activeBoard();
@@ -965,13 +970,20 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     const posts=new Set(C.list(postIds)),comments=new Set(C.list(commentIds));
     for(const u of [...state.accounts,...state.users])u.history=C.list(u.history).filter(h=>(!h.postId||!posts.has(h.postId))&&(!h.commentId||!comments.has(h.commentId)));
   }
-  let stopped=false,retryTask=null,retryError='';
-  async function job(task) {
-    if(busy)throw new Error('已有生成正在進行，請等待完成或先停止。');
-    busy=true;stopped=false;retryTask=task;retryError='';note('AI 正在閱讀作品並生成，隨時可到生成與排程停止。');
-    try { await task();retryTask=null;if(!stopped)note('生成完成，已保存。'); }
-    catch(err){if(!stopped)retryError=err.message;else retryTask=null;throw err;}
-    finally {busy=false;controller=null;syncBusyIndicator();refreshLive();}
+  let stopped=false,retryTask=null,retryError='',aiQueue=[];
+  function job(task,label='AI 請求') {
+    if(aiQueue.filter(x=>x.status==='queued'||x.status==='running').length>=10)throw new Error('AI 工作排程已達 10 筆，請等待一筆完成或先取消等待中的工作。');
+    const item={id:C.id(),label,status:'queued',task,createdAt:Date.now(),finishedAt:null,error:'',resolve:null,reject:null};
+    const promise=new Promise((resolve,reject)=>{item.resolve=resolve;item.reject=reject;});
+    aiQueue.push(item);note('已加入 AI 排程：'+label+'。');updateAIQueuePanel();queueMicrotask(runNextAIJob);return promise;
+  }
+  async function runNextAIJob(){
+    if(busy)return;const item=aiQueue.find(x=>x.status==='queued');if(!item)return;
+    busy=true;stopped=false;retryTask=null;retryError='';item.status='running';note('AI 正在處理：'+item.label+'。可到生成與排程查看或停止。');syncBusyIndicator();updateAIQueuePanel();
+    const beforePosts=new Set(state.posts.map(x=>x.id)),beforeComments=new Set(state.comments.map(x=>x.id));
+    try{const result=await item.task();const addedPosts=state.posts.filter(x=>!beforePosts.has(x.id)),addedComments=state.comments.filter(x=>!beforeComments.has(x.id));if(!stopped&&item.label==='生成論壇文章'&&!addedPosts.length)throw new Error('生成程序結束但沒有新增文章，請從排程表重試。');item.resultPostId=addedPosts.at(-1)?.id||addedComments.at(-1)?.postId||'';item.status=stopped?'cancelled':'done';item.finishedAt=Date.now();if(!stopped)note('已完成：'+item.label+(addedPosts.length?'，新增 '+addedPosts.length+' 篇文章':addedComments.length?'，新增 '+addedComments.length+' 則留言':'')+'。');item.resolve(result);}
+    catch(err){item.finishedAt=Date.now();item.error=err?.message||String(err);if(stopped){item.status='cancelled';item.resolve();retryTask=null;}else{item.status='failed';item.retryTask=retryTask||item.task;retryTask=item.retryTask;retryError=item.error;item.reject(err);}}
+    finally{busy=false;controller=null;syncBusyIndicator();updateAIQueuePanel();refreshLive();queueMicrotask(runNextAIJob);}
   }
   async function seedUsers(count=6,boardId=activeBoardId(),request={}) {
     const lore=context(boardId),existing=boardUsers(boardId);
@@ -1007,7 +1019,9 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     if(!users.length)throw new Error('沒有其他可用的 AI 用戶能回覆；請先邀請更多世界居民。');
     const raw=await callAI({task:targetId?`讓 ID ${targetId} 以本人身分回覆這則人類留言，產生 1 則回覆。`:`新增 ${count} 則留言，${parentId?'接續指定留言討論，不能替換原留言':'回應文章內容'}。`,lore,atmosphere:g.atmosphere,post:{id:p.id,title:p.title,content:parentId?p.content.slice(0,1800):p.content,charIds:p.charIds,author:authorFor(p),chapters:state.comments.filter(c=>c.postId===p.id&&c.kind==='chapter'&&!c.deleted&&(!parentId||chain.some(x=>x.id===c.id))).map(c=>({id:c.id,title:c.chapterTitle,content:parentId?c.content.slice(0,1800):c.content}))},parentId,replyFocus:focus?{id:focus.id,authorId:focus.authorId,author:authorFor(focus).name,content:focus.content,instruction:'首要回答這則指定留言的觀點、問題或情緒，帶入自己的立場。文章只作背景，勿重新寫整篇讀後感。'}:null,history:history.map(x=>({id:x.id,parentId:x.parentId,content:x.content.slice(0,700),author:authorFor(x).name,official:authorFor(x).official})),users,schema:{comments:[{authorId:'提供的虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',content:'留言文字'}],memories:[{userId:'本次發言ID',summary:'更新後的長期記憶摘要',event:'本次互動紀錄',links:[{userId:'互動對方ID',note:'好友／同好／對家及熟悉程度'}]}]}},SYSTEM);
     const allowed=new Set(users.filter(x=>state.users.some(u=>u.id===x.id)).map(x=>x.id));
-    const replies=C.list(raw.comments).slice(0,targetId?1:count);
+    const rawReplies=C.list(raw.comments);
+    if(targetId&&!rawReplies.length){const fallback=String(raw.content||raw.text||raw.message||raw.comment?.content||'').trim();if(fallback)rawReplies.push({authorId:targetId,content:fallback});}
+    const replies=rawReplies.slice(0,targetId?1:count).map(x=>targetId&&x&&typeof x.content==='string'?{...x,authorId:targetId}:x);
     if(!replies.length||replies.some(x=>!x||x.authorId===excludedAuthorId||!allowed.has(x.authorId)||(targetId&&x.authorId!==targetId)||typeof x.content!=='string'||!x.content.trim()))throw new Error('AI 留言格式或作者不正確，或嘗試由同一帳號回覆自己；未寫入本批留言。');
     if(stopped||!state.posts.some(x=>x.id===p.id))return;
     const participants=new Set([p.authorId,...chain.map(x=>x.authorId),...replies.map(x=>x.authorId)]);
@@ -1157,7 +1171,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     if(a==='home'){homeUser=arg;return go('home');}
     if(a==='dm')return chatUI.openUser(arg);
 
-    if(a==='generate-update'){homeUser=arg;return job(async()=>{await generateUpdate(arg);view='home';});}
+    if(a==='generate-update'){homeUser=arg;return job(async()=>{await generateUpdate(arg);view='home';},'生成用戶小廢推');}
     if(a==='publish-update'){
       const u=state.accounts.find(x=>x.id===arg),text=val('ff-user-update').trim();if(!u||!text)throw new Error('請用自己的帳號輸入近況。');u.updates=C.list(u.updates);u.updates.push({id:C.id(),content:[...text].slice(0,100).join(''),createdAt:Date.now()});save();return render();
     }
@@ -1187,6 +1201,11 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     if(a==='folder-delete'){if(confirm('刪除此資料夾？文章仍保留在收藏。')){state.favoriteFolders=state.favoriteFolders.filter(f=>f.id!==arg);for(const p of state.posts)p.folderIds=C.list(p.folderIds).filter(id=>id!==arg);if(filter.folder===arg)filter.folder='';save();render();}return;}
     if(a==='folder-post'){const p=state.posts.find(x=>x.id===arg);if(!p)return;return showForumDialog('收藏分類',checkList('ff-post-folders',boardFolders(p.boardId),C.list(p.folderIds))+btn('保存分類','folder-save:'+arg));}
     if(a==='folder-save'){const p=state.posts.find(x=>x.id===arg);if(p){p.starred=true;p.folderIds=picks('ff-post-folders');save();}$('ff-social-dialog')?.close();return render();}
+    if(a==='queue-cancel'){const item=aiQueue.find(x=>x.id===arg&&x.status==='queued');if(item){item.status='cancelled';item.finishedAt=Date.now();item.resolve();updateAIQueuePanel();}return;}
+    if(a==='queue-stop'){const item=aiQueue.find(x=>x.id===arg&&x.status==='running');if(item){stopped=true;controller?.abort();note('正在停止：'+item.label+'；已完成的內容會保留。');}return;}
+    if(a==='queue-retry'){const item=aiQueue.find(x=>x.id===arg&&x.status==='failed');if(item)return job(item.retryTask||item.task,'重試 · '+item.label);return;}
+    if(a==='queue-open-post'){if(state.posts.some(x=>x.id===arg)){currentPost=arg;return go('post');}throw new Error('這篇文章已不存在。');}
+    if(a==='queue-clear-finished'){aiQueue=aiQueue.filter(x=>x.status==='queued'||x.status==='running');updateAIQueuePanel();return;}
     if(a==='retry-ai'){const task=retryTask;if(task)return job(task);return;}
     if(a==='dismiss-retry'){retryTask=null;retryError='';return render();}
     if(a==='cloud')return window.OCCloud.open('forum');
@@ -1378,9 +1397,12 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       const c={id:C.id(),postId:p.id,parentId,authorId,authorSnapshot:snapshot,content:text,createdAt:Date.now()},targetId=parentId?state.comments.find(x=>x.id===parentId)?.authorId:p.authorId;
       simulateLikes(c,p);state.comments.push(c);if(!oc)state.activeUser=authorId;save();
       const rootId=parentId?commentRootId(parentId):c.id;if(parentId)expandedComments.add(rootId);
+      const visible=discussionRows(state.comments.filter(x=>x.postId===p.id)),rootIndex=Math.max(0,visible.findIndex(x=>x.id===rootId));
+      commentPages.set(pageKey(),Math.floor(rootIndex/15)+1);
       replyDrawerState.open=false;
       render();
-      if(!user(targetId).owned&&state.users.some(x=>x.id===targetId))await job(async()=>{let reply='';if(auto){const before=state.comments.length;await makeComments(p,c.id,targetId,1);reply=state.comments.slice(before).find(x=>x.authorId===targetId)?.content||'';}await maybePublicInspiration(targetId,{kind:'留言回覆',post:p,text,reply});});
+      requestAnimationFrame(()=>{$('ff-comment-'+c.id)?.scrollIntoView({block:'center'});note('回覆已送出並保存。');});
+      if(!user(targetId).owned&&state.users.some(x=>x.id===targetId))await job(async()=>{let reply='';if(auto){const before=state.comments.length;await makeComments(p,c.id,targetId,1);reply=state.comments.slice(before).find(x=>x.authorId===targetId)?.content||'';}await maybePublicInspiration(targetId,{kind:'留言回覆',post:p,text,reply});},'AI 回覆你的留言');
       return;
     }
     if(a==='subboard-add'){showSubBoardModal(activeBoard());return;}
@@ -1429,7 +1451,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       if(!val('ff-title').trim()||(!val('ff-content').trim()&&!bookDraft.length))throw new Error('請填寫標題與文章內容。');
       const authorId=val('ff-author');if(!own().some(x=>x.id===authorId))throw new Error('請先建立自己的帳號。');
       const auto=checked('ff-auto-comments'),p={id:C.id(),authorId,authorSnapshot:authorSnapshot(user(authorId)),boardId:activeBoardId(),title:val('ff-title').trim(),content:val('ff-content').trim(),imageUrl:safeImage(val('ff-image-url')),tags:C.tags(val('ff-tags')),charIds:picks('ff-chars'),type:bookDraft.length?'書籍':val('ff-type'),note:val('ff-publish-note').trim(),kind:bookDraft.length?'book':'post',fan:checked('ff-fan'),canon:false,starred:false,createdAt:Date.now()};
-      const section=subBoardOf(activeBoard(),val('ff-sub-board'));p.subBoardId=section?.id||'';p.subBoard=section?.name||'綜合交流';state.posts.push(p);for(let i=0;i<bookDraft.length;i++)state.comments.push({id:C.id(),postId:p.id,parentId:null,authorId,authorSnapshot:authorSnapshot(user(authorId)),kind:'chapter',chapterTitle:val('ff-chapter-title-'+i)||bookDraft[i].title,content:val('ff-chapter-body-'+i),createdAt:Date.now()+i,sourceDocId:bookDraft[i].id});bookDraft=[];state.activeUser=authorId;save();currentPost=p.id;go('post');if(auto)await job(()=>makeComments(p));return;
+      const section=subBoardOf(activeBoard(),val('ff-sub-board'));p.subBoardId=section?.id||'';p.subBoard=section?.name||'綜合交流';state.posts.push(p);for(let i=0;i<bookDraft.length;i++)state.comments.push({id:C.id(),postId:p.id,parentId:null,authorId,authorSnapshot:authorSnapshot(user(authorId)),kind:'chapter',chapterTitle:val('ff-chapter-title-'+i)||bookDraft[i].title,content:val('ff-chapter-body-'+i),createdAt:Date.now()+i,sourceDocId:bookDraft[i].id});bookDraft=[];state.activeUser=authorId;save();currentPost=p.id;go('post');if(auto)await job(()=>makeComments(p),'生成發布後留言');return;
     }
     if(a==='comment-page'||a==='comment-thread'||a==='comment-sort'){
       if(a==='comment-page')commentPages.set(pageKey(),Math.max(1,Number(arg)||1));
@@ -1448,10 +1470,10 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       if(!oc&&!own().some(x=>x.id===selectedAuthor))throw new Error('請選擇自己的帳號或目前論壇的 OC。');
       const authorId=oc?'oc:'+oc.id:selectedAuthor,snapshot=oc?roleplaySnapshot(oc):authorSnapshot(user(authorId));
       const c={id:C.id(),postId:p.id,parentId,authorId,authorSnapshot:snapshot,content:text,createdAt:Date.now()},targetId=parentId?state.comments.find(x=>x.id===parentId)?.authorId:p.authorId;
-      simulateLikes(c,p);state.comments.push(c);if(!oc)state.activeUser=authorId;save();const rootId=parentId?commentRootId(parentId):c.id;if(parentId)expandedComments.add(rootId);const visible=discussionRows(state.comments.filter(x=>x.postId===p.id)),anchor=state.comments.find(x=>x.id===rootId)||c;commentPages.set(pageKey(),Math.floor(Math.max(0,visible.findIndex(x=>x.id===anchor.id))/15)+1);render();if(!user(targetId).owned&&state.users.some(x=>x.id===targetId))await job(async()=>{let reply='';if(auto){const before=state.comments.length;await makeComments(p,c.id,targetId,1);reply=state.comments.slice(before).find(x=>x.authorId===targetId)?.content||'';}await maybePublicInspiration(targetId,{kind:'留言回覆',post:p,text,reply});});return;
+      simulateLikes(c,p);state.comments.push(c);if(!oc)state.activeUser=authorId;save();const rootId=parentId?commentRootId(parentId):c.id;if(parentId)expandedComments.add(rootId);const visible=discussionRows(state.comments.filter(x=>x.postId===p.id)),anchor=state.comments.find(x=>x.id===rootId)||c;commentPages.set(pageKey(),Math.floor(Math.max(0,visible.findIndex(x=>x.id===anchor.id))/15)+1);render();if(!user(targetId).owned&&state.users.some(x=>x.id===targetId))await job(async()=>{let reply='';if(auto){const before=state.comments.length;await makeComments(p,c.id,targetId,1);reply=state.comments.slice(before).find(x=>x.authorId===targetId)?.content||'';}await maybePublicInspiration(targetId,{kind:'留言回覆',post:p,text,reply});},'AI 回覆你的留言');return;
     }
-    if(a==='comments')return job(()=>refreshComments(state.posts.find(x=>x.id===arg)));
-    if(a==='continue'){const c=state.comments.find(x=>x.id===arg);return job(()=>refreshComments(state.posts.find(x=>x.id===c.postId),c.id));}
+    if(a==='comments')return job(()=>refreshComments(state.posts.find(x=>x.id===arg)),'生成文章留言');
+    if(a==='continue'){const c=state.comments.find(x=>x.id===arg);return job(()=>refreshComments(state.posts.find(x=>x.id===c.postId),c.id),'讓同好接著回覆');}
     if(a==='regenerate-comment'||a.startsWith('regenerate-comment:')){
       const c = state.comments.find(x=>x.id===arg);
       if(!c) throw new Error('留言已不存在。');
@@ -1465,13 +1487,12 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
           lore,
           schema: { content: '30-80字精簡留言' }
         }, SYSTEM);
-        const text = String(raw.content || raw.text || raw.message || '').trim();
-        if(text) {
-          c.content = text;
-          save();
-          renderWithDraft();
-          note('✨ 留言已重新生成！');
-        }
+        const text = String(raw.content || raw.text || raw.message || raw.comment?.content || raw.comments?.[0]?.content || '').trim();
+        if(!text)throw new Error('模型沒有提供可用的留言內容，請再試一次。');
+        c.content = text;
+        save();
+        renderWithDraft();
+        note('✨ 留言已重新生成！');
       });
     }
     if(a==='continue-comment'||a.startsWith('continue-comment:')){
@@ -1516,7 +1537,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       if(deleteOrigin==='posts-admin')go('posts-admin');else if(a==='delete-keep'){currentPost=arg;go('post');}else go('feed');note(a==='delete-keep'?'已刪除 '+ids.size+' 篇內容，討論已保留。':'已永久刪除 '+ids.size+' 篇文章及其討論。');return;
     }
     if(a==='save-generation'){readGeneration();note('生成設定已保存。');return;}
-    if(a==='generate'){readGeneration();return job(makePosts);}
+    if(a==='generate'){readGeneration();return job(makePosts,'生成論壇文章');}
     if(a==='toggle-schedule'){readGeneration();const g=generationFor();g.enabled=!g.enabled;g.nextAt=Date.now()+g.interval*60000;if(!g.enabled){stopped=true;controller?.abort();}save();return render();}
     if(a==='stop'){stopped=true;controller?.abort();generationFor().enabled=false;save();note('已暫停目前論壇排程並停止生成；已完成內容保留。');return render();}
     if(a==='seed-users'){showInviteUsersDialog();return;}
@@ -1524,7 +1545,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     if(a==='invite-users-confirm'){
       const count=number('ff-invite-count',1,30),request={type:val('ff-invite-type').trim(),instruction:val('ff-invite-instruction').trim()},boardId=activeBoardId();
       $('ff-invite-users-dialog')?.close();$('ff-invite-users-dialog')?.remove();
-      return job(()=>seedUsers(count,boardId,request));
+      return job(()=>seedUsers(count,boardId,request),'AI 邀請新用戶');
     }
     if(a==='user'){userListScroll=window.scrollY;editingUser=arg;return go('user');}
     if(a==='select-all-users'){const ids=boardUsers().filter(u=>!u.owned).map(u=>u.id),all=ids.every(id=>selectedUserIds.has(id));ids.forEach(id=>all?selectedUserIds.delete(id):selectedUserIds.add(id));return render();}
