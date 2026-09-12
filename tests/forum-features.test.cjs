@@ -5,6 +5,12 @@ const path = require('node:path');
 const ForumCore = require('../forum-core.js');
 const CloudSyncCore = require('../cloud-sync-core.js');
 
+test('index loads the forum entry program for direct file use', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /<script src="forum\.js\?v=[^"]+"><\/script>/);
+  assert.ok(html.indexOf('forum-chat.js') < html.indexOf('forum.js'), 'forum chat must load before forum UI');
+});
+
 test('legacy forum data migrates to scoped forums without losing records', () => {
   const legacy = ForumCore.initial();
   delete legacy.activeBoardId;
@@ -71,6 +77,45 @@ test('board mode, displayName, theme, and aiInstruction migrate and persist prop
   assert.equal(validated.boards[0].displayName, '校園論壇');
   assert.equal(validated.boards[0].theme.primary, '#123456');
   assert.equal(validated.boards[0].aiInstruction, '請扮演學生發言');
+});
+
+test('AI throttle defaults to standard and persists with the local lore digest', () => {
+  const initial = ForumCore.initial();
+  assert.equal(initial.aiThrottleMode, 'standard');
+  assert.equal(initial.aiThrottleModel, 'deepseek-v4-flash');
+  initial.aiThrottleMode = 'eco';
+  initial.boards[0].loreDigest = { text: '精簡世界資料', updatedAt: 123 };
+  const validated = ForumCore.validate(initial);
+  const portable = ForumCore.portable(validated);
+  assert.equal(validated.aiThrottleMode, 'eco');
+  assert.equal(validated.boards[0].loreDigest.text, '精簡世界資料');
+  assert.equal(portable.aiThrottleMode, 'eco');
+  assert.equal(portable.aiThrottleModel, 'deepseek-v4-flash');
+  assert.equal(portable.boards[0].loreDigest.updatedAt, 123);
+  initial.aiThrottleMode = 'invalid';
+  assert.equal(ForumCore.validate(initial).aiThrottleMode, 'standard');
+});
+
+test('standard and eco modes can automatically use the cheaper official DeepSeek model', () => {
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  assert.match(forum, /deepseek-v4-flash/);
+  assert.match(forum, /ff-ai-throttle-model/);
+  assert.match(forum, /isOfficialDeepSeek/);
+  assert.match(forum, /aiThrottleMode\|\|'standard'\)!==['"]full['"]/);
+  assert.doesNotMatch(forum, /model:'deepseek-chat'/);
+});
+
+test('AI throttle uses compact lore, shorter history and mode-aware response length', () => {
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const chat = fs.readFileSync(path.join(__dirname, '..', 'forum-chat.js'), 'utf8');
+  assert.match(forum, /function buildLoreDigest/);
+  assert.match(forum, /function lengthPolicy/);
+  assert.match(forum, /約 60%/);
+  assert.match(forum, /約 80%/);
+  assert.match(forum, /buildLoreDigest\(b\.id\)/);
+  assert.match(forum, /throttle!==['"]full['"]/);
+  assert.match(chat, /historyLimit=throttle===['"]eco['"]\?8/);
+  assert.match(chat, /約 80% 回覆應簡短自然/);
 });
 
 test('board subset extraction isolates single board data for deletion backup', () => {
@@ -406,4 +451,11 @@ test('AI requests queue up to ten jobs with status, cancellation, retry and resu
   assert.match(chat, /'私訊 AI 回覆'/);
   assert.doesNotMatch(chat, /if\(h\.busy\(\)\)throw new Error\('正在生成回覆/);
   assert.match(styles, /\.ff-ai-queue-item\.is-running/);
+});
+
+test('search drawer is not trapped by a transformed page animation', () => {
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(styles, /#forum-root \.ff-main\{animation:ff-view-shift \.14s ease-out\}/);
+  assert.match(styles, /@keyframes ff-view-shift\{from\{opacity:\.72\}to\{opacity:1\}\}/);
+  assert.doesNotMatch(styles, /#forum-root \.ff-main\{animation:ff-view-shift[^}]*both/);
 });
