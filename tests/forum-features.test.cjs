@@ -354,7 +354,7 @@ test('mobile orientation follows the operating system and back exits only from c
   const manifest = fs.readFileSync(path.join(__dirname, '..', 'manifest.webmanifest'), 'utf8');
   const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
   assert.doesNotMatch(manifest, /"orientation"\s*:/);
-  assert.match(app, /window\.addEventListener\('pageshow',ensureBackGuard\)/);
+  assert.match(app, /window\.addEventListener\('pageshow',\(\)=>ensureBackGuard\(\)\)/);
   assert.match(app, /active.*visualNovelPlayerModal/s);
   assert.match(app, /document\.body\.classList\.contains\('forum-open'\)/);
   assert.match(app, /querySelector\('\.tab-content\.active'\)\?\.id!=='tab-cards'/);
@@ -366,4 +366,13 @@ test('chat avatars load immediately and local refresh never animates from the to
   assert.match(chat, /replace\('loading="lazy"','loading="eager"'\)/);
   assert.match(chat, /log\.style\.scrollBehavior='auto';log\.scrollTop=log\.scrollHeight/);
   assert.match(chat, /next\.style\.scrollBehavior='auto';next\.scrollTop=oldTop/);
+});
+
+test('each mobile app launch creates a real same-document back guard', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /const appBackSessionId = Date\.now\(\)\.toString\(36\)/);
+  assert.match(app, /ensureBackGuard\(true\)/);
+  assert.match(app, /baseUrl\+'#oc-app'/);
+  assert.match(app, /history\.pushState\(\{ocGuard:true,sessionId:appBackSessionId\},'',guardUrl\)/);
+  assert.match(app, /visibilitychange/);
 });
