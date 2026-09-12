@@ -69,6 +69,24 @@
 .oc-cloud-info { overflow-wrap: anywhere; }
 .oc-cloud-account { display:flex;align-items:center;justify-content:space-between;gap:12px; }
 .oc-cloud-account .oc-cloud-info { min-width:0; }
+.oc-cloud-manual,.oc-cloud-online,.oc-cloud-login { border:1px solid var(--cloud-border);border-radius:18px;padding:20px;background:color-mix(in srgb,var(--cloud-raised) 55%,var(--cloud-surface));margin-bottom:18px; }
+.oc-cloud-section-heading { display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:14px; }
+.oc-cloud-section-heading h3 { margin:2px 0 0; }
+.oc-cloud-section-heading > p { max-width:420px;margin:0;color:var(--cloud-muted);font-size:13px;text-align:right; }
+.oc-cloud-section-heading small,.oc-cloud-online .oc-cloud-account small { color:var(--cloud-accent);font-size:10px;letter-spacing:.13em;font-weight:700; }
+.oc-cloud-manual-actions { display:grid;grid-template-columns:1.15fr 1fr 1fr 1.35fr;gap:10px; }
+.oc-cloud-manual-actions button { min-height:54px; }
+.oc-cloud-manual-actions [data-cloud="export-complete"],.oc-cloud-manual-actions [data-cloud="import-auto"] { border-color:var(--cloud-accent); }
+.oc-cloud-login form { margin-bottom:10px; }
+.oc-cloud-backup-times { display:grid;grid-template-columns:minmax(210px,.85fr) minmax(0,1.5fr);gap:12px;margin:16px 0 20px; }
+.oc-cloud-time-summary,.oc-cloud-time-list article { border:1px solid var(--cloud-border);border-radius:14px;background:var(--cloud-raised);padding:14px 16px; }
+.oc-cloud-time-summary { display:flex;flex-direction:column;justify-content:center;gap:3px; }
+.oc-cloud-time-summary > span,.oc-cloud-time-list article > span { color:var(--cloud-muted);font-size:12px;font-weight:700;letter-spacing:.04em; }
+.oc-cloud-time-summary strong { color:var(--cloud-accent);font-size:17px; }
+.oc-cloud-time-summary small,.oc-cloud-time-list small { color:var(--cloud-muted);font-size:11px; }
+.oc-cloud-time-list { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px; }
+.oc-cloud-time-list article { display:grid;gap:3px;min-width:0; }
+.oc-cloud-time-list time { color:var(--cloud-text);font-size:14px;font-weight:700;overflow-wrap:anywhere; }
 .oc-cloud-scopes { align-items:center; }
 .oc-cloud-scopes label { display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer; }
 .oc-cloud-scopes input[type="checkbox"] { width:20px;min-height:20px;height:20px;flex:0 0 20px;accent-color:var(--cloud-action); }
@@ -108,4 +126,12 @@
   .oc-cloud-main-actions { grid-template-columns:1fr 1fr;gap:8px; }
   .oc-cloud-main-actions button { min-height:56px;font-size:16px;padding-inline:8px; }
   .oc-cloud-main-actions [data-cloud="restore"] { min-height:48px;font-size:14px; }
+  .oc-cloud-backup-times { grid-template-columns:1fr; }
+  .oc-cloud-time-list { grid-template-columns:1fr 1fr;gap:8px; }
+  .oc-cloud-time-summary,.oc-cloud-time-list article { padding:12px; }
+  .oc-cloud-manual,.oc-cloud-online,.oc-cloud-login { padding:14px;margin-bottom:12px; }
+  .oc-cloud-section-heading { display:block; }
+  .oc-cloud-section-heading > p { text-align:left;margin-top:4px; }
+  .oc-cloud-manual-actions { grid-template-columns:1fr 1fr; }
+  .oc-cloud-manual-actions button { min-height:50px;padding:8px; }
 }
