@@ -14,6 +14,7 @@ let collapsedBooks = {};
 let globalTags = new Set();
 let articleTags = new Set();
 let visualNovelTemplates = [];
+let customPresetAvatars = [];
 
 let deepseekSettings = {
   apiKey: "",
@@ -23,6 +24,7 @@ let deepseekSettings = {
 
 let currentTheme = 'dark';
 let currentRelViewMode = 'matrix';
+let appTabHistory = [];
 
 function escapeHtml(str) {
   return String(str || "")
@@ -69,6 +71,9 @@ let visualNovelSuppressContinueClick = false;
 let visualNovelPointerDownHandled = false;
 let visualNovelAutoSpeed = 1.5;
 let visualNovelFontSize = 1.05;
+let visualNovelScriptEditMode = false;
+let pendingVnSpeakerEdit = null;
+let lastVnAvatarTap = { index:-1, at:0 };
 const editorModalSnapshots = { documentModal:null, visualNovelEditorModal:null };
 
 // 初始化
@@ -128,6 +133,7 @@ function loadStateFromLocalStorage() {
 
   // Ensure relationship migration: legacy relationships default to isMainline: true
   characters.forEach(c => {
+    if (!Number.isFinite(Number(c.createdAt))) c.createdAt = 0;
     if (Array.isArray(c.relationships)) {
       c.relationships.forEach(r => {
         if (r.isMainline === undefined) r.isMainline = true;
@@ -192,6 +198,7 @@ function loadStateFromLocalStorage() {
 
   const savedVnTemplates = localStorage.getItem("oc_visual_novel_templates");
   if (savedVnTemplates) { try { visualNovelTemplates = JSON.parse(savedVnTemplates) || []; } catch (e) { visualNovelTemplates = []; } }
+  try { customPresetAvatars=JSON.parse(localStorage.getItem('oc_custom_preset_avatars')||'[]')||[]; } catch(e){ customPresetAvatars=[]; }
 
   const savedTargets = localStorage.getItem("oc_perspective_targets");
   if (savedTargets) { try { perspectiveTargets = JSON.parse(savedTargets); } catch (e) {} }
@@ -222,6 +229,7 @@ function saveStateToLocalStorage() {
   localStorage.setItem("oc_documents", JSON.stringify(documents));
   localStorage.setItem("oc_collapsed_books", JSON.stringify(collapsedBooks));
   localStorage.setItem("oc_visual_novel_templates", JSON.stringify(visualNovelTemplates));
+  localStorage.setItem('oc_custom_preset_avatars',JSON.stringify(customPresetAvatars));
   localStorage.setItem("oc_perspective_targets", JSON.stringify(perspectiveTargets));
   localStorage.setItem("oc_deepseek_settings", JSON.stringify(deepseekSettings));
 }
@@ -307,6 +315,8 @@ function syncGlobalTags() {
   const docTagSelect = document.getElementById("docTagFilter");
   const articleTagSuggestions = document.getElementById("articleTagSuggestions");
 
+  const previousFilterTag = filterSelect?.value || "";
+  const previousDocTag = docTagSelect?.value || "";
   if (filterSelect) filterSelect.innerHTML = `<option value="">全部標籤</option>`;
   if (modalSelect) modalSelect.innerHTML = `<option value="">+ 下拉選擇已建立標籤 / 陣營</option>`;
   if (docTagSelect) docTagSelect.innerHTML = `<option value="">全部標籤</option>`;
@@ -318,6 +328,8 @@ function syncGlobalTags() {
   articleTags.forEach(tag => {
     if (docTagSelect) docTagSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
   });
+  if (filterSelect && [...filterSelect.options].some(option => option.value === previousFilterTag)) filterSelect.value = previousFilterTag;
+  if (docTagSelect && [...docTagSelect.options].some(option => option.value === previousDocTag)) docTagSelect.value = previousDocTag;
   if (articleTagSuggestions) articleTagSuggestions.innerHTML = [...articleTags].map(tag => `<option value="${tag}"></option>`).join('');
 }
 
@@ -353,7 +365,9 @@ function updateBadges() {
   document.getElementById("hiddenCharBadge").innerText = hiddenCount;
 }
 
-function switchTab(tabId) {
+function switchTab(tabId, fromBack = false) {
+  const previous=document.querySelector('.tab-content.active')?.id;
+  if(!fromBack&&previous&&previous!==tabId)appTabHistory.push(previous);
   document.querySelectorAll(".nav-tab").forEach(tab => tab.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(content => content.classList.remove("active"));
 
@@ -399,7 +413,7 @@ function renderCharacterCards() {
     
     const matchTag = !selectedTag || (c.tags && c.tags.includes(selectedTag));
     return matchSearch && matchTag;
-  });
+  }).sort((a,b)=>{const direction=document.getElementById('characterSort')?.value==='old'?1:-1;return direction*((Number(a.createdAt)||0)-(Number(b.createdAt)||0));});
 
   activeGrid.innerHTML = filteredActive.length ? filteredActive.map(c => createCharacterCardHtml(c)).join('') : 
     `<div class="empty-state"><p>沒有角色。點擊「新建角色」建立新卡片！</p></div>`;
@@ -968,7 +982,7 @@ function openWizGalleryModal() {
 function renderWizTagChips() {
   const container = document.getElementById("wizExistingTagChips");
   if (!container) return;
-  const chipNames = [...new Set([...(paros || []).map(p => p.name), ...(factions || []).map(f => f.name)])].filter(Boolean);
+  const chipNames = [...new Set([...(paros || []).map(p => p.name), ...(factions || []).flatMap(f => [f.name,...(f.subTags||[]).map(sub=>sub.name)])])].filter(Boolean);
   if (!chipNames.length) {
     container.innerHTML = `<span style="font-size:11px; color:var(--text-muted);">尚無現有世界觀或陣營</span>`;
     return;
@@ -1073,6 +1087,7 @@ function finishWizard() {
 
   const charData = {
     id: `char_${Date.now()}`,
+    createdAt: Date.now(),
     name: name,
     englishName: document.getElementById("wizEnglishName").value.trim(),
     avatar: document.getElementById("wizAvatarUrl").value.trim() || PRESET_AVATARS[0].url,
@@ -1101,7 +1116,7 @@ function finishWizard() {
   saveStateToLocalStorage();
   syncGlobalTags();
   renderAllViews();
-  closeModal("newCharWizardModal");
+  closeModal("newCharWizardModal", true);
   switchTab("tab-cards");
   alert(`人設卡「${name}」建立完成！✨`);
 }
@@ -1192,18 +1207,21 @@ function saveCharacterForm() {
   saveStateToLocalStorage();
   syncGlobalTags();
   renderAllViews();
-  closeModal('characterModal');
+  closeModal('characterModal', true);
 }
 
 function openAvatarGalleryModal() {
   const galleryGrid = document.getElementById("avatarGalleryGrid");
-  galleryGrid.innerHTML = PRESET_AVATARS.map(avatar => `
+  const allAvatars=[...PRESET_AVATARS,...customPresetAvatars];
+  const title=document.getElementById('avatarGalleryTitle');if(title)title.textContent=`選擇預設頭像 (${allAvatars.length} 張)`;
+  galleryGrid.innerHTML = allAvatars.map(avatar => `
     <div class="avatar-thumb-item" onclick="selectAvatarFromGallery('${avatar.url}')">
       <img src="${avatar.url}" alt="${avatar.name}" title="${avatar.name}">
     </div>
   `).join('');
   document.getElementById("avatarGalleryModal").classList.add("active");
 }
+function addCustomPresetAvatar(){const input=document.getElementById('customPresetAvatarUrl'),url=input.value.trim();if(!/^https?:\/\//i.test(url)){alert('請輸入有效的 http(s) 圖片網址。');return;}if(!customPresetAvatars.some(item=>item.url===url))customPresetAvatars.push({name:`自訂頭像 ${customPresetAvatars.length+1}`,url});input.value='';saveStateToLocalStorage();openAvatarGalleryModal();}
 
 function selectAvatarFromGallery(url) {
   document.getElementById("charAvatarUrl").value = url;
@@ -1387,9 +1405,7 @@ function renderCallNameMatrix() {
                 ${mainA ? '' : '<span class="badge" style="background:#6b7280; color:#ffffff; font-size:10px; margin-left:6px; padding:1px 6px; border-radius:4px;">番外</span>'}
               </div>
             </div>
-            <button class="btn btn-xs btn-outline" onclick="openRelationshipModal('${currentSubject.id}', '${target.name}', '${relA.callName !== '—' ? relA.callName : ''}', '${relA.opinion !== '（尚無記載）' ? relA.opinion : ''}', ${mainA})">
-              <i class="fa-solid fa-pen"></i> 編輯
-            </button>
+            <div class="rel-card-actions"><button class="btn btn-xs btn-outline" onclick="openRelationshipModal('${currentSubject.id}', '${target.name}', '${relA.callName !== '—' ? relA.callName : ''}', '${relA.opinion !== '（尚無記載）' ? relA.opinion : ''}', ${mainA})"><i class="fa-solid fa-pen"></i> 編輯</button><button class="btn btn-xs btn-danger" onclick="removeCallNameTarget('${currentSubject.id}', '${target.name}')" title="從稱呼表移除"><i class="fa-solid fa-user-minus"></i><span>移除</span></button></div>
           </div>
           <div class="rel-pair-body" style="font-size:0.88rem; line-height:1.6;">
             <div class="rel-muted-label" style="margin-bottom:4px; font-size:0.8rem;">${currentSubject.name} 對 ${target.name} 的稱呼與印象：</div>
@@ -1797,6 +1813,7 @@ function renderRankingModule() {
 
   if (!currentRankingSubjectId) currentRankingSubjectId = rankings[0].id;
   const currentRanking = rankings.find(r => r.id === currentRankingSubjectId) || rankings[0];
+  const displayRanks=(currentRanking.items||[]).map((item,index)=>index>0&&currentRanking.items[index-1]?.operator==='='?index:index+1);
 
   bar.innerHTML = rankings.map(r => `
     <button class="btn btn-pill ${r.id === currentRanking.id ? 'active' : ''}" onclick="switchRankingSubject('${r.id}')">
@@ -1822,8 +1839,9 @@ function renderRankingModule() {
 
         return `
           ${cutoff ? `<div class="cutoff-divider"><i class="fa-solid fa-bookmark"></i> 切點等級：${cutoff.label}（從 ${char.name} 開始）</div>` : ''}
-          <div class="ranking-item-row" draggable="true" ondragstart="handleRankingDragStart(event, ${idx})" ondragover="handleRankingDragOver(event, ${idx})" ondrop="handleRankingDrop(event, ${idx}, '${currentRanking.id}')" ondragend="handleRankingDragEnd(event)" style="cursor:grab;">
-            <span style="font-weight:700; color:var(--accent-gold); width:24px;">#${idx + 1}</span>
+          <div class="ranking-item-row" data-ranking-index="${idx}" data-ranking-id="${currentRanking.id}" draggable="true" ondragstart="handleRankingDragStart(event, ${idx})" ondragover="handleRankingDragOver(event, ${idx})" ondrop="handleRankingDrop(event, ${idx}, '${currentRanking.id}')" ondragend="handleRankingDragEnd(event)" style="cursor:grab;">
+            <button type="button" class="doc-drag-handle" aria-label="拖曳調整排名" onpointerdown="beginRankingPointerDrag(event,${idx},'${currentRanking.id}')"><i class="fa-solid fa-grip-vertical"></i></button>
+            <span class="ranking-number">#${displayRanks[idx]}</span>
             <img src="${char.avatar}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
             <strong style="flex:1;">${char.name}</strong>
 
@@ -1862,6 +1880,8 @@ function handleRankingDragStart(e, idx) {
 function handleRankingDragOver(e, idx) {
   e.preventDefault();
   e.dataTransfer.dropEffect = "move";
+  document.querySelectorAll('.ranking-item-row.drag-target').forEach(row=>row.classList.remove('drag-target'));
+  e.currentTarget.classList.add('drag-target');
 }
 
 function handleRankingDrop(e, targetIdx, rankId) {
@@ -1881,7 +1901,14 @@ function handleRankingDrop(e, targetIdx, rankId) {
 
 function handleRankingDragEnd(e) {
   draggedRankingIdx = null;
-  if (e.currentTarget) e.currentTarget.classList.remove("dragging");
+  document.querySelectorAll('.ranking-item-row').forEach(row=>row.classList.remove('dragging','drag-target'));
+}
+
+function beginRankingPointerDrag(event,sourceIdx,rankId){
+  if(event.pointerType==='mouse'&&event.button!==0)return;const handle=event.currentTarget,row=handle.closest('.ranking-item-row');handle.setPointerCapture?.(event.pointerId);row?.classList.add('dragging');
+  const move=moveEvent=>{const target=document.elementFromPoint(moveEvent.clientX,moveEvent.clientY)?.closest('.ranking-item-row');document.querySelectorAll('.ranking-item-row.drag-target').forEach(item=>item.classList.remove('drag-target'));if(target)target.classList.add('drag-target');};
+  const finish=finishEvent=>{const target=document.elementFromPoint(finishEvent.clientX,finishEvent.clientY)?.closest('.ranking-item-row'),targetIdx=Number(target?.dataset.rankingIndex);document.querySelectorAll('.ranking-item-row').forEach(item=>item.classList.remove('dragging','drag-target'));handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',finish);handle.removeEventListener('pointercancel',finish);if(Number.isFinite(targetIdx)&&targetIdx!==sourceIdx){draggedRankingIdx=sourceIdx;handleRankingDrop({preventDefault(){},stopPropagation(){}},targetIdx,rankId);}};
+  handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish);event.preventDefault();
 }
 
 function switchRankingSubject(id) { currentRankingSubjectId = id; renderRankingModule(); }
@@ -2890,7 +2917,7 @@ function getDefaultVisualNovelSettings(doc) {
     primaryColor: firstCharacter?.themeColor?.primary || book?.iconColor || "#d97706",
     secondaryColor: firstCharacter?.themeColor?.secondary || "#7c3aed",
     themeMode: "dark", backgroundColor: "#17130f", textColor: "#fffaf0",
-    narratorBorderColor: "#b8aa98", narratorTextColor: "#fffaf0", globalBgm: "", bgmVolume: 0.7, typewriterSoundVolume: 0.4,
+    narratorBorderColor: "#b8aa98", narratorTextColor: "#fffaf0", globalBgm: "", bgmVolume: 0.7, typewriterSoundVolume: 0.6,
     useCharacterColors: true, typewriterEnabled: true, typewriterSound: false
   };
 }
@@ -2981,6 +3008,16 @@ function openVisualNovelEditor(docId) {
   document.getElementById("visualNovelEditorModal").classList.add("active");
   captureEditorModalSnapshot("visualNovelEditorModal");
 }
+function openVisualNovelCharacterProfiles(){
+  const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value);if(!doc)return;document.getElementById('vnCharacterProfilesModal')?.remove();const profiles=doc.visualNovel?.characterProfiles||[];
+  const modal=document.createElement('div');modal.id='vnCharacterProfilesModal';modal.className='modal-backdrop active vn-character-profiles-backdrop';modal.innerHTML=`<div class="modal-box modal-md" onclick="event.stopPropagation()"><div class="modal-header"><h3>人物頭像／名稱自定義</h3><button class="close-btn" onclick="document.getElementById('vnCharacterProfilesModal').remove()">×</button></div><div class="modal-body"><div id="vnCharacterProfileRows"></div><div class="vn-profile-add-row"><select id="vnProfileCharacterPicker"></select><button class="btn btn-outline" onclick="addVisualNovelCharacterProfile()"><i class="fa-solid fa-plus"></i> 加入本文角色</button></div><label class="form-group">整體補充指示<textarea id="vnCharacterProfileNotes" rows="4" placeholder="例如：本文採某角色第一人稱；『我』對應某角色。">${escapeHtml(doc.visualNovel?.characterProfileNotes||'')}</textarea></label></div><div class="modal-footer"><button class="btn btn-outline" onclick="document.getElementById('vnCharacterProfilesModal').remove()">取消</button><button class="btn btn-primary" onclick="saveVisualNovelCharacterProfiles()">保存設定</button></div></div>`;document.body.appendChild(modal);renderVisualNovelCharacterProfiles(profiles);
+}
+function renderVisualNovelCharacterProfiles(profiles){const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value),rows=document.getElementById('vnCharacterProfileRows');rows.dataset.profiles=JSON.stringify(profiles);rows.innerHTML=profiles.map((profile,index)=>{const char=characters.find(item=>item.id===profile.charId);return `<div class="vn-character-profile-row"><img src="${escapeHtml(profile.avatar||char?.avatar||DEFAULT_VN_AVATAR)}" onclick="chooseVisualNovelProfileAvatar(${index})" title="點擊從預設頭像選擇"><div><strong>${escapeHtml(char?.name||'角色')}</strong><input data-key="displayName" data-index="${index}" value="${escapeHtml(profile.displayName||char?.name||'')}" placeholder="小說中的顯示名稱"><input data-key="avatar" data-index="${index}" value="${escapeHtml(profile.avatar||char?.avatar||'')}" placeholder="顯示頭像網址"><input data-key="aliases" data-index="${index}" value="${escapeHtml(profile.aliases||'')}" placeholder="別名／稱呼，以逗號分隔"></div><button class="btn btn-xs btn-danger" onclick="removeVisualNovelCharacterProfile(${index})">×</button></div>`}).join('')||'<p class="empty-state">尚未加入角色。請從下方選單加入。</p>';const picker=document.getElementById('vnProfileCharacterPicker');if(picker){const available=getDocumentPossibleCharacters(doc).filter(char=>!profiles.some(item=>item.charId===char.id));picker.innerHTML=available.map(char=>`<option value="${char.id}">${escapeHtml(char.name)}</option>`).join('');picker.disabled=!available.length;}}
+function chooseVisualNovelProfileAvatar(index){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]'),choices=[...PRESET_AVATARS,...customPresetAvatars];document.getElementById('vnProfileAvatarPickerModal')?.remove();const modal=document.createElement('div');modal.id='vnProfileAvatarPickerModal';modal.className='modal-backdrop active vn-character-profiles-backdrop';modal.innerHTML=`<div class="modal-box modal-md" onclick="event.stopPropagation()"><div class="modal-header"><h3>選擇顯示頭像</h3><button class="close-btn" onclick="this.closest('.modal-backdrop').remove()">×</button></div><div class="modal-body"><div class="avatar-gallery-grid">${choices.map(item=>`<button class="avatar-thumb-item" onclick="applyVisualNovelProfileAvatar(${index},'${String(item.url).replace(/'/g,"&#39;")}')"><img src="${item.url}" alt="${escapeHtml(item.name)}"></button>`).join('')}</div></div></div>`;document.body.appendChild(modal);}
+function applyVisualNovelProfileAvatar(index,url){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]');profiles[index].avatar=url;document.getElementById('vnProfileAvatarPickerModal')?.remove();renderVisualNovelCharacterProfiles(profiles);}
+function addVisualNovelCharacterProfile(){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]'),char=characters.find(item=>item.id===document.getElementById('vnProfileCharacterPicker').value);if(char&&!profiles.some(item=>item.charId===char.id)){profiles.push({charId:char.id,displayName:char.name,avatar:char.avatar,aliases:''});renderVisualNovelCharacterProfiles(profiles);}}
+function removeVisualNovelCharacterProfile(index){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]');profiles.splice(index,1);renderVisualNovelCharacterProfiles(profiles);}
+function saveVisualNovelCharacterProfiles(){const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value),rows=document.getElementById('vnCharacterProfileRows'),profiles=JSON.parse(rows.dataset.profiles||'[]');rows.querySelectorAll('input[data-index]').forEach(input=>profiles[Number(input.dataset.index)][input.dataset.key]=input.value.trim());const notes=document.getElementById('vnCharacterProfileNotes').value.trim();doc.visualNovel=doc.visualNovel||{};doc.visualNovel.characterProfiles=profiles;doc.visualNovel.characterProfileNotes=notes;document.getElementById('vnAiCustomPrompt').value=[...profiles.flatMap(profile=>{const char=characters.find(item=>item.id===profile.charId);return String(profile.aliases||'').split(/[,，/]/).filter(Boolean).map(alias=>`${alias.trim()} = ${char?.name||profile.displayName}`)}),notes].filter(Boolean).join('\n');saveStateToLocalStorage();document.getElementById('vnCharacterProfilesModal').remove();}
 
 function openVisualNovelEditorFromDocumentModal() {
   const docId = document.getElementById("docId").value;
@@ -2991,6 +3028,9 @@ function openVisualNovelEditorFromDocumentModal() {
 
 function openCurrentVisualNovelEditor() {
   if (!currentVisualNovelDocId) return;
+  const doc=documents.find(item=>item.id===currentVisualNovelDocId);
+  if(doc?.visualNovel&&currentVisualNovelIndex>=0)doc.visualNovel.bookmarkIndex=currentVisualNovelIndex;
+  saveStateToLocalStorage();
   closeVisualNovelPlayer();
   openVisualNovelEditor(currentVisualNovelDocId);
 }
@@ -3028,7 +3068,9 @@ function saveVisualNovelScript(preview = false) {
   if (!scriptText.trim()) { alert("腳本目前是空白的，請先產生或輸入內容。"); return; }
   const aiCustomPrompt = document.getElementById("vnAiCustomPrompt")?.value.trim() || "";
   document.getElementById("vnScriptText").value = scriptText;
-  doc.visualNovel = { version: 1, settings: collectVisualNovelSettings(), scriptText, aiCustomPrompt, updatedAt: new Date().toISOString() };
+  const bookmarkIndex=doc.visualNovel?.bookmarkIndex;
+  doc.visualNovel = { ...(doc.visualNovel || {}), version: 1, settings: collectVisualNovelSettings(), scriptText, aiCustomPrompt, updatedAt: new Date().toISOString() };
+  if(bookmarkIndex!=null)doc.visualNovel.bookmarkIndex=Math.min(bookmarkIndex,Math.max(0,parseVisualNovelScript(scriptText).length-1));
   saveStateToLocalStorage(); renderDocumentsModule(); closeModal("visualNovelEditorModal", true);
   if (preview) startVisualNovel(doc.id);
 }
@@ -3165,24 +3207,28 @@ function inferVisualNovelSpeakerWithContext(segments, index, possibleCharacters)
 }
 
 function buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters) {
-  return segments.map((segment, index) => {
-    if (segment.text === "") return null;
-    const fallback = inferVisualNovelSpeakerWithContext(segments, index, possibleCharacters);
-    const aiSpeaker = normalizeVisualNovelSpeaker(speakerMap.get(segment.id), possibleCharacters);
-    const speaker = !segment.isDialogue ? "旁白" : (aiSpeaker === "路人" && fallback !== "路人" ? fallback : (speakerMap.has(segment.id) ? aiSpeaker : fallback));
-    return `${speaker}｜${segment.text}`;
-  }).filter(line => line !== null).join("\n\n");
+  const rows=[];
+  const resolvedSpeakers=segments.map((segment,index)=>{if(segment.text==='')return '';const fallback=inferVisualNovelSpeakerWithContext(segments,index,possibleCharacters),aiSpeaker=normalizeVisualNovelSpeaker(speakerMap.get(segment.id),possibleCharacters);return !segment.isDialogue?'旁白':(aiSpeaker==='路人'&&fallback!=='路人'?fallback:(speakerMap.has(segment.id)?aiSpeaker:fallback));});
+  segments.forEach((segment, index) => {
+    if(segment.text===""){rows.push(null);return;}
+    const speaker=resolvedSpeakers[index];
+    const previous=rows.at(-1);
+    if(segment.joinPrevious&&speaker==='旁白'&&previous?.speaker==='旁白')previous.text+=`${/\s$/.test(previous.text)||/^\s/.test(segment.text)?'':' '}${segment.text}`;
+    else rows.push({speaker,text:segment.text});
+  });
+  return rows.filter(Boolean).map(row=>`${row.speaker}｜${row.text}`).join("\n\n");
 }
 
 function visualNovelScriptPreservesSegments(script, segments) {
-  const lines = String(script || "").split("\n").filter(line => line.trim() !== "");
-  const contentSegments = segments.filter(segment => segment.text !== "");
-  if (lines.length !== contentSegments.length) return false;
-  return lines.every((rawLine, index) => {
-    const line = rawLine.replace(/^\s*↳\s?/, "");
-    const separatorIndex = line.indexOf("｜");
-    return separatorIndex >= 0 && line.slice(separatorIndex + 1) === contentSegments[index].text;
-  });
+  const normalize=value=>String(value||'').replace(/\s+/gu,'').trim();
+  const scriptText=String(script||'').split('\n').filter(line=>line.trim()).map(line=>{const i=line.indexOf('｜');return i<0?'':line.slice(i+1);}).join('');
+  const source=segments.map((segment,index)=>`${index>0&&!segment.joinPrevious?'\n':''}${segment.text}`).join('');
+  return normalize(scriptText)===normalize(source);
+}
+
+function removeRedundantVisualNovelSpeakerCues(script){
+  const blocks=String(script||'').split(/\n\s*\n/),parsed=blocks.map(block=>{const index=block.indexOf('｜');return index<0?{speaker:'',text:block}:{speaker:block.slice(0,index).trim(),text:block.slice(index+1)};});
+  return blocks.filter((block,index)=>{const row=parsed[index],next=parsed[index+1],cue=row?.speaker==='旁白'&&row.text.trim().match(/^(.{1,30}?)[：:]$/u);return !(cue&&next&&next.text.trim().startsWith('「')&&!['旁白','路人','系統'].includes(next.speaker)&&compactVisualNovelSpeakerName(cue[1])===compactVisualNovelSpeakerName(next.speaker));}).join('\n\n');
 }
 
 function createVisualNovelAiBatches(segments) {
@@ -3218,11 +3264,11 @@ function generateVisualNovelLocally() {
   if (!doc?.content?.trim()) { alert("此章沒有正文內容。"); return; }
   const possibleCharacters = getDocumentPossibleCharacters(doc);
   const segments = createLosslessVisualNovelSegments(doc.content);
-  const script = buildLosslessVisualNovelScript(segments, new Map(), possibleCharacters);
+  let script = buildLosslessVisualNovelScript(segments, new Map(), possibleCharacters);
   if (!visualNovelScriptPreservesSegments(script, segments)) {
     alert("完整性檢查失敗，已停止產生腳本以保護原文。"); return;
   }
-  document.getElementById("vnScriptText").value = script;
+  script=removeRedundantVisualNovelSpeakerCues(script);document.getElementById("vnScriptText").value = script;
 }
 
 async function generateVisualNovelWithAi(forceRecalculate = false) {
@@ -3254,9 +3300,9 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
         if (batch.some(segment => !mapping[segment.id])) fallbackBatchCount++;
       } catch (error) { fallbackBatchCount++; }
     }
-    const script = buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters);
+    let script = buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters);
     if (!visualNovelScriptPreservesSegments(script, segments)) throw new Error("完整性驗證未通過，沒有覆蓋目前腳本");
-    document.getElementById("vnScriptText").value = script;
+    script=removeRedundantVisualNovelSpeakerCues(script);document.getElementById("vnScriptText").value = script;
     if (fallbackBatchCount) alert(`AI 辨識完成。共有 ${fallbackBatchCount} 批存在漏標行，這些行已由本機規則補上說話者；所有原文字句仍完整保留。`);
   } catch (error) { alert(`AI 視覺小說化失敗：${error.message}\n\n已保留原本腳本，您也可以先使用「本機製作基礎腳本」。`); }
   finally { hideToast(); }
@@ -3332,6 +3378,10 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   currentVisualNovelSpeakerAliases = parseVisualNovelSpeakerAliases(doc.visualNovel?.aiCustomPrompt);
   currentVisualNovelEvents = parseVisualNovelScript(doc.visualNovel.scriptText);
   currentVisualNovelIndex = -1;
+  visualNovelScriptEditMode = false;
+  document.getElementById('vnPlayer')?.classList.remove('vn-script-editing');
+  const editModeButton=document.getElementById('vnScriptEditModeBtn'),fullEditorButton=document.getElementById('vnOpenFullScriptEditorBtn');
+  if(editModeButton)editModeButton.innerHTML='<i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式';if(fullEditorButton)fullEditorButton.style.display='none';
   if (!preserveHistory) visualNovelHistory = [];
   const settings = { ...getDefaultVisualNovelSettings(doc), ...(doc.visualNovel.settings || {}) };
   currentVisualNovelSettings = settings;
@@ -3535,7 +3585,7 @@ function playVisualNovelTypeBeep() {
     oscillator.type = "triangle";
     oscillator.frequency.setValueAtTime(820, visualNovelAudioContext.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(540, visualNovelAudioContext.currentTime + 0.04);
-    gain.gain.setValueAtTime(0.03, visualNovelAudioContext.currentTime);
+    gain.gain.setValueAtTime(0.075, visualNovelAudioContext.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.00001, visualNovelAudioContext.currentTime + 0.045);
     oscillator.connect(gain); gain.connect(visualNovelTypeGain);
     oscillator.start(); oscillator.stop(visualNovelAudioContext.currentTime + 0.05);
@@ -3635,6 +3685,8 @@ function executeVisualNovelEvent(event) {
 
   const speakerColor = currentVisualNovelSettings.useCharacterColors !== false && character?.themeColor?.primary
     ? character.themeColor.primary : "var(--vn-primary)";
+  const currentDoc=documents.find(item=>item.id===currentVisualNovelDocId),profile=currentDoc?.visualNovel?.characterProfiles?.find(item=>item.charId===character?.id);
+  if(profile?.displayName)displaySpeaker=profile.displayName;
   const feed = document.getElementById("vnStoryFeed");
   const row = document.createElement("div");
   row.className = `vn-feed-entry ${narrator ? (isSystem ? 'vn-feed-system' : 'vn-feed-narrator') : 'vn-feed-character'}`;
@@ -3646,8 +3698,9 @@ function executeVisualNovelEvent(event) {
   } else {
     const frame = document.createElement("div"); frame.className = "vn-feed-avatar";
     frame.style.setProperty("--speaker-color", speakerColor);
-    const image = document.createElement("img"); image.src = character?.avatar || DEFAULT_VN_AVATAR; image.alt = displaySpeaker;
-    frame.appendChild(image);
+    const image = document.createElement("img"); image.src = profile?.avatar || character?.avatar || DEFAULT_VN_AVATAR; image.alt = displaySpeaker;
+    frame.appendChild(image);frame.title='在「編輯劇本模式」中雙擊／雙點更正說話人';
+    const requestSpeakerEdit=clickEvent=>{clickEvent.stopPropagation();if(visualNovelScriptEditMode)openVnSpeakerEditor(Number(row.dataset.eventIndex),row);};frame.addEventListener('dblclick',requestSpeakerEdit);frame.addEventListener('pointerup',tapEvent=>{if(!visualNovelScriptEditMode||tapEvent.pointerType==='mouse')return;tapEvent.stopPropagation();const index=Number(row.dataset.eventIndex),now=Date.now();if(lastVnAvatarTap.index===index&&now-lastVnAvatarTap.at<480){lastVnAvatarTap={index:-1,at:0};requestSpeakerEdit(tapEvent);}else lastVnAvatarTap={index,at:now};});
     const card = document.createElement("div"); card.className = "vn-feed-dialogue";
     card.style.setProperty("--speaker-color", speakerColor);
     const name = document.createElement("strong"); name.textContent = displaySpeaker;
@@ -3666,6 +3719,25 @@ function executeVisualNovelEvent(event) {
   if (!visualNovelHistory.some(item => item.key === historyKey)) visualNovelHistory.push({ key:historyKey, speaker:narrator ? "旁白" : displaySpeaker, text:event.text });
   return true;
 }
+
+function openVnSpeakerEditor(eventIndex,row){
+  const event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!event||event.type!=='dialogue'||!doc?.visualNovel)return;pendingVnSpeakerEdit={eventIndex,row};
+  const select=document.getElementById('vnSpeakerCharacterSelect'),available=getDocumentPossibleCharacters(doc);select.innerHTML=['旁白','路人',...available.map(char=>char.name)].map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')+'<option value="__custom__">手動輸入其他名稱…</option>';
+  select.value=[...select.options].some(option=>option.value===event.speaker)?event.speaker:'__custom__';document.getElementById('vnSpeakerCustomInput').value=event.speaker||'';document.getElementById('vnSpeakerLinePreview').textContent=event.text;document.getElementById('vnSpeakerEditorModal').classList.add('active');
+}
+function syncVnSpeakerCustomInput(value){if(value!=='__custom__')document.getElementById('vnSpeakerCustomInput').value=value;}
+function closeVnSpeakerEditor(){document.getElementById('vnSpeakerEditorModal').classList.remove('active');pendingVnSpeakerEdit=null;}
+function saveVnSpeakerCorrection(){
+  if(!pendingVnSpeakerEdit)return;const {eventIndex,row}=pendingVnSpeakerEdit,event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId),next=document.getElementById('vnSpeakerCustomInput').value.trim();if(!event||!doc?.visualNovel||!next)return;
+  const oldLine=`${event.speaker}｜${event.text}`,newLine=`${next.trim()}｜${event.text}`;
+  doc.visualNovel.scriptText=doc.visualNovel.scriptText.replace(oldLine,newLine);event.speaker=next.trim();doc.visualNovel.updatedAt=new Date().toISOString();saveStateToLocalStorage();
+  const character=characters.find(char=>normalizedImportName(char.name)===normalizedImportName(next));
+  const image=row?.querySelector('.vn-feed-avatar img'),name=row?.querySelector('.vn-feed-dialogue strong');if(image)image.src=character?.avatar||DEFAULT_VN_AVATAR;if(name)name.textContent=next.trim();
+  closeVnSpeakerEditor();showVnFloatingToast('說話人已更正並保存');
+}
+
+function handleVisualNovelStageClick(event){if(visualNovelScriptEditMode)return;advanceVisualNovel(event);}
+function toggleVisualNovelScriptEditMode(event){event?.stopPropagation?.();visualNovelScriptEditMode=!visualNovelScriptEditMode;visualNovelAutoPlay=false;clearTimeout(visualNovelAutoTimer);document.getElementById('vnAutoPlayBtn')?.classList.remove('active');document.getElementById('vnPlayer').classList.toggle('vn-script-editing',visualNovelScriptEditMode);const button=document.getElementById('vnScriptEditModeBtn'),full=document.getElementById('vnOpenFullScriptEditorBtn');button.innerHTML=visualNovelScriptEditMode?'<i class="fa-solid fa-check"></i> 結束編輯劇本模式':'<i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式';full.style.display=visualNovelScriptEditMode?'flex':'none';showVnFloatingToast(visualNovelScriptEditMode?'編輯劇本模式：雙擊頭像即可校對':'已結束編輯劇本模式');}
 
 function clearVisualNovelBookmark(docId) {
   const doc = documents.find(item => item.id === docId);
@@ -4005,7 +4077,7 @@ function toggleVisualNovelTypeSound(event) {
 }
 
 function closeVisualNovelPlayer() {
-  clearTimeout(visualNovelAutoTimer); stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;
+  clearTimeout(visualNovelAutoTimer); stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
@@ -4431,7 +4503,7 @@ function downloadExportPdf() {
 
 // ========== 12. 線上快照同步 ==========
 function openCloudSyncModal() {
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, collapsedBooks, exportedAt: new Date().toISOString() };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, customPresetAvatars, collapsedBooks, exportedAt: new Date().toISOString() };
   const jsonStr = JSON.stringify(exportData);
   const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
   document.getElementById("cloudSyncStringArea").value = encoded;
@@ -4459,6 +4531,7 @@ function applyCloudSyncString() {
     if (data.books) books = data.books;
     if (data.documents) documents = data.documents;
     if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
+    if (Array.isArray(data.customPresetAvatars)) customPresetAvatars = data.customPresetAvatars;
     if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
 
     saveStateToLocalStorage();
@@ -4483,12 +4556,73 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
+  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `OC_Master_Backup_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function exportWorkshopDataJson() {
+  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'}));
+  a.download = `人設卡工坊-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+function exportForumDataJson() {
+  const data=window.OCForum?.exportState?.();
+  if(!data)throw new Error('論壇資料尚未載入，請重新整理網站後再試。');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download=`同人論壇-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+function detectBackupData(data) {
+  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('檔案不是有效的備份格式。');
+  if(data.format==='oc-cloud-save'){
+    if(data.scope==='forum')return {kind:'forum',label:'論壇',data:data.data};
+    if(data.scope==='workshop')return {kind:'workshop',label:'人設卡工坊',data:data.data};
+  }
+  if(data.format==='oc-fandom-forum'||(Array.isArray(data.boards)&&Array.isArray(data.posts)&&Array.isArray(data.users)))return {kind:'forum',label:'論壇',data};
+  if(data.forum&&(Array.isArray(data.characters)||data.format==='oc-workshop-complete-backup'))return {kind:'complete',label:'完整（人設卡工坊＋論壇）',data};
+  if(Array.isArray(data.characters)||Array.isArray(data.paros)||Array.isArray(data.documents))return {kind:'workshop',label:'人設卡工坊',data};
+  throw new Error('無法辨識這份檔案是論壇或人設卡工坊備份。');
+}
+
+function applyWorkshopBackupData(data) {
+  if (data.characters) characters = data.characters;
+  if (data.paros) paros = data.paros;
+  if (data.factions) factions = data.factions;
+  if (data.rankings) rankings = data.rankings;
+  if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
+  if (data.books) books = data.books;
+  if (data.documents) documents = data.documents;
+  if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
+  if (Array.isArray(data.customPresetAvatars)) customPresetAvatars = data.customPresetAvatars;
+  if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
+  if (data.perspectiveTargets && typeof data.perspectiveTargets === 'object') perspectiveTargets = data.perspectiveTargets;
+  if (data.currentTheme === 'light' || data.currentTheme === 'dark') { currentTheme = data.currentTheme; document.documentElement.setAttribute('data-theme', currentTheme); }
+  if (data.currentRelViewMode) currentRelViewMode = data.currentRelViewMode;
+  if (data.deepseekSettings) deepseekSettings = { ...deepseekSettings, ...data.deepseekSettings };
+  saveStateToLocalStorage();syncGlobalTags();renderAllViews();
+}
+
+async function importBackupFileAutomatically(file) {
+  if(!file)return null;
+  if(file.size>30*1024*1024)throw new Error('請選擇小於 30 MB 的備份檔。');
+  let text='';try{text=await file.text();}catch{}
+  if(!String(text).trim())text=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(reader.error||new Error('無法讀取檔案。'));reader.readAsText(file,'utf-8');});
+  let parsed;try{parsed=JSON.parse(String(text).replace(/^\uFEFF/,'').trim());}catch{throw new Error('JSON 格式無效，或檔案尚未完整下載。');}
+  const detected=detectBackupData(parsed);
+  if(!confirm(`已辨識為「${detected.label}」備份。\n\n確定讀取並取代對應的本機資料嗎？`))return {cancelled:true,label:detected.label};
+  if(detected.kind==='forum')window.OCForum.importState(detected.data);
+  else {applyWorkshopBackupData(detected.data);if(detected.kind==='complete'&&detected.data.forum)window.OCForum.importState(detected.data.forum);}
+  return {kind:detected.kind,label:detected.label};
 }
 
 function openImportOptionsModal() {
@@ -4519,21 +4653,8 @@ function handleImportJson(event) {
         prepareAdvancedImport(data, file.name);
         return;
       }
-      if (data.characters) characters = data.characters;
-      if (data.paros) paros = data.paros;
-      if (data.factions) factions = data.factions;
-      if (data.rankings) rankings = data.rankings;
-      if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
-      if (data.books) books = data.books;
-      if (data.documents) documents = data.documents;
-      if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
-      if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
-      if (data.perspectiveTargets && typeof data.perspectiveTargets === 'object') perspectiveTargets = data.perspectiveTargets;
-      if (data.currentTheme === 'light' || data.currentTheme === 'dark') { currentTheme = data.currentTheme; document.documentElement.setAttribute('data-theme', currentTheme); }
-      if (data.currentRelViewMode) currentRelViewMode = data.currentRelViewMode;
-      if (data.deepseekSettings) deepseekSettings = { ...deepseekSettings, ...data.deepseekSettings };
+      applyWorkshopBackupData(data);
       if (data.forum) window.OCForum?.importState?.(data.forum);
-      saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
       closeModal("importOptionsModal");
       alert("JSON 資料匯入成功！");
     } catch (err) { alert("匯入失敗：" + err.message); }
@@ -4963,11 +5084,12 @@ function closeModal(modalId, force = false) {
 function setupEventListeners() {
   window.onclick = function(event) {
     if (event.target.classList.contains("modal-backdrop")) {
-      const modalId = event.target.id;
-      if (modalId) closeModal(modalId);
-      else event.target.classList.remove("active");
+      // 全站彈窗只能透過明確的關閉、取消或保存按鈕離開，避免手機誤觸背景遺失操作進度。
+      event.preventDefault();
+      event.stopPropagation();
     }
   };
+  try{history.replaceState({ocBase:true},'');history.pushState({ocGuard:true},'');window.addEventListener('popstate',()=>{const active=[...document.querySelectorAll('.modal-backdrop.active')].filter(node=>getComputedStyle(node).display!=='none').at(-1);let handled=false;if(active){handled=true;if(active.id==='visualNovelPlayerModal')closeVisualNovelPlayer();else if(active.id==='documentReaderModal')closeModal('documentReaderModal',true);else if(active.id==='vnSpeakerEditorModal')closeVnSpeakerEditor();else if(active.id==='vnCharacterProfilesModal'||active.id==='vnProfileAvatarPickerModal')active.remove();else closeModal(active.id);}else if(document.body.classList.contains('forum-open')&&window.OCForum?.handleBack){handled=window.OCForum.handleBack();}else if(document.querySelector('.tab-content.active')?.id!=='tab-cards'){handled=true;switchTab(appTabHistory.pop()||'tab-cards',true);}if(handled)history.pushState({ocGuard:true},'');else history.back();});}catch(error){}
 }
 
 function showToast(msg) {
