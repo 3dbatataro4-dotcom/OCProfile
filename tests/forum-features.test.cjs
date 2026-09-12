@@ -11,6 +11,30 @@ test('index loads the forum entry program for direct file use', () => {
   assert.ok(html.indexOf('forum-chat.js') < html.indexOf('forum.js'), 'forum chat must load before forum UI');
 });
 
+test('new character wizard supports AI text conversion with reviewed CP and call-name data', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(html, /AI 文字轉人設/);
+  assert.match(html, /id="aiCharacterSourceText"/);
+  assert.match(app, /async function parseAiCharacterText/);
+  assert.match(app, /existingCharacterNames/);
+  assert.match(app, /wizardAiRelations/);
+  assert.match(app, /perspectiveTargets\[charData\.id\]/);
+  assert.match(app, /cps\.push\(\{id:`cp_/);
+  assert.match(styles, /\.wiz-ai-text-entry/);
+});
+
+test('AI character import creates linked draft placeholders and later promotes matching drafts', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function createAiPlaceholderCharacter/);
+  assert.match(app, /isAiPlaceholder:true/);
+  assert.match(app, /isHidden:true/);
+  assert.match(app, /matchedPlaceholder=characters\.find/);
+  assert.match(app, /characters\[characters\.indexOf\(matchedPlaceholder\)\]=charData/);
+  assert.match(app, /\(!c\.isHidden \|\| c\.isAiPlaceholder\)/);
+});
+
 test('legacy forum data migrates to scoped forums without losing records', () => {
   const legacy = ForumCore.initial();
   delete legacy.activeBoardId;
