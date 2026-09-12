@@ -360,3 +360,10 @@ test('mobile orientation follows the operating system and back exits only from c
   assert.match(app, /querySelector\('\.tab-content\.active'\)\?\.id!=='tab-cards'/);
   assert.match(app, /candidate!==\'tab-forum\'/);
 });
+
+test('chat avatars load immediately and local refresh never animates from the top', () => {
+  const chat = fs.readFileSync(path.join(__dirname, '..', 'forum-chat.js'), 'utf8');
+  assert.match(chat, /replace\('loading="lazy"','loading="eager"'\)/);
+  assert.match(chat, /log\.style\.scrollBehavior='auto';log\.scrollTop=log\.scrollHeight/);
+  assert.match(chat, /next\.style\.scrollBehavior='auto';next\.scrollTop=oldTop/);
+});
