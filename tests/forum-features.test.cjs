@@ -333,3 +333,30 @@ test('mobile comments expose reply controls and AI posts are distributed safely'
   assert.match(script, /function chooseGeneratedSubBoard/);
   assert.match(script, /subBoardId:section\?\.id/);
 });
+
+test('live AI updates preserve the current reading and private-chat state', () => {
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const chat = fs.readFileSync(path.join(__dirname, '..', 'forum-chat.js'), 'utf8');
+  assert.match(forum, /requestAnimationFrame\(\(\)=>\{liveRefreshFrame=0;if\(view==='dm'\)chatUI\.refresh\(\);else renderPreservingReadingState\(\);\}\)/);
+  assert.match(forum, /querySelectorAll\('details'\).*\.open/);
+  assert.match(chat, /pending=chatId;if\(h\.view\(\)==='dm'\)refresh\(\)/);
+  assert.match(chat, /return \{view,afterRender,refresh,action/);
+});
+
+test('group chat can be created directly from characters or forum users', () => {
+  const chat = fs.readFileSync(path.join(__dirname, '..', 'forum-chat.js'), 'utf8');
+  assert.match(chat, /data-contact-kind=/);
+  assert.match(chat, /data-source-id=/);
+  assert.match(chat, /el\.value\|\|addContact\(el\.dataset\.contactKind,el\.dataset\.sourceId\)\.id/);
+});
+
+test('mobile orientation follows the operating system and back exits only from card library', () => {
+  const manifest = fs.readFileSync(path.join(__dirname, '..', 'manifest.webmanifest'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.doesNotMatch(manifest, /"orientation"\s*:/);
+  assert.match(app, /window\.addEventListener\('pageshow',ensureBackGuard\)/);
+  assert.match(app, /active.*visualNovelPlayerModal/s);
+  assert.match(app, /document\.body\.classList\.contains\('forum-open'\)/);
+  assert.match(app, /querySelector\('\.tab-content\.active'\)\?\.id!=='tab-cards'/);
+  assert.match(app, /candidate!==\'tab-forum\'/);
+});
