@@ -9,6 +9,7 @@
   const cloudHeads={workshop:null,forum:null};
   const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
+  if(session&&(!session.user?.id||!session.access_token)){localStorage.removeItem(SESSION);session=null;}
   const labels={chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
   const baselineKey=scope=>`oc_cloud_base_${session.user.id}_${scope}`;
   function workshop(){return {characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,customPresetAvatars,collapsedBooks,perspectiveTargets};}
@@ -23,8 +24,17 @@
     syncGlobalTags();renderAllViews();
   }
   function message(text){modal.querySelector('[role=status]').textContent=text;}
+  function isInvalidRefreshToken(error){const text=String(error?.message||error||'').toLowerCase();return text.includes('invalid refresh token')||text.includes('refresh token not found')||text.includes('refresh_token_not_found');}
+  function clearExpiredCloudLogin(){localStorage.removeItem(SESSION);session=null;preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;if(modal)render();}
   async function request(path,body,auth=true){
-    if(auth){if(!session?.access_token)throw new Error('請先登入雲端帳號。');if(session.expires_at<Date.now()/1000+60){const renewed=await request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token},false);keepSession(renewed);}}
+    if(auth){
+      if(!session?.access_token)throw new Error('請先登入雲端帳號。');
+      if(!Number.isFinite(Number(session.expires_at))||Number(session.expires_at)<Date.now()/1000+60){
+        if(!session.refresh_token){clearExpiredCloudLogin();throw new Error('雲端登入已過期，請重新登入。本機人物與論壇資料均已保留。');}
+        try{const renewed=await request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token},false);keepSession(renewed);}
+        catch(error){if(isInvalidRefreshToken(error)){clearExpiredCloudLogin();throw new Error('雲端登入已過期，請重新登入。本機人物與論壇資料均已保留。');}throw error;}
+      }
+    }
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
     try{
       const hasBody=body!==undefined&&body!==null,serialized=hasBody?JSON.stringify(body):'';
