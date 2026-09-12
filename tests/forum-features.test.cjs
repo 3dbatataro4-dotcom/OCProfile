@@ -79,9 +79,9 @@ test('board mode, displayName, theme, and aiInstruction migrate and persist prop
   assert.equal(validated.boards[0].aiInstruction, '請扮演學生發言');
 });
 
-test('AI throttle defaults to standard and persists with the local lore digest', () => {
+test('AI throttle defaults to eco and persists with the local lore digest', () => {
   const initial = ForumCore.initial();
-  assert.equal(initial.aiThrottleMode, 'standard');
+  assert.equal(initial.aiThrottleMode, 'eco');
   assert.equal(initial.aiThrottleModel, 'deepseek-v4-flash');
   initial.aiThrottleMode = 'eco';
   initial.boards[0].loreDigest = { text: '精簡世界資料', updatedAt: 123 };
@@ -93,7 +93,7 @@ test('AI throttle defaults to standard and persists with the local lore digest',
   assert.equal(portable.aiThrottleModel, 'deepseek-v4-flash');
   assert.equal(portable.boards[0].loreDigest.updatedAt, 123);
   initial.aiThrottleMode = 'invalid';
-  assert.equal(ForumCore.validate(initial).aiThrottleMode, 'standard');
+  assert.equal(ForumCore.validate(initial).aiThrottleMode, 'eco');
 });
 
 test('standard and eco modes can automatically use the cheaper official DeepSeek model', () => {
@@ -101,7 +101,7 @@ test('standard and eco modes can automatically use the cheaper official DeepSeek
   assert.match(forum, /deepseek-v4-flash/);
   assert.match(forum, /ff-ai-throttle-model/);
   assert.match(forum, /isOfficialDeepSeek/);
-  assert.match(forum, /aiThrottleMode\|\|'standard'\)!==['"]full['"]/);
+  assert.match(forum, /aiThrottleMode\|\|'eco'\)!==['"]full['"]/);
   assert.doesNotMatch(forum, /model:'deepseek-chat'/);
 });
 
@@ -116,6 +116,13 @@ test('AI throttle uses compact lore, shorter history and mode-aware response len
   assert.match(forum, /throttle!==['"]full['"]/);
   assert.match(chat, /historyLimit=throttle===['"]eco['"]\?8/);
   assert.match(chat, /約 80% 回覆應簡短自然/);
+});
+
+test('saving forum settings rebuilds lore digest only after worldview changes', () => {
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  assert.match(forum, /previousWorldview=b\.worldview/);
+  assert.match(forum, /!b\.loreDigest\?\.text\|\|b\.worldview!==previousWorldview/);
+  assert.match(forum, /懶人包沒有重複生成/);
 });
 
 test('board subset extraction isolates single board data for deletion backup', () => {
