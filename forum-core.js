@@ -31,7 +31,7 @@
     const boardId=id();
     return { format: 'oc-fandom-forum', version: 1, forumStructureVersion:2, activeBoardId:boardId, boards: [{ id: boardId, name: '同人放映室', englishName: 'Fandom Archive', slogan: 'Every story deserves an echo.', kind:'fandom', mode:'fandom', displayName:'同人放映室', subBoards: [{id:id(),name:'綜合交流',description:'跨作品同好交流'}], theme:{ preset:'system',primary:'', secondary:'', surfaceTint:'' }, terminology:{...FANDOM_TERMS}, aiInstruction:'', linkedParoSourceId:null, description: '給喜歡的角色一封情書，給同好的創作一點回聲。', worldview:'' }], characters: [], worlds: [], factions: [], relationships: [], loreEntries: [],
       accounts: [{ id: official, name: '官方編輯部', owned: true, official: true, gender: '女', color: '#d9ae70', color2: '#9c78c9' }, { id: fan, name: '我的同人帳號', owned: true, official: false, gender: '女', color: '#ad87c5', color2: '#709cac' }], users: [],
-      posts: [], comments: [], tagCatalog: [], favoriteFolders: [], chatContacts: [], chats: [], chatMessages: [], activeUser: fan, profiles: [], activeProfile: 'inherit', aiThrottleMode:'standard', aiThrottleModel:'deepseek-v4-flash',
+      posts: [], comments: [], tagCatalog: [], favoriteFolders: [], chatContacts: [], chats: [], chatMessages: [], activeUser: fan, profiles: [], activeProfile: 'inherit', aiThrottleMode:'eco', aiThrottleConfigured:true, aiThrottleModel:'deepseek-v4-flash',
       generation: { boardId: '', tags: '', type: '隨機', min: 1, max: 3, comments: 3, interval: 15, allowNew: true, enabled: false, nextAt: 0, prompt: '', atmosphere: '允許逆 CP、拆官配、角色爭議與對家拌嘴；不同用戶有各自立場。' } };
   }
   function migrateHierarchy(data){
@@ -65,7 +65,8 @@
     if(data.tagCatalog===undefined)data.tagCatalog=tags(list(data.posts).flatMap(p=>list(p.tags))).map(name=>({id:id(),name}));
     if(data.loreEntries===undefined)data.loreEntries=[];
     if (data.profiles === undefined) data.profiles = [];
-    data.aiThrottleMode=['eco','standard','full'].includes(data.aiThrottleMode)?data.aiThrottleMode:'standard';
+    if(data.aiThrottleConfigured!==true){data.aiThrottleMode='eco';data.aiThrottleConfigured=true;}
+    else data.aiThrottleMode=['eco','standard','full'].includes(data.aiThrottleMode)?data.aiThrottleMode:'eco';
     data.aiThrottleModel=['deepseek-v4-flash','current'].includes(data.aiThrottleModel)?data.aiThrottleModel:'deepseek-v4-flash';
     if(!data.boards.length)data.boards.push({id:id(),name:'綜合交流',description:'跨作品同好交流'});
     for(const [index,board] of data.boards.entries()){
@@ -119,7 +120,7 @@
   }
   // User-requested portable API settings include credentials; schedules remain local.
   function portable(state) {
-    return { format: state.format, version: 1, forumStructureVersion:2, activeBoardId:state.activeBoardId, activeUser:state.activeUser, activeProfile:state.activeProfile, aiThrottleMode:state.aiThrottleMode||'standard', aiThrottleModel:state.aiThrottleModel||'deepseek-v4-flash', ...Object.fromEntries(groups.map(k => [k, clone(state[k])])) };
+    return { format: state.format, version: 1, forumStructureVersion:2, activeBoardId:state.activeBoardId, activeUser:state.activeUser, activeProfile:state.activeProfile, aiThrottleMode:state.aiThrottleMode||'eco', aiThrottleConfigured:true, aiThrottleModel:state.aiThrottleModel||'deepseek-v4-flash', ...Object.fromEntries(groups.map(k => [k, clone(state[k])])) };
   }
   function dependencies(data, selected) {
     const chosen = new Set(selected);
