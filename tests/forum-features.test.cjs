@@ -239,7 +239,8 @@ test('C.tags deduplicates tags case-insensitively and removes extra spaces', () 
 test('forum UI keeps the shared live-status helper required by every AI action', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
   assert.match(source, /function\s+note\s*\(message\)/);
-  assert.match(source, /async function job\(task\)[\s\S]*?note\('AI 正在閱讀作品並生成/);
+  assert.match(source, /function job\(task,label='AI 請求'\)/);
+  assert.match(source, /note\('AI 正在處理：'\+item\.label/);
 });
 
 test('AI discussion replies cannot select the comment author as the responder', () => {
@@ -375,4 +376,34 @@ test('each mobile app launch creates a real same-document back guard', () => {
   assert.match(app, /baseUrl\+'#oc-app'/);
   assert.match(app, /history\.pushState\(\{ocGuard:true,sessionId:appBackSessionId\},'',guardUrl\)/);
   assert.match(app, /visibilitychange/);
+});
+
+test('mobile reply drawer stays above navigation and targeted AI replies are resilient', () => {
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(styles, /\.ff-reply-drawer\{z-index:2400/);
+  assert.match(styles, /max-height:calc\(100dvh/);
+  assert.match(styles, /\.ff-reply-drawer-actions\{position:sticky/);
+  assert.match(styles, /\.ff-reply-drawer-row\{display:grid;grid-template-columns:1fr/);
+  assert.match(forum, /targetId&&x&&typeof x\.content==='string'\?\{\.\.\.x,authorId:targetId\}/);
+  assert.match(forum, /raw\.comments\?\.\[0\]\?\.content/);
+  assert.match(forum, /commentPages\.set\(pageKey\(\),Math\.floor\(rootIndex\/15\)\+1\)/);
+  assert.match(forum, /\$\('ff-comment-'\+c\.id\)\?\.scrollIntoView/);
+});
+
+test('AI requests queue up to ten jobs with status, cancellation, retry and result links', () => {
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const chat = fs.readFileSync(path.join(__dirname, '..', 'forum-chat.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(forum, /length>=10\)throw new Error/);
+  assert.match(forum, /status:'queued'/);
+  assert.match(forum, /queueMicrotask\(runNextAIJob\)/);
+  assert.match(forum, /queue-cancel/);
+  assert.match(forum, /queue-stop/);
+  assert.match(forum, /queue-retry/);
+  assert.match(forum, /queue-open-post/);
+  assert.match(forum, /生成程序結束但沒有新增文章/);
+  assert.match(chat, /'私訊 AI 回覆'/);
+  assert.doesNotMatch(chat, /if\(h\.busy\(\)\)throw new Error\('正在生成回覆/);
+  assert.match(styles, /\.ff-ai-queue-item\.is-running/);
 });
