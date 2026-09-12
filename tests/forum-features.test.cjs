@@ -30,9 +30,34 @@ test('AI character import creates linked draft placeholders and later promotes m
   assert.match(app, /function createAiPlaceholderCharacter/);
   assert.match(app, /isAiPlaceholder:true/);
   assert.match(app, /isHidden:true/);
-  assert.match(app, /matchedPlaceholder=characters\.find/);
-  assert.match(app, /characters\[characters\.indexOf\(matchedPlaceholder\)\]=charData/);
+  assert.match(app, /wizardAiMatchedCharacterId/);
+  assert.match(app, /function findExistingCharacterMatch/);
+  assert.match(app, /characters\[characters\.indexOf\(matchedRecord\)\]=charData/);
   assert.match(app, /\(!c\.isHidden \|\| c\.isAiPlaceholder\)/);
+});
+
+test('AI character import safely merges existing character, relationship and CP records', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function mergeUniqueText/);
+  assert.match(app, /function mergeRelationshipRows/);
+  assert.match(app, /matchedExistingName/);
+  assert.match(app, /targetMatchedExistingName/);
+  assert.match(app, /partnerMatchedExistingName/);
+  assert.match(app, /existingCp=normalized\.find/);
+  assert.match(app, /member\.r18=mergeUniqueText/);
+});
+
+test('AI Paro text import previews and merges fields without clearing existing values', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(html, /AI 文字整合到此 Paro/);
+  assert.match(html, /id="aiParoSourceText"/);
+  assert.match(app, /async function parseAiParoText/);
+  assert.match(app, /function applyAiParoImport/);
+  assert.match(app, /characterDirectory/);
+  assert.match(app, /characterNameAliases/);
+  assert.match(app, /character\.paroValues\[paro\.id\]\[field\.id\]=cell\.value/);
+  assert.match(app, /if\(!character\.paroValues\[paro\.id\]\)character\.paroValues\[paro\.id\]=\{\}/);
 });
 
 test('legacy forum data migrates to scoped forums without losing records', () => {
@@ -88,6 +113,16 @@ test('cloud snapshots replace PostgreSQL-invalid Unicode without damaging emoji'
   assert.equal(cloud.data.users[0].name, '完整🌟表情');
   assert.equal(cloud.data.users[0].history[0].note, '截斷字元\uFFFD');
   assert.doesNotMatch(JSON.stringify(cloud), /\\ud[89ab][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})/i);
+});
+
+test('invalid Supabase refresh tokens return to login without clearing local saves', () => {
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
+  assert.match(cloud, /function isInvalidRefreshToken/);
+  assert.match(cloud, /refresh token not found/);
+  assert.match(cloud, /function clearExpiredCloudLogin/);
+  assert.match(cloud, /localStorage\.removeItem\(SESSION\)/);
+  assert.match(cloud, /本機人物與論壇資料均已保留/);
+  assert.doesNotMatch(cloud, /clearExpiredCloudLogin[\s\S]{0,300}localStorage\.clear/);
 });
 
 test('board mode, displayName, theme, and aiInstruction migrate and persist properly', () => {
