@@ -5,7 +5,7 @@
   const e = s => String(s ?? '').replace(/[&<>"']/g, x => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[x]));
   const presets = { deepseek: { name:'DeepSeek', type:'openai', baseUrl:'https://api.deepseek.com', model:'deepseek-chat', models:['deepseek-chat','deepseek-reasoner'] }, openai: { name:'OpenAI 相容', type:'openai', baseUrl:'https://api.openai.com/v1', model:'gpt-5-mini', models:['gpt-5-mini','gpt-4.1-mini','gpt-4.1'] }, gemini: { name:'Gemini', type:'gemini', baseUrl:'https://generativelanguage.googleapis.com/v1beta', model:'gemini-2.5-flash', models:['gemini-2.5-flash','gemini-2.5-pro','gemini-2.5-flash-lite'] } };
   const labels = { chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄', favoriteFolders:'收藏資料夾', tagCatalog:'論壇 Tag', boards:'論壇空間', characters:'人物副本', worlds:'世界觀副本', factions:'陣營副本', relationships:'CP 關係副本', loreEntries:'注意詞條', accounts:'我的帳號', users:'虛擬同好', posts:'貼文／創作', comments:'留言', profiles:'AI 連線設定（含金鑰）' };
-  let state, view = 'feed', currentPost = null, busy = false, controller = null, status = '', pendingImport = null, userListScroll = 0;
+  let state, view = 'feed', currentPost = null, busy = false, controller = null, status = '', pendingImport = null, userListScroll = 0, mobileManageDrawerOpen = false, mobileManageClickTimer = null;
   const selectedUserIds=new Set();
   const forumViewHistory=[];
   let filter = { folder:'', board:'', subBoard:'', tag:'', tags:[], search:'', sort:'new', dateRange:'all' }, feedPage=1, searchDrawerOpen=false, editingUser = null, editingProfile = null, editingSnapshot = null, editingBoard = null, previousTab = 'tab-cards', dmUser = null;
@@ -56,6 +56,9 @@
     : {id:'',name:'同人放映室',englishName:'Fandom Archive',slogan:'Every story deserves an echo.',description:'',worldview:'',subBoards:[{id:'def',name:'綜合交流'}]};
   const subBoardsOf = (board=activeBoard()) => C.list(board?.subBoards).map(x => typeof x==='object'&&x&&x.name ? x : C.section(x));
   const subBoardOf = (board,idOrName) => subBoardsOf(board).find(s=>s.id===idOrName||s.name===idOrName)||subBoardsOf(board)[0]||C.section('綜合交流');
+  const normalizedPostText=value=>String(value||'').toLocaleLowerCase().replace(/[\s\p{P}\p{S}]/gu,'');
+  function generatedPostIsDuplicate(boardId,title,content){const nextTitle=normalizedPostText(title),nextLead=normalizedPostText(content).slice(0,140);return boardPosts(boardId).some(post=>{const oldTitle=normalizedPostText(post.title),oldLead=normalizedPostText(post.content).slice(0,140);return (nextTitle&&oldTitle&&(nextTitle===oldTitle||(Math.min(nextTitle.length,oldTitle.length)>=6&&(nextTitle.includes(oldTitle)||oldTitle.includes(nextTitle)))))||(nextLead.length>=24&&oldLead===nextLead);});}
+  function chooseGeneratedSubBoard(boardId,requested=''){const board=state.boards.find(item=>item.id===boardId)||activeBoard(),sections=subBoardsOf(board);if(!sections.length)return null;const counts=new Map(sections.map(section=>[section.id,boardPosts(boardId).filter(post=>post.subBoardId===section.id||(!post.subBoardId&&post.subBoard===section.name)).length])),minimum=Math.min(...counts.values()),requestedSection=sections.find(section=>section.id===requested||section.name===requested);if(requestedSection&&(counts.get(requestedSection)||0)<=minimum+1)return requestedSection;const leastUsed=sections.filter(section=>(counts.get(section)||0)===minimum);return leastUsed[Math.floor(Math.random()*leastUsed.length)]||sections[0];}
   const themePresets={
     system:{dark:['#d9ae70','#b87936'],light:['#b87936','#d9ae70']},
     red:{dark:['#f87171','#dc2626'],light:['#dc2626','#ef4444']},
@@ -374,6 +377,7 @@
 
   function render() {
     if (!$('forum-root')) return;
+    const preservedNavScroll=$('forum-root').querySelector('.ff-sidebar')?.scrollLeft||0;
     if (!state) {
       try {
         const stored = localStorage.getItem(KEY);
@@ -438,13 +442,18 @@
       $('forum-root').querySelectorAll('.ff-user-tile').forEach((tile,index)=>{const u=rows[index];if(!u||u.owned)return;tile.insertAdjacentHTML('afterbegin',`<label class="ff-user-select"><input type="checkbox" data-user-select="${e(u.id)}" ${selectedUserIds.has(u.id)?'checked':''}> 選取</label>`);});
     }
     if(isWorld){const top=$('forum-root').querySelector('.ff-workspaces');const set=(action,text)=>{const node=top?.querySelector(`[data-action="${action}"]`);if(node)node.textContent=text;};set('nav:feed',terms.home||'世界大廳');set('nav:compose',terms.publish||'發布動態');set('nav:users',terms.manage||'世界管理');}
-    $('forum-root').insertAdjacentHTML('beforeend','<nav class="ff-mobile-nav" aria-label="手機主要導覽">'+[[ 'feed','comments',isWorld?'大廳':'廣場'],['favorites','star','收藏'],['compose','plus','發布'],['dm','comments','私訊'],['users','sliders','管理']].map(([v,icon,t])=>btn('<i class="fa-solid fa-'+icon+'"></i><span>'+t+'</span>',v==='feed'?'plaza':'nav:'+v,(view===v||(v==='feed'&&view==='fan')||(v==='users'&&backend))?'active':'')).join('')+'</nav>'+(isWorld?'': '<div class="ff-plaza-drawer" id="ff-plaza-drawer" hidden><strong>同好廣場</strong>'+btn('全部貼文','plaza-feed')+btn('純同人板塊','plaza-fan')+'</div>'));
+    const manageTabs=tabs.slice(isWorld?3:4);
+    const mobileNavHtml='<nav class="ff-mobile-nav" aria-label="手機主要導覽">'+[[ 'feed','comments',isWorld?'大廳':'廣場'],['favorites','star','收藏'],['compose','plus','發布'],['dm','comments','私訊'],['mobile-manage','sliders','管理']].map(([v,icon,t])=>btn('<i class="fa-solid fa-'+icon+'"></i><span>'+t+'</span>',v==='feed'?'plaza':v==='mobile-manage'?'mobile-manage':'nav:'+v,(view===v||(v==='feed'&&view==='fan')||(v==='mobile-manage'&&backend))?'active':'')).join('')+'</nav>';
+    const plazaDrawerHtml=isWorld?'':'<div class="ff-plaza-drawer" id="ff-plaza-drawer" hidden><strong>同好廣場</strong>'+btn('全部貼文','plaza-feed')+btn('純同人板塊','plaza-fan')+'</div>';
+    const manageDrawerHtml=mobileManageDrawerOpen?`<div class="ff-manage-drawer-backdrop" aria-hidden="true"></div><section class="ff-manage-drawer" role="dialog" aria-modal="true" aria-labelledby="ff-manage-title"><div class="ff-manage-drawer-handle"></div><header><div><small>MANAGEMENT</small><h3 id="ff-manage-title">${e(isWorld?(terms.manage||'世界管理'):'論壇管理')}</h3></div>${btn('×','manage-close','ff-icon')}</header><nav>${manageTabs.map(([k,iconName,title])=>btn(`<i class="fa-solid fa-${iconName}"></i><span>${e(title)}</span>`,'nav:'+k,view===k?'active':'')).join('')}</nav><p>單擊底部「管理」前往同好／居民管理；連點兩下開啟本列表。</p></section>`:'';
+    $('forum-root').insertAdjacentHTML('beforeend',mobileNavHtml+plazaDrawerHtml+manageDrawerHtml);
     if($('ff-forum-switch'))$('ff-forum-switch').value=current.id;
     const plaza=$('forum-root').querySelector('[data-action="plaza"]');plaza?.setAttribute('aria-expanded','false');plaza?.setAttribute('aria-controls','ff-plaza-drawer');
     chatUI.afterRender();
     if(retryError&&!busy)$('forum-root').querySelector('.ff-main').insertAdjacentHTML('afterbegin','<div class="ff-notice ff-retry-notice" role="alert">'+e(retryError)+'<div class="ff-actions">'+btn('重試失敗的生成','retry-ai')+btn('略過','dismiss-retry')+'</div></div>');
     if (view === 'profile') updateModels();
     updateBoardModeFields();
+    const restoredSidebar=$('forum-root').querySelector('.ff-sidebar');if(restoredSidebar)restoredSidebar.scrollLeft=preservedNavScroll;
   }
   function updateBoardModeFields(){
     const mode=$('ff-edit-board-mode'),paro=$('ff-edit-board-linked-paro')?.closest('.ff-field');
@@ -1023,8 +1032,8 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       }
       const g=generationFor(boardId),profile=g.creationProfile?creationProfile(g.creationProfile):undefined;
       const raw=await callAI({task:'這位虛擬用戶剛和使用者互動完，受到啟發後額外發一篇公開貼文。內容可以是感想、抱怨、追更碎念、同人腦洞或想繼續更文的宣言；嚴格遵守目前論壇模式的視角規則。',lore,users:[persona],source:{kind:source.kind,postTitle:source.post?.title||'',postContent:clip(source.post?.content,1200),message:clip(source.text,500),reply:clip(source.reply,500)},recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'這位虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'貼文標題',content:'公開貼文正文',type:'閒聊、感想、抱怨或創作',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'本次受互動啟發發布貼文'}]}},SYSTEM,profile);
-      const r=raw.post;if(!r||r.authorId!==id||typeof r.title!=='string'||!r.title.trim()||typeof r.content!=='string'||!r.content.trim()||stopped)return;
-      const p={id:C.id(),authorId:id,authorSnapshot:authorSnapshot(u,r.displaySuffix),boardId,title:r.title,content:r.content,tags:C.tags(r.tags),charIds:C.list(r.charIds).filter(x=>lore.selectedIds.includes(x)),type:String(r.type||'閒聊'),kind:'post',fan:true,canon:false,starred:false,createdAt:Date.now()};
+      const r=raw.post;if(!r||r.authorId!==id||typeof r.title!=='string'||!r.title.trim()||typeof r.content!=='string'||!r.content.trim()||stopped||generatedPostIsDuplicate(boardId,r.title,r.content))return;
+      const section=chooseGeneratedSubBoard(boardId,r.subBoardId||r.subBoard),p={id:C.id(),authorId:id,authorSnapshot:authorSnapshot(u,r.displaySuffix),boardId,subBoardId:section?.id||'',subBoard:section?.name||'綜合交流',title:r.title,content:r.content,tags:C.tags(r.tags),charIds:C.list(r.charIds).filter(x=>lore.selectedIds.includes(x)),type:String(r.type||'閒聊'),kind:'post',fan:true,canon:false,starred:false,createdAt:Date.now()};
       simulateLikes(p,p);state.posts.push(p);u.history=C.list(u.history);u.history.push({at:p.createdAt,postId:p.id,note:'受互動啟發發表 '+p.type+'：'+p.title});applyMemory(raw,new Set([id]),p);save();refreshLive();
     }catch(err){if(!stopped)note('互動已送出；這次沒有額外觸發公開動態。');}
   }
@@ -1037,12 +1046,13 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       retryTask=()=>makePosts({g,count,index:i});
       note(`正在生成第 ${i+1}／${count} 篇貼文…`);
       if(g.allowNew&&Math.random()<.2){await seedUsers(1);if(stopped)break;}
-      const boardId=g.boardId||activeBoardId(),lore=context(boardId),users=candidates(lore);
+      const boardId=g.boardId||activeBoardId(),lore=context(boardId),users=candidates(lore),sections=subBoardsOf(lore.board);
       const raw=await callAI({task:'由一位現有虛擬用戶在目前論壇發表貼文，可以是創作、角色或劇情討論、企劃、推薦、閒聊或發癲。嚴格參考注意詞條，並嚴格遵守目前論壇模式的視角規則。',type:g.type,tags:C.tags(g.tags),direction:g.prompt,atmosphere:g.atmosphere,lore,users,recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'現有虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'標題',content:'完整文章',type:'創作或閒聊等',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'發表企劃或作品的記錄'}]}},SYSTEM,g.creationProfile?creationProfile(g.creationProfile):undefined);
       const r=raw.post;
       if(!r||!users.some(u=>u.id===r.authorId)||typeof r.title!=='string'||!r.title.trim()||typeof r.content!=='string'||!r.content.trim())throw new Error('模型貼文格式不正確；已完成的其他貼文仍保留。');
+      if(generatedPostIsDuplicate(boardId,r.title,r.content))throw new Error('AI 產生的標題或文章主旨與既有貼文過於相似，本篇未寫入；可重試生成。');
       if(stopped)break;
-      const p={id:C.id(),authorId:r.authorId,authorSnapshot:authorSnapshot(user(r.authorId),r.displaySuffix),title:r.title,content:r.content,type:g.type==='隨機'?String(r.type||'創作'):g.type,tags:C.tags(g.tags).length?C.tags(g.tags):C.tags(r.tags),charIds:C.list(r.charIds).filter(x=>lore.selectedIds.includes(x)),boardId,fan:true,canon:false,starred:false,createdAt:Date.now()};
+      const section=chooseGeneratedSubBoard(boardId,r.subBoardId||r.subBoard);const p={id:C.id(),authorId:r.authorId,authorSnapshot:authorSnapshot(user(r.authorId),r.displaySuffix),title:r.title,content:r.content,type:g.type==='隨機'?String(r.type||'創作'):g.type,tags:C.tags(g.tags).length?C.tags(g.tags):C.tags(r.tags),charIds:C.list(r.charIds).filter(x=>lore.selectedIds.includes(x)),boardId,subBoardId:section?.id||'',subBoard:section?.name||'綜合交流',fan:true,canon:false,starred:false,createdAt:Date.now()};
       simulateLikes(p,p);state.posts.push(p);const u=user(p.authorId);u.history=C.list(u.history);u.history.push({at:p.createdAt,postId:p.id,note:'發表 '+p.type+'：'+p.title});applyMemory(raw,new Set([p.authorId]),p);save();refreshLive();
       if(!stopped)try{await makeComments(p,null,null,g.comments);}catch(err){
         const retryComments=async()=>{try{await makeComments(state.posts.find(x=>x.id===p.id),null,null,g.comments);}catch(nextError){retryTask=retryComments;throw nextError;}if(!stopped&&i+1<count)await makePosts({g,count,index:i+1});};
@@ -1133,6 +1143,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     }
     if(a.startsWith('chat-'))return chatUI.action(a,arg);
     if(a==='plaza'){if(!['feed','fan'].includes(view))return go('feed');const drawer=$('ff-plaza-drawer');drawer.hidden=!drawer.hidden;$('forum-root').querySelector('[data-action="plaza"]').setAttribute('aria-expanded',String(!drawer.hidden));return;}
+    if(a==='manage-close'){mobileManageDrawerOpen=false;return render();}
     if(a==='plaza-feed'||a==='plaza-fan')return go(a==='plaza-feed'?'feed':'fan');
     if(a==='social-close'){$('ff-social-dialog')?.close();return;}
     if(a==='home'){homeUser=arg;return go('home');}
@@ -1233,6 +1244,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       currentPost=p.id;postEdit=null;go('post');note('文章已更新，原有留言、收藏與正史狀態已保留。');return;
     }
     if(a==='nav'){
+      mobileManageDrawerOpen=false;
       if(arg==='forum-settings')editingBoard=activeBoardId();
       if(arg==='forum-new')editingBoard=null;
       const restoreUsers=arg==='users'&&view==='user';go(arg);if(restoreUsers)requestAnimationFrame(()=>window.scrollTo({top:userListScroll,behavior:'instant'}));return;
@@ -1716,7 +1728,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       try { state=C.initial(); assignNameStyles(); save(); } catch(e){}
     }
     $('forum-root').addEventListener('error',event=>{if(event.target.tagName==='IMG')event.target.closest('.ff-avatar')?.classList.add('ff-avatar-failed');},true);
-    $('forum-root').addEventListener('click',event=>{const el=event.target.closest('[data-action]');if(!el)return;Promise.resolve(action(el.dataset.action)).catch(err=>{note(err.message);});});
+    $('forum-root').addEventListener('click',event=>{const el=event.target.closest('[data-action]');if(!el)return;if(el.dataset.action==='mobile-manage'){if(mobileManageClickTimer){clearTimeout(mobileManageClickTimer);mobileManageClickTimer=null;mobileManageDrawerOpen=true;render();}else mobileManageClickTimer=setTimeout(()=>{mobileManageClickTimer=null;Promise.resolve(action('nav:users')).catch(err=>note(err.message));},280);return;}Promise.resolve(action(el.dataset.action)).catch(err=>{note(err.message);});});
     document.addEventListener('click',event=>{
       if(!event.target.isConnected)return;
       const d=$('ff-plaza-drawer');
