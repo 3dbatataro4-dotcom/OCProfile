@@ -781,8 +781,8 @@
     return `<div class="ff-heading"><div><h2>${e(board.name)} · 世界觀資料</h2><p class="ff-heading-note">目前 ${state.boards.length} 個論壇，資料與生成脈絡各自分開。</p></div><div class="ff-actions">${btn('編輯目前論壇','nav:forum-settings')}${btn('＋ 新建世界觀／PARO 論壇','nav:forum-new','ff-primary')}</div></div><div class="ff-notice">選取的工坊資料只會複製到「${e(board.name)}」。後續修改人設卡不會自動影響論壇副本。</div><div class="ff-card"><h3>現有論壇</h3>${state.boards.map(b=>`<p class="ff-forum-row"><span><strong>${e(b.name)}</strong><small>${e(b.englishName||'Fandom Archive')} · ${e(b.kind==='paro'?'世界觀／PARO':'同人論壇')}</small></span>${btn(b.id===board.id?'目前使用中':'切換','board-filter:'+b.id,'ff-small')}${btn('設定','board:'+b.id,'ff-small')}</p>`).join('')}</div><div class="ff-card"><h3>複製工坊資料到目前論壇</h3><h3>人物（已複製 ${scoped('characters').length}）</h3>${checkList('ff-sync-chars',characters,scoped('characters').map(x=>x.sourceId||x.id))}<h3>世界觀／PARO</h3>${checkList('ff-sync-worlds',paros,scoped('worlds').map(x=>x.sourceId||x.id))}<h3>陣營</h3>${checkList('ff-sync-factions',factions,scoped('factions').map(x=>x.sourceId||x.id))}<h3>CP 關係</h3>${checkList('ff-sync-relations',cps.map(x=>({...x,name:x.name||x.title||[x.char1Id,x.char2Id].map(id=>name(characters,id)).join(' × ')})),scoped('relationships').map(x=>x.sourceId||x.id))}<p>${btn('複製／手動同步勾選資料','sync','ff-primary')}</p></div><div class="ff-card"><h3>目前論壇副本</h3>${['characters','worlds','factions','relationships'].map(k=>`<details class="ff-details"><summary>${labels[k]} · ${scoped(k).length}</summary>${scoped(k).map(x=>`<p>${e(x.name||x.title||x.id)} ${btn('編輯副本','snapshot:'+k+':'+x.id,'ff-small')}${btn('移除','remove-snapshot:'+k+':'+x.id,'ff-small ff-danger')}</p>`).join('')||'<p class="ff-muted">尚無資料。</p>'}</details>`).join('')}</div>`;
   }
   function aiView() {
-    const mode=state.aiThrottleMode||'standard';
-    return `<h2>AI 接入設定</h2><div class="ff-notice">預設沿用工坊的 DeepSeek 設定。支援多組 OpenAI 相容 API 及 Gemini 原生 API，模型名稱可自訂。金鑰會保存在此瀏覽器，並包含於論壇備份。備份含敏感資料，請妥善保管。</div><div class="ff-card ff-throttle-card"><h3>AI 節流模式</h3>${field('目前模式',select('ff-ai-throttle-mode',[['eco','省流 · 最少背景與連鎖生成'],['standard','標準 · 精簡脈絡與必要細節（推薦）'],['full','完整 · 傳送完整論壇設定']],mode))}${field('省流／標準模式使用的 DeepSeek 模型',select('ff-ai-throttle-model',[['deepseek-v4-flash','自動使用 V4 Flash（較便宜，推薦）'],['current','沿用目前選擇的模型']],state.aiThrottleModel||'deepseek-v4-flash'))}<div class="ff-throttle-options"><p><strong>省流</strong><span>懶人包＋最多 4 位相關角色；約 90% 短發言，不觸發額外動態。</span></p><p><strong>標準</strong><span>懶人包＋最多 6 位相關角色；約 80% 短發言，降低延伸動態機率。</span></p><p><strong>完整</strong><span>完整人物、世界觀與正史資料；約 60% 短發言。</span></p></div>${btn('保存節流模式','save-throttle-mode','ff-primary')}<p class="ff-muted">明確要求長文、考據或深入分析時，三種模式都會按內容需要展開。網站首次使用默認為「標準」；使用 DeepSeek 時，省流與標準預設採用較便宜的 V4 Flash，完整模式不會自動換模型。</p></div><div class="ff-card"><div class="ff-heading"><div><h3>沿用工坊 AI</h3><p class="ff-muted">DeepSeek · ${e(deepseekSettings.baseUrl)} · ${deepseekSettings.apiKey?'已保存金鑰':'尚未填金鑰'}</p></div>${btn(state.activeProfile==='inherit'?'使用中':'切換使用','profile-use:inherit')}</div>${btn('開啟工坊 AI 設定','existing-ai')}</div>${state.profiles.map(p=>`<div class="ff-card"><div class="ff-heading"><div><h3>${e(p.name)}</h3><p class="ff-muted">${e(p.model)} · ${!!p.apiKey?'已保存金鑰':'需填金鑰'}</p></div><div class="ff-actions">${btn(state.activeProfile===p.id?'使用中':'切換使用','profile-use:'+p.id)}${btn('設定／填入金鑰','profile:'+p.id)}</div></div></div>`).join('')}<div class="ff-actions">${btn('＋ OpenAI 相容 API','new-profile:openai','ff-primary')}${btn('＋ Gemini','new-profile:gemini')}${btn('＋ DeepSeek','new-profile:deepseek')}</div><p class="ff-muted">DeepSeek 舊模型名稱已淘汰，新設定請使用 V4 Flash 或 V4 Pro。預設清單不保證你的帳號擁有全部模型權限。</p>`;
+    const mode=state.aiThrottleMode||'eco';
+    return `<h2>AI 接入設定</h2><div class="ff-notice">預設沿用工坊的 DeepSeek 設定。支援多組 OpenAI 相容 API 及 Gemini 原生 API，模型名稱可自訂。金鑰會保存在此瀏覽器，並包含於論壇備份。備份含敏感資料，請妥善保管。</div><div class="ff-card ff-throttle-card"><h3>AI 節流模式</h3>${field('目前模式',select('ff-ai-throttle-mode',[['eco','省流 · 最少背景與連鎖生成（預設）'],['standard','標準 · 精簡脈絡與必要細節'],['full','完整 · 傳送完整論壇設定']],mode))}${field('省流／標準模式使用的 DeepSeek 模型',select('ff-ai-throttle-model',[['deepseek-v4-flash','自動使用 V4 Flash（較便宜，推薦）'],['current','沿用目前選擇的模型']],state.aiThrottleModel||'deepseek-v4-flash'))}<div class="ff-throttle-options"><p><strong>省流</strong><span>懶人包＋最多 4 位相關角色；約 90% 短發言，不觸發額外動態。</span></p><p><strong>標準</strong><span>懶人包＋最多 6 位相關角色；約 80% 短發言，降低延伸動態機率。</span></p><p><strong>完整</strong><span>完整人物、世界觀與正史資料；約 60% 短發言。</span></p></div>${btn('保存節流模式','save-throttle-mode','ff-primary')}<p class="ff-muted">網站預設為「省流」。明確要求長文、考據或深入分析時仍會按內容需要展開；使用 DeepSeek 時，省流與標準預設採用較便宜的 V4 Flash。</p></div><div class="ff-card"><div class="ff-heading"><div><h3>沿用工坊 AI</h3><p class="ff-muted">DeepSeek · ${e(deepseekSettings.baseUrl)} · ${deepseekSettings.apiKey?'已保存金鑰':'尚未填金鑰'}</p></div>${btn(state.activeProfile==='inherit'?'使用中':'切換使用','profile-use:inherit')}</div>${btn('開啟工坊 AI 設定','existing-ai')}</div>${state.profiles.map(p=>`<div class="ff-card"><div class="ff-heading"><div><h3>${e(p.name)}</h3><p class="ff-muted">${e(p.model)} · ${!!p.apiKey?'已保存金鑰':'需填金鑰'}</p></div><div class="ff-actions">${btn(state.activeProfile===p.id?'使用中':'切換使用','profile-use:'+p.id)}${btn('設定／填入金鑰','profile:'+p.id)}</div></div></div>`).join('')}<div class="ff-actions">${btn('＋ OpenAI 相容 API','new-profile:openai','ff-primary')}${btn('＋ Gemini','new-profile:gemini')}${btn('＋ DeepSeek','new-profile:deepseek')}</div><p class="ff-muted">DeepSeek 舊模型名稱已淘汰，新設定請使用 V4 Flash 或 V4 Pro。預設清單不保證你的帳號擁有全部模型權限。</p>`;
   }
   function snapshotEditor() {
     const row=state[editingSnapshot.key].find(x=>x.id===editingSnapshot.id);
@@ -869,7 +869,7 @@
   }
   async function callAI(payload, system=SYSTEM, customProfile) {
     const sourceProfile=customProfile||profile(),p={...sourceProfile,key:String(sourceProfile.key||sourceProfile.apiKey||'').trim(),baseUrl:String(sourceProfile.baseUrl||'').trim(),model:String(sourceProfile.model||'').trim()};
-    const isOfficialDeepSeek=/^https:\/\/api\.deepseek\.com(?:\/|$)/i.test(p.baseUrl);if(isOfficialDeepSeek&&['deepseek-chat','deepseek-reasoner'].includes(p.model))p.model='deepseek-v4-flash';if((state.aiThrottleMode||'standard')!=='full'&&(state.aiThrottleModel||'deepseek-v4-flash')==='deepseek-v4-flash'&&isOfficialDeepSeek)p.model='deepseek-v4-flash';
+    const isOfficialDeepSeek=/^https:\/\/api\.deepseek\.com(?:\/|$)/i.test(p.baseUrl);if(isOfficialDeepSeek&&['deepseek-chat','deepseek-reasoner'].includes(p.model))p.model='deepseek-v4-flash';if((state.aiThrottleMode||'eco')!=='full'&&(state.aiThrottleModel||'deepseek-v4-flash')==='deepseek-v4-flash'&&isOfficialDeepSeek)p.model='deepseek-v4-flash';
     if(!p.key) throw new Error('尚未找到 API 金鑰。請到「AI 模型」重新保存，或沿用工坊 AI 設定。');
     if(!p.baseUrl||!p.model)throw new Error('AI 設定不完整：請確認 API 網址與模型名稱。');
     let effectiveSystem = system;
@@ -920,12 +920,12 @@
   function lightCharacter(c,max=500){return{id:c.id,name:c.name,englishName:c.englishName||'',gender:c.gender||'',occupation:c.occupation||c.role||'',personality:clip(c.personality||c.description||'',max),appearance:clip(c.appearance||'',Math.floor(max*.55)),notes:clip(c.forumNotes||c.notes||'',Math.floor(max*.55))};}
   function lengthPolicy(explicit='',kind='發言'){
     if(/長文|詳細|深入|完整分析|考據|詳述|不少於|至少.{0,6}(字|段)/i.test(String(explicit||'')))return `使用者已明確要求長篇，這次${kind}可按內容需要完整展開，不套用簡短比例。`;
-    const mode=state.aiThrottleMode||'standard',ratio=mode==='eco'?90:mode==='full'?60:80;
+    const mode=state.aiThrottleMode||'eco',ratio=mode==='eco'?90:mode==='full'?60:80;
     return `本次為${mode==='eco'?'省流':mode==='full'?'完整':'標準'}模式：約 ${ratio}% 的一般${kind}應短而自然（通常 1 至 3 句），其餘只在創作、考據、分析或話題確實需要時寫長文；不要為湊字數重述設定。`;
   }
   function context(boardId,charIds=[]) {
     const pool=state.characters.filter(x=>!boardId||x.boardId===boardId);
-    const throttle=state.aiThrottleMode||'standard',limit=throttle==='eco'?4:6;
+    const throttle=state.aiThrottleMode||'eco',limit=throttle==='eco'?4:6;
     const selected=(charIds.length?state.characters.filter(x=>charIds.includes(x.id)):sample(pool,Math.min(limit,pool.length))).slice(0,throttle==='full'?60:limit);
     const relevant=p=>p.boardId===boardId||!boardId;
     // Older copies may still reference workshop IDs. Resolve those explicitly.
@@ -964,7 +964,7 @@
     const boardId=lore.board?.id||activeBoardId(),all=boardUsers(boardId).filter(x=>!x.owned&&x.id!==excludedAuthorId), target=all.find(x=>x.id===targetId);
     const matches=all.filter(u=>C.list(u.charIds).some(id=>lore.selectedIds.includes(id)));
     const isWorld=lore.board?.mode==='world';
-    const mode=state.aiThrottleMode||'standard',limit=mode==='eco'?4:mode==='full'?9:6;
+    const mode=state.aiThrottleMode||'eco',limit=mode==='eco'?4:mode==='full'?9:6;
     return [...new Map([...(target?[target]:[]),...sample(matches,5),...sample(all,5)].map(u=>[u.id,u])).values()].slice(0,limit).map(u=>({id:u.id,name:u.name,handle:handle(u),signature:u.signature,abstractStyle:!!u.abstractStyle,dynamicName:!!u.dynamicName,dynamicSuffix:u.dynamicSuffix,role:u.role,forumRole:isWorld?(u.forumRoles?.[boardId]||u.role):u.role,personality:u.personality,supports:u.supports,charIds:u.charIds,shortReplies:!!u.shortReplies,memory:clip(u.memory,mode==='eco'?180:360),links:C.list(u.links).slice(-(mode==='eco'?2:5)).map(l=>({userId:l.userId,note:clip(l.note,80)})),recentHistory:C.list(u.history).slice(-(mode==='eco'?1:3)).map(h=>({postId:h.postId,partnerId:h.partnerId,note:clip(h.note,90)}))}));
   }
   function newUser(raw={},owned=false,boardId=activeBoardId()) {
@@ -1039,7 +1039,7 @@
     if(stopped)return;
     const chain=[];let c=state.comments.find(x=>x.id===parentId),seen=new Set();
     while(c&&!seen.has(c.id)){seen.add(c.id);chain.unshift(c);c=state.comments.find(x=>x.id===c.parentId);}
-    const mode=state.aiThrottleMode||'standard',historyLimit=mode==='eco'?3:mode==='full'?6:5;
+    const mode=state.aiThrottleMode||'eco',historyLimit=mode==='eco'?3:mode==='full'?6:5;
     const history=(parentId?chain.slice(-historyLimit):state.comments.filter(x=>x.postId===p.id&&x.kind!=='chapter').slice(-historyLimit));
     const focus=parentId?state.comments.find(x=>x.id===parentId):null;
     const excludedAuthorId=focus?.authorId||(!parentId?p.authorId:'');
@@ -1071,7 +1071,7 @@
   }
   async function maybePublicInspiration(id,source={}) {
     const u=state.users.find(x=>x.id===id&&!x.owned);if(!u||stopped)return;
-    const throttle=state.aiThrottleMode||'standard';if(throttle==='eco')return;const roll=Math.random(),limit=throttle==='standard' ? .16 : .4;if(roll>=limit)return;
+    const throttle=state.aiThrottleMode||'eco';if(throttle==='eco')return;const roll=Math.random(),limit=throttle==='standard' ? .16 : .4;if(roll>=limit)return;
     try{
       const boardId=source.post?.boardId||activeBoardId();
       const lore=context(boardId,C.list(u.charIds)),persona=candidates(lore,id).find(x=>x.id===id);
@@ -1734,20 +1734,20 @@
       const linkedParoSourceId=mode==='world'?(val('ff-edit-board-linked-paro')||null):null;
       const primary=val('ff-edit-board-theme-primary'), secondary=val('ff-edit-board-theme-secondary'),preset=val('ff-edit-board-theme-preset')||'system';
       const aiInstruction=val('ff-edit-board-ai-instruction').trim();
-      const prevParo = b.linkedParoSourceId;
+      const prevParo = b.linkedParoSourceId, previousWorldview=b.worldview;
       const subBoards=readSections(b);if(!subBoards.length)throw new Error('請至少保留一個子論壇版塊。');
       Object.assign(b,{name,kind:mode==='world'?'paro':'fandom',mode,displayName,linkedParoSourceId,subBoards,userTypes:C.tags(val('ff-edit-board-user-types').split(/\n|,/)),userCreationRules:val('ff-edit-board-user-rules').trim(),theme:{preset,primary,secondary,surfaceTint:''},terminology:{home:val('ff-term-home'),feed:val('ff-term-feed'),members:val('ff-term-members'),publish:val('ff-term-publish'),manage:val('ff-term-manage')},aiInstruction,englishName:val('ff-edit-board-english').trim()||'Fandom Archive',slogan:val('ff-edit-board-slogan').trim()||'Every story deserves an echo.',description:val('ff-edit-board-description').trim(),worldview:val('ff-edit-board-worldview').trim()});
       if(mode!=='world')for(const u of state.users)if(C.list(u.forumIds).includes(b.id))u.forumRoles={...u.forumRoles,[b.id]:u.role||'網路同好'};
       for(const p of boardPosts(b.id)){const s=subBoardOf(b,p.subBoardId)||subBoards[0];p.subBoardId=s.id;p.subBoard=s.name;}
       if(linkedParoSourceId && linkedParoSourceId !== prevParo) syncParoCharacters(b.id, linkedParoSourceId);
-      b.loreDigest=buildLoreDigest(b.id);save();editingBoard=b.id;render();note('論壇設定與省流懶人包已保存。');return;
+      if(!b.loreDigest?.text||b.worldview!==previousWorldview)b.loreDigest=buildLoreDigest(b.id);save();editingBoard=b.id;render();note('論壇設定已保存。'+(b.worldview!==previousWorldview?'世界觀已變更，懶人包同步更新。':'懶人包沒有重複生成。'));return;
     }
     if(a==='sync')return sync();
     if(a==='snapshot'){editingSnapshot={key:parts[0],id:parts.slice(1).join(':')};return go('snapshot');}
     if(a==='save-snapshot'){const {key,id}=editingSnapshot,row=state[key].find(x=>x.id===id),data=JSON.parse(val('ff-snapshot-json'));if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('進階資料必須為 JSON 物件。');state[key][state[key].indexOf(row)]={...data,id:row.id,sourceId:row.sourceId,boardId:row.boardId,name:val('ff-snapshot-name'),forumNotes:val('ff-snapshot-notes')};save();return go('snapshots');}
     if(a==='remove-snapshot'){const[k,id]=parts;if(confirm('移除此論壇副本？原始人設卡不受影響。')){state[k]=state[k].filter(x=>x.id!==id);save();render();}return;}
     if(a==='existing-ai'){openApiKeyModal();return;}
-    if(a==='save-throttle-mode'){state.aiThrottleMode=['eco','standard','full'].includes(val('ff-ai-throttle-mode'))?val('ff-ai-throttle-mode'):'standard';state.aiThrottleModel=val('ff-ai-throttle-model')==='current'?'current':'deepseek-v4-flash';save();render();note('AI 節流模式已切換為「'+({eco:'省流',standard:'標準',full:'完整'}[state.aiThrottleMode])+'」。');return;}
+    if(a==='save-throttle-mode'){state.aiThrottleMode=['eco','standard','full'].includes(val('ff-ai-throttle-mode'))?val('ff-ai-throttle-mode'):'eco';state.aiThrottleConfigured=true;state.aiThrottleModel=val('ff-ai-throttle-model')==='current'?'current':'deepseek-v4-flash';save();render();note('AI 節流模式已切換為「'+({eco:'省流',standard:'標準',full:'完整'}[state.aiThrottleMode])+'」。');return;}
     if(a==='new-profile'){const {models,...p}=presets[arg];const item={...p,id:C.id()};state.profiles.push(item);editingProfile=item.id;save();return go('profile');}
     if(a==='profile'){editingProfile=arg;return go('profile');}
     if(a==='profile-use'){state.activeProfile=arg;save();return render();}
@@ -1777,7 +1777,7 @@
     // A cross-tab lock prevents duplicate automatic batches on the same origin.
     if(navigator.locks)await navigator.locks.request('oc-forum-auto',{ifAvailable:true},async lock=>{if(lock)await run();});else await run();
   }
-  const chatUI=ForumChat.create({state:()=>state,portrait:u=>avatar(u).replace(/^<button[^>]*data-initial=/,'<span data-initial=').replace('class="ff-avatar ','class="fc-avatar ff-avatar ').replace('</button>','</span>'),save,render,go,job,ai:callAI,compact,characters:()=>characters,view:()=>view,throttle:()=>state.aiThrottleMode||'standard',busy:()=>busy,stopped:()=>stopped,stop:()=>action('stop'),persona:id=>{const u=state.users.find(u=>u.id===id);return u?{id:u.id,name:u.name,handle:u.handle,role:u.role,personality:u.personality,supports:u.supports,memory:clip(u.memory,360),characters:context('',C.list(u.charIds)).characters}:null;}});
+  const chatUI=ForumChat.create({state:()=>state,portrait:u=>avatar(u).replace(/^<button[^>]*data-initial=/,'<span data-initial=').replace('class="ff-avatar ','class="fc-avatar ff-avatar ').replace('</button>','</span>'),save,render,go,job,ai:callAI,compact,characters:()=>characters,view:()=>view,throttle:()=>state.aiThrottleMode||'eco',busy:()=>busy,stopped:()=>stopped,stop:()=>action('stop'),persona:id=>{const u=state.users.find(u=>u.id===id);return u?{id:u.id,name:u.name,handle:u.handle,role:u.role,personality:u.personality,supports:u.supports,memory:clip(u.memory,360),characters:context('',C.list(u.charIds)).characters}:null;}});
   function bootForum() {
     try {
       const stored=localStorage.getItem(KEY);state=stored?C.validate(JSON.parse(stored)):C.initial();
