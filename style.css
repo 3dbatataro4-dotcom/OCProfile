@@ -1154,3 +1154,4 @@ body.forum-entering #forum-root>.ff-top,body.forum-entering #forum-root>.ff-layo
     transition: none !important;
   }
 }
+.ai-paro-help{margin:0 0 1rem;padding:.75rem .9rem;border:1px solid color-mix(in srgb,var(--accent-gold) 28%,transparent);border-radius:12px;background:color-mix(in srgb,var(--accent-gold) 8%,var(--bg-secondary));color:var(--text-muted);font-size:.88rem;line-height:1.65}.ai-paro-preview{display:flex;flex-direction:column;gap:.45rem;margin-top:1rem;padding:.9rem 1rem;border-radius:14px;background:var(--bg-secondary);border:1px solid var(--border-color)}.ai-paro-preview strong{color:var(--accent-gold)}.ai-paro-preview span,.ai-paro-preview small{line-height:1.55}.ai-paro-preview small{color:var(--text-muted)}
