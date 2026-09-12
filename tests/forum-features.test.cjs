@@ -297,3 +297,20 @@ test('forum logo star mask uses exactly the same solid color as the themed heade
   assert.match(styles, /#forum-root \.ff-top\{background:var\(--bg-primary\)\}/);
   assert.match(styles, /#forum-root \.ff-brand-mark>span\{background:var\(--bg-primary\)\}/);
 });
+
+test('fandom boards cannot retain a linked PARO source', () => {
+  const data = ForumCore.initial();
+  data.boards[0].mode = 'fandom';
+  data.boards[0].linkedParoSourceId = 'paro-source';
+  const validated = ForumCore.validate(data);
+  assert.equal(validated.boards[0].linkedParoSourceId, null);
+});
+
+test('forum AI prompts strictly separate fandom audiences from in-world residents', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  assert.match(source, /【同人社區模式】這是現實網路上的大型 IP 同好社區/);
+  assert.match(source, /嚴禁用戶把自己寫成作品世界居民/);
+  assert.match(source, /【世界／PARO 模式】這是世界內部的真實社群/);
+  assert.match(source, /forumRole:isWorld\?/);
+  assert.match(source, /mode==='world'\?\(val\('ff-edit-board-linked-paro'\)/);
+});
