@@ -55,6 +55,10 @@ body.forum-open>.mobile-bottom-bar,body.forum-open>.mobile-submenu-drawer{displa
   #forum-root .ff-top>.ff-actions .ff-back::after{content:'返回';font-size:10px}
   #forum-root .ff-post-heading h3{font-size:18px!important;line-height:1.55}
 }
+
+/* One-session AI request queue */
+.ff-ai-queue-card{padding:16px!important}.ff-ai-queue-card .ff-heading{margin-bottom:12px}.ff-ai-queue-card h3{margin:0;font-size:16px}.ff-ai-queue-count{white-space:nowrap;padding:6px 10px;border-radius:999px;background:color-mix(in srgb,var(--ff-accent) 10%,transparent);color:var(--ff-accent);font-size:11px}.ff-ai-queue-list{display:grid;gap:8px;margin-bottom:12px}.ff-ai-queue-item{display:grid;grid-template-columns:90px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--ff-line);border-radius:10px;background:var(--ff-bg)}.ff-ai-queue-item>div{min-width:0}.ff-ai-queue-item strong,.ff-ai-queue-item small{display:block}.ff-ai-queue-item strong{font-size:13px}.ff-ai-queue-item small{margin-top:4px;color:var(--ff-muted);font-size:10px;overflow-wrap:anywhere}.ff-ai-queue-state{font-size:11px;color:var(--ff-muted)}.ff-ai-queue-item.is-running{border-color:var(--ff-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--ff-accent) 9%,transparent)}.ff-ai-queue-item.is-running .ff-ai-queue-state{color:var(--ff-accent);animation:ff-queue-pulse 1.1s ease-in-out infinite}.ff-ai-queue-item.is-done .ff-ai-queue-state{color:#4f9a69}.ff-ai-queue-item.is-failed .ff-ai-queue-state{color:#c75d5d}.ff-ai-queue-item.is-cancelled{opacity:.62}.ff-ai-queue-empty{padding:24px 14px}.ff-ai-queue-card>.ff-actions{justify-content:flex-end}@keyframes ff-queue-pulse{50%{opacity:.45}}
+@media(max-width:760px){.ff-ai-queue-card{padding:14px!important}.ff-ai-queue-item{grid-template-columns:78px minmax(0,1fr);gap:7px 9px}.ff-ai-queue-item>.ff-actions{grid-column:1/-1;justify-content:flex-end}.ff-ai-queue-item .ff-btn{min-height:38px!important}.ff-ai-queue-count{font-size:10px}}
 /* Keep the logo star mask pixel-identical to the solid themed header. */
 #forum-root .ff-top{background:var(--bg-primary)}
 #forum-root .ff-brand-mark>span{background:var(--bg-primary)}
@@ -362,6 +366,28 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
 .ff-reply-input{width:100%;min-height:72px;max-height:160px;resize:vertical;border-radius:10px!important;padding:10px!important;font-size:13.5px!important;background:var(--ff-bg)!important;border:1px solid var(--ff-line)!important;color:var(--ff-text)!important}
 .ff-reply-drawer-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px}
 .ff-actions-right{display:flex;align-items:center;gap:8px}
+
+@media(max-width:760px){
+  .ff-reply-drawer-backdrop{z-index:2390;background:rgba(0,0,0,.28)}
+  .ff-reply-drawer{z-index:2400;left:0;right:0;bottom:0;transform:none;width:100%;max-height:calc(100dvh - env(safe-area-inset-top,0px) - 12px);overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box;border-radius:20px 20px 0 0;padding:15px 16px calc(18px + env(safe-area-inset-bottom,0px));animation:ff-reply-mobile-up .22s cubic-bezier(.2,.8,.25,1)}
+  @keyframes ff-reply-mobile-up{from{transform:translateY(100%)}to{transform:none}}
+  .ff-reply-drawer-header{align-items:flex-start;gap:10px;margin-bottom:14px}
+  .ff-reply-drawer-title{min-width:0;flex:1;display:grid;gap:7px;font-size:15px;line-height:1.45}
+  .ff-reply-drawer-badge{display:block;width:max-content;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;padding:5px 10px}
+  .ff-reply-drawer-body{gap:13px}
+  .ff-reply-drawer-row{display:grid;grid-template-columns:1fr;gap:10px}
+  .ff-reply-drawer-field{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 10px;min-width:0;width:100%;align-items:center;font-size:13px}
+  .ff-reply-drawer-field>span{white-space:nowrap}
+  .ff-reply-drawer-field select{width:100%;height:44px!important;padding:8px 36px 8px 11px!important;font-size:16px!important;border-radius:10px!important;background:var(--ff-bg)!important}
+  .ff-reply-drawer-field .ff-btn{grid-column:2;width:max-content;min-height:38px!important;padding:6px 10px}
+  .ff-reply-drawer-auto{width:100%;min-height:44px;padding:9px 11px;border:1px solid var(--ff-line);border-radius:10px;background:var(--ff-bg);font-size:13px;box-sizing:border-box}
+  .ff-reply-drawer-auto input{flex:0 0 20px}
+  .ff-reply-input{min-height:112px;max-height:34dvh;font-size:16px!important;padding:13px!important;background:var(--bg-card)!important}
+  .ff-reply-drawer-actions{position:sticky;bottom:calc(-18px - env(safe-area-inset-bottom,0px));z-index:2;display:grid;grid-template-columns:1fr;gap:8px;margin:0 -16px;padding:11px 16px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--ff-line);background:color-mix(in srgb,var(--ff-panel) 96%,transparent);backdrop-filter:blur(16px)}
+  .ff-reply-drawer-actions>[data-action="ai-suggest-reply"]{width:100%}
+  .ff-actions-right{display:grid;grid-template-columns:minmax(88px,.65fr) minmax(150px,1.35fr);width:100%;gap:8px}
+  .ff-actions-right .ff-btn{width:100%;min-height:46px}
+}
 
 /* Twitter/X Style User Profile Card */
 .ff-twitter-profile-card{padding:0!important;overflow:hidden;margin-bottom:20px;border-radius:14px;border:1px solid var(--ff-line);background:var(--ff-panel)}
