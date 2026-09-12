@@ -109,11 +109,11 @@
       if(a==='chat-mention'){const c=members(room()).find(c=>c.id===arg);if(!c)return;syncDraft();const d=draft();d.text=d.text.replace(/@$/,'')+'@'+c.name+' ';d.mentionIds=[...new Set([...d.mentionIds,c.id])];if($('fc-text'))$('fc-text').value=d.text;mentionOpen=false;h.render();$('fc-text')?.focus();return;}
       if(a==='chat-older'){const log=$('fc-log'),old=log.scrollHeight;limits.set(active,(limits.get(active)||40)+40);h.render();$('fc-log').scrollTop=$('fc-log').scrollHeight-old;return;}
       if(a==='chat-send'){
-        if(h.busy())throw new Error('正在生成回覆，請稍候或先停止。');syncDraft();const r=room();if(!r)throw new Error('請先開啟對話。');
+        syncDraft();const r=room();if(!r)throw new Error('請先開啟對話。');
         if(!state().accounts.some(a=>a.id===r.accountId))throw new Error('此對話的我的帳號已移除，請先用其他帳號建立對話。');
         const d=draft(),text=d.text.trim(),mentionIds=d.mentionIds.filter(id=>{const c=members(r).find(c=>c.id===id);return c&&text.includes('@'+c.name);});let triggerId=null;
         if(text){const m={id:C.id(),chatId:r.id,senderId:'self',senderHandle:displayId(state().accounts.find(a=>a.id===r.accountId)),senderName:state().accounts.find(a=>a.id===r.accountId)?.name||'我',content:[...text].slice(0,2000).join(''),mentionIds,createdAt:Date.now()};state().chatMessages.push(m);try{h.save();}catch(err){state().chatMessages.pop();throw err;}triggerId=m.id;}
-        drafts.set(active,{text:'',mentionIds:[]});if($('fc-text'))$('fc-text').value='';return h.job(()=>reply(r.id,triggerId,text,mentionIds));
+        drafts.set(active,{text:'',mentionIds:[]});if($('fc-text'))$('fc-text').value='';return h.job(()=>reply(r.id,triggerId,text,mentionIds),'私訊 AI 回覆');
       }
     }
     return {view,afterRender,refresh,action,openUser:id=>openContact(addContact('user',id)),beforeRender:syncDraft};
