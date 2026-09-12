@@ -10,7 +10,7 @@
     const contacts=()=>state().chatContacts.map(c=>resolve(c)),room=()=>state().chats.find(r=>r.id===active);
     function resolve(c){const u=c.kind==='user'?state().users.find(u=>u.id===c.userId):null;return {...c,name:u?.name||c.name,avatar:u?.avatar||c.avatar||c.character?.avatar||'',color:u?.color||c.character?.themeColor?.primary||'#b67d48',missing:c.kind==='user'&&!u};}
     const members=r=>r.contactIds.map(id=>contacts().find(c=>c.id===id)).filter(Boolean);
-    function portrait(c){const u=c.kind==='user'?state().users.find(u=>u.id===c.userId):[...state().accounts,...state().users].find(u=>u.id===c.id);if(u&&h.portrait)return h.portrait(u);let url='';try{const u=new URL(c.avatar);if(['https:','http:'].includes(u.protocol))url=u.href;}catch{}return `<span class="fc-avatar" aria-hidden="true"><b>${e([...c.name||'聊'][0])}</b>${url?`<img src="${e(url)}" alt="" loading="lazy" onerror="this.hidden=true">`:''}</span>`;}
+    function portrait(c){const u=c.kind==='user'?state().users.find(u=>u.id===c.userId):[...state().accounts,...state().users].find(u=>u.id===c.id);if(u&&h.portrait)return h.portrait(u).replace('loading="lazy"','loading="eager"');let url='';try{const u=new URL(c.avatar);if(['https:','http:'].includes(u.protocol))url=u.href;}catch{}return `<span class="fc-avatar" aria-hidden="true"><b>${e([...c.name||'聊'][0])}</b>${url?`<img src="${e(url)}" alt="" loading="eager" onerror="this.hidden=true">`:''}</span>`;}
     const displayId=c=>c?.kind==='user'?(state().users.find(u=>u.id===c.userId)?.handle||c.userId):c?.kind==='character'?(c.sourceId||c.id):(c?.handle||c?.id||'').slice(0,36);
     const roomName=r=>r.kind==='group'?r.name:(members(r)[0]?.name||r.name||'舊對話');
     const time=t=>new Date(t).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -55,13 +55,13 @@
       document.querySelectorAll('[data-chat-member]').forEach(el=>el.addEventListener('change',()=>{if($('fc-member-count'))$('fc-member-count').textContent='已選 '+document.querySelectorAll('[data-chat-member]:checked').length+' 位聯絡人，加上你最多12人。';}));
       if($('fc-text'))$('fc-text').addEventListener('input',()=>{syncDraft();if($('fc-text').value.endsWith('@')){mentionOpen=true;$('fc-mentions').hidden=false;}});
       if($('fc-search'))$('fc-search').addEventListener('input',event=>{search=event.target.value;const selection=event.target.selectionStart;h.render();$('fc-search')?.focus();$('fc-search')?.setSelectionRange(selection,selection);});
-      if($('fc-log'))$('fc-log').scrollTop=$('fc-log').scrollHeight;
+      const log=$('fc-log');if(log){const behavior=log.style.scrollBehavior;log.style.scrollBehavior='auto';log.scrollTop=log.scrollHeight;log.style.scrollBehavior=behavior;}
     }
     function refresh(){
       if(h.view()!=='dm')return;
       syncDraft();const shell=document.querySelector('.fc-shell'),log=$('fc-log'),wasAtBottom=!log||log.scrollHeight-log.scrollTop-log.clientHeight<48,oldTop=log?.scrollTop||0;
       if(!shell){h.render();return;}
-      shell.outerHTML=view();afterRender();const next=$('fc-log');if(next&&!wasAtBottom)next.scrollTop=oldTop;
+      shell.outerHTML=view();afterRender();const next=$('fc-log');if(next&&!wasAtBottom){const behavior=next.style.scrollBehavior;next.style.scrollBehavior='auto';next.scrollTop=oldTop;next.style.scrollBehavior=behavior;}
     }
     async function reply(chatId,triggerId,text,mentionIds){
       const r=state().chats.find(r=>r.id===chatId);if(!r)throw new Error('對話已不存在。');
