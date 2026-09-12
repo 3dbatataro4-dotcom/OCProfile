@@ -25,6 +25,7 @@ let deepseekSettings = {
 let currentTheme = 'dark';
 let currentRelViewMode = 'matrix';
 let appTabHistory = [];
+const appBackSessionId = Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 function escapeHtml(str) {
   return String(str || "")
@@ -5090,9 +5091,16 @@ function setupEventListeners() {
     }
   };
   try{
-    const ensureBackGuard=()=>{if(!history.state?.ocGuard){history.replaceState({ocBase:true},'');history.pushState({ocGuard:true},'');}};
-    ensureBackGuard();
-    window.addEventListener('pageshow',ensureBackGuard);
+    const baseUrl=location.pathname+location.search;
+    const guardUrl=baseUrl+'#oc-app';
+    const ensureBackGuard=(force=false)=>{
+      if(!force&&history.state?.ocGuard&&history.state?.sessionId===appBackSessionId)return;
+      history.replaceState({ocBase:true,sessionId:appBackSessionId},'',baseUrl);
+      history.pushState({ocGuard:true,sessionId:appBackSessionId},'',guardUrl);
+    };
+    ensureBackGuard(true);
+    window.addEventListener('pageshow',()=>ensureBackGuard());
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)ensureBackGuard();});
     window.addEventListener('popstate',()=>{
       const active=[...document.querySelectorAll('.modal-backdrop.active')].filter(node=>getComputedStyle(node).display!=='none').at(-1);
       let handled=false;
@@ -5111,7 +5119,7 @@ function setupEventListeners() {
         while(appTabHistory.length){const candidate=appTabHistory.pop();if(candidate&&candidate!=='tab-forum'){target=candidate;break;}}
         switchTab(target,true);
       }
-      if(handled)history.pushState({ocGuard:true},'');
+      if(handled)history.pushState({ocGuard:true,sessionId:appBackSessionId},'',guardUrl);
       else setTimeout(()=>history.back(),0);
     });
   }catch(error){}
