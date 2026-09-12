@@ -1006,6 +1006,14 @@ body.forum-entering #forum-root>.ff-top,body.forum-entering #forum-root>.ff-layo
 .wizard-step-panel.active {
   display: block;
 }
+.wiz-ai-text-entry{width:100%;display:flex!important;align-items:center;justify-content:flex-start!important;gap:12px;margin:0 0 16px;padding:12px 14px!important;text-align:left;border-style:dashed!important}
+.wiz-ai-text-entry>i{font-size:18px;color:var(--accent-gold)}
+.wiz-ai-text-entry span{display:flex;flex-direction:column;gap:2px}
+.wiz-ai-text-entry small{font-weight:400;color:var(--text-muted);white-space:normal}
+.ai-character-text-modal textarea{width:100%;min-height:260px;resize:vertical;line-height:1.7}
+.ai-character-help{margin:0 0 12px;color:var(--text-muted);line-height:1.65}
+.ai-character-parse-preview{display:flex;flex-direction:column;gap:6px;margin-top:12px;padding:12px 14px;border:1px solid var(--accent-gold);border-radius:10px;background:color-mix(in srgb,var(--accent-gold) 8%,var(--bg-card));font-size:.84rem}
+.ai-character-parse-preview[hidden]{display:none}
 @keyframes wizFadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
