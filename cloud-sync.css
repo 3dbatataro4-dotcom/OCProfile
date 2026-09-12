@@ -87,6 +87,12 @@
 .oc-cloud-time-list { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px; }
 .oc-cloud-time-list article { display:grid;gap:3px;min-width:0; }
 .oc-cloud-time-list time { color:var(--cloud-text);font-size:14px;font-weight:700;overflow-wrap:anywhere; }
+.oc-cloud-time-list small b { color:var(--cloud-accent);font-weight:700; }
+.oc-cloud-sync-options { display:grid;grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr);gap:12px;align-items:stretch; }
+.oc-cloud-note { padding:13px 15px;border-radius:14px;background:var(--cloud-raised); }
+.oc-cloud-note > span { display:flex;align-items:center;gap:8px; }
+.oc-cloud-note input { min-height:40px;font-size:14px;padding:8px 10px; }
+.oc-cloud-note small { flex:0 0 auto;font-size:11px;white-space:nowrap; }
 .oc-cloud-scopes { align-items:center; }
 .oc-cloud-scopes label { display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer; }
 .oc-cloud-scopes input[type="checkbox"] { width:20px;min-height:20px;height:20px;flex:0 0 20px;accent-color:var(--cloud-action); }
@@ -134,4 +140,5 @@
   .oc-cloud-section-heading > p { text-align:left;margin-top:4px; }
   .oc-cloud-manual-actions { grid-template-columns:1fr 1fr; }
   .oc-cloud-manual-actions button { min-height:50px;padding:8px; }
+  .oc-cloud-sync-options { grid-template-columns:1fr; }
 }
