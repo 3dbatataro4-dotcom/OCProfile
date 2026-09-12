@@ -314,3 +314,22 @@ test('forum AI prompts strictly separate fandom audiences from in-world resident
   assert.match(source, /forumRole:isWorld\?/);
   assert.match(source, /mode==='world'\?\(val\('ff-edit-board-linked-paro'\)/);
 });
+
+test('mobile management drawer and horizontal navigation retain usable state', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(script, /mobileManageClickTimer/);
+  assert.match(script, /mobileManageDrawerOpen=true;render\(\)/);
+  assert.match(script, /preservedNavScroll/);
+  assert.match(script, /restoredSidebar\.scrollLeft=preservedNavScroll/);
+  assert.match(styles, /\.ff-manage-drawer\{display:block/);
+});
+
+test('mobile comments expose reply controls and AI posts are distributed safely', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(styles, /data-action\^="reply:"/);
+  assert.match(script, /function generatedPostIsDuplicate/);
+  assert.match(script, /function chooseGeneratedSubBoard/);
+  assert.match(script, /subBoardId:section\?\.id/);
+});
