@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=21.17">
-  <link rel="stylesheet" href="forum.css?v=21.17">
+  <link rel="stylesheet" href="style.css?v=21.19">
+  <link rel="stylesheet" href="forum.css?v=21.19">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.17">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.19">
 </head>
 <body>
 
@@ -524,6 +524,7 @@
             <h4>基本身分與頭像</h4>
             <p>填寫角色的基本姓名與頭像資訊。</p>
           </div>
+          <button type="button" class="btn btn-outline wiz-ai-text-entry" onclick="openAiCharacterTextModal()"><i class="fa-solid fa-wand-magic-sparkles"></i><span><strong>AI 文字轉人設</strong><small>貼上一段設定，自動整理人物卡、CP 與稱呼關係</small></span></button>
           <input type="hidden" id="wizAvatarUrl" value="https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png">
           <div class="form-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.8rem; margin-top:1rem;">
             <div class="form-group">
@@ -646,6 +647,25 @@
           <button class="btn btn-primary" id="wizNextBtn" onclick="wizStep(1)">下一步 <i class="fa-solid fa-arrow-right"></i></button>
           <button class="btn btn-primary wiz-finish-btn" id="wizFinishBtn" onclick="finishWizard()" style="display:none;"><i class="fa-solid fa-check"></i> 完成建立人設卡 ✨</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: AI text to character draft -->
+  <div class="modal-backdrop" id="aiCharacterTextModal">
+    <div class="modal-box modal-lg ai-character-text-modal">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-lines" style="color:var(--accent-gold);"></i> AI 文字轉人設</h3>
+        <button class="close-btn" onclick="closeModal('aiCharacterTextModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="ai-character-help">可直接貼上散文或「姓名／外貌／固定CP／稱呼表」等半結構化資料。AI 只先整理可確認的草稿；完成建立時，尚無人設卡的關係人會進入草稿區，方便先接好稱呼與 CP。</p>
+        <textarea id="aiCharacterSourceText" rows="14" placeholder="貼上人物設定文字……"></textarea>
+        <div id="aiCharacterParsePreview" class="ai-character-parse-preview" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('aiCharacterTextModal')">取消</button>
+        <button class="btn btn-primary" id="aiCharacterParseBtn" onclick="parseAiCharacterText()"><i class="fa-solid fa-wand-magic-sparkles"></i> 解析並填入精靈</button>
       </div>
     </div>
   </div>
@@ -1546,12 +1566,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=21.17"></script>
-  <script src="forum-chat-core.js?v=21.17"></script>
-  <script src="forum-core.js?v=21.17"></script>
-  <script src="forum-chat.js?v=21.17"></script>
-  <script src="forum.js?v=21.17"></script>
-  <script src="cloud-sync-core.js?v=21.17"></script>
-  <script src="cloud-sync.js?v=21.17"></script>
+  <script src="app.js?v=21.19"></script>
+  <script src="forum-chat-core.js?v=21.19"></script>
+  <script src="forum-core.js?v=21.19"></script>
+  <script src="forum-chat.js?v=21.19"></script>
+  <script src="forum.js?v=21.19"></script>
+  <script src="cloud-sync-core.js?v=21.19"></script>
+  <script src="cloud-sync.js?v=21.19"></script>
 </body>
 </html>
