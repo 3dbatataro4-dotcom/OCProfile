@@ -684,7 +684,12 @@
   }
   function showDeleteDialog(ids) {
     pendingDeleteIds=ids.filter(id=>state.posts.some(p=>p.id===id));if(!pendingDeleteIds.length)throw new Error('請先勾選要刪除的文章。');deleteOrigin=view;
-    $('ff-delete-dialog')?.remove();const dialog=document.createElement('dialog');dialog.id='ff-delete-dialog';dialog.className='ff-delete-dialog';dialog.setAttribute('aria-labelledby','ff-delete-title');dialog.innerHTML='<h2 id="ff-delete-title">刪除 '+pendingDeleteIds.length+' 篇文章／討論串</h2><p class="ff-muted">保留討論會移除文章、加註及書籍正文，保留留言與回覆關係。永久刪除則一併移除整個討論串。</p><div class="ff-actions">'+btn('刪除內容，保留討論','delete-keep:'+pendingDeleteIds[0])+btn('永久刪除文章與所有留言','delete-hard:'+pendingDeleteIds[0],'ff-danger')+btn('取消','cancel-delete')+'</div>';$('forum-root').append(dialog);dialog.showModal();
+    $('ff-delete-dialog')?.remove();const dialog=document.createElement('dialog');dialog.id='ff-delete-dialog';dialog.className='ff-delete-dialog';dialog.setAttribute('aria-labelledby','ff-delete-title');dialog.innerHTML='<h2 id="ff-delete-title">刪除 '+pendingDeleteIds.length+' 篇文章／討論串</h2><p class="ff-muted">保留討論會移除文章、加註及書籍正文，保留留言與回覆關係。永久刪除則一併移除整個討論串。</p><div class="ff-actions">'+btn('刪除內容，保留討論','delete-keep:'+pendingDeleteIds[0])+btn('永久刪除文章與所有留言','delete-hard:'+pendingDeleteIds[0],'ff-danger')+btn('取消','cancel-delete')+'</div>';
+    // 原生 dialog 位於瀏覽器 top layer；部分手機 WebView 不會把按鈕事件可靠地冒泡回 forum-root。
+    // 由確認視窗直接接管自己的操作，避免「畫面閃一下但沒有刪除」。
+    dialog.addEventListener('click',event=>{const trigger=event.target.closest('[data-action]');if(!trigger)return;const command=trigger.dataset.action;if(!/^(delete-keep:|delete-hard:|cancel-delete$)/.test(command))return;event.preventDefault();event.stopPropagation();Promise.resolve(action(command)).catch(error=>note(error.message));});
+    $('forum-root').append(dialog);
+    if(typeof dialog.showModal==='function')dialog.showModal();else{dialog.setAttribute('open','');dialog.classList.add('ff-dialog-fallback');}
   }
   function postEditor() {
     const p=state.posts.find(x=>x.id===postEdit?.id);if(!p)return '<div class="ff-empty">貼文已不存在。</div>';
