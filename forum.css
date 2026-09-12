@@ -234,8 +234,8 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
 
 /* Interaction polish and new media/chat surfaces. */
 #forum-root .ff-btn,#forum-root .ff-card,#forum-root .ff-tag,#forum-root .ff-avatar{transition:transform .18s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease,opacity .18s ease}
-#forum-root .ff-main{animation:ff-view-shift .14s ease-out both}
-@keyframes ff-view-shift{from{opacity:.72;transform:translateY(2px)}to{opacity:1;transform:none}}
+#forum-root .ff-main{animation:ff-view-shift .14s ease-out}
+@keyframes ff-view-shift{from{opacity:.72}to{opacity:1}}
 #forum-root .ff-btn:hover,#forum-root .ff-tag:hover{transform:translateY(-1px)}
 #forum-root .ff-feed-card:hover,.ff-user-tile:hover{transform:translateY(-2px);box-shadow:0 8px 20px #00000012!important}
 #forum-root .ff-avatar:hover{transform:scale(1.04)}
@@ -477,3 +477,10 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
 }
 .ff-user-select { display:flex; align-items:center; gap:.35rem; width:max-content; margin:0 0 .5rem auto; color:var(--ff-muted); font-size:.76rem; cursor:pointer; }
 .ff-user-select input { accent-color:var(--ff-primary); }
+.ff-throttle-card{overflow:hidden}
+.ff-throttle-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 16px}
+.ff-throttle-options p{display:flex;flex-direction:column;gap:5px;margin:0;padding:12px;border:1px solid var(--ff-line);border-radius:11px;background:color-mix(in srgb,var(--ff-accent) 5%,var(--ff-panel))}
+.ff-throttle-options strong{font-size:13px;color:var(--ff-accent)}
+.ff-throttle-options span{font-size:12px;line-height:1.55;color:var(--ff-muted)}
+.ff-lore-digest pre{max-height:280px;overflow:auto;margin:10px 0 0;padding:12px;border:1px solid var(--ff-line);border-radius:10px;background:var(--ff-bg);font:12px/1.65 inherit;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:760px){.ff-throttle-options{grid-template-columns:1fr}.ff-throttle-options p{padding:10px 12px}}
