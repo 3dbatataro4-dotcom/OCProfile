@@ -884,11 +884,15 @@ function openCharacterModal(charId = null) {
 let wizardCurrentStep = 1;
 let wizardAiRelations = [];
 let wizardAiCpDraft = null;
+let wizardAiMatchedCharacterId = '';
+let aiParoTargetId = '';
+let aiParoImportDraft = null;
 
 function openNewCharacterWizard() {
   wizardCurrentStep = 1;
   wizardAiRelations = [];
   wizardAiCpDraft = null;
+  wizardAiMatchedCharacterId = '';
   const defaultAvatar = PRESET_AVATARS[0].url;
   document.getElementById("wizName").value = "";
   document.getElementById("wizEnglishName").value = "";
@@ -936,8 +940,41 @@ function sameCharacterName(left, right) {
   return normalize(left)===normalize(right);
 }
 
+function findExistingCharacterMatch(name, aiMatchedName='') {
+  const normalize=value=>String(value||'').replace(/[\u200B-\u200D\uFEFF\s·・._-]/g,'').replace(/[（(][^)）]*[)）]/g,'').toLocaleLowerCase();
+  const exact=value=>characters.filter(character=>normalize(character.name)===normalize(value));
+  const aiMatches=aiMatchedName?exact(aiMatchedName):[];if(aiMatches.length===1)return aiMatches[0];
+  const direct=exact(name);if(direct.length===1)return direct[0];
+  const key=normalize(name);if(key.length<2)return null;
+  const loose=characters.filter(character=>{const other=normalize(character.name);return other.length>=2&&(other.includes(key)||key.includes(other));});
+  return loose.length===1?loose[0]:null;
+}
+
+function characterNameAliases(value) {
+  const raw=String(value||'').trim(),normalize=text=>String(text||'').replace(/[\u200B-\u200D\uFEFF\s·・._-]/g,'').toLocaleLowerCase();
+  return [...new Set([raw,raw.replace(/[（(][^)）]*[)）]/g,''),...(raw.match(/[（(]([^)）]+)[)）]/g)||[]).map(part=>part.replace(/[（）()]/g,''))].map(normalize).filter(alias=>alias.length>=2))];
+}
+
+function findParoCharacterMatch(name, matchedId='', matchedName='') {
+  const byId=characters.find(character=>character.id===matchedId);if(byId)return byId;
+  const wanted=[...characterNameAliases(name),...characterNameAliases(matchedName)];
+  const matches=characters.filter(character=>characterNameAliases(character.name).some(alias=>wanted.includes(alias)));
+  if(matches.length===1)return matches[0];
+  return findExistingCharacterMatch(name,matchedName);
+}
+
+function mergeUniqueText(existing, incoming) {
+  const oldText=String(existing||'').trim(),newText=String(incoming||'').trim();if(!newText||oldText.includes(newText))return oldText;if(!oldText)return newText;return `${oldText}\n\n${newText}`;
+}
+
+function mergeRelationshipRows(existing=[],incoming=[]) {
+  const result=(Array.isArray(existing)?existing:[]).map(row=>({...row}));
+  for(const row of incoming){const prior=result.find(item=>sameCharacterName(item.targetName,row.targetName));if(prior){prior.callName=prior.callName||row.callName;prior.opinion=mergeUniqueText(prior.opinion,row.opinion);prior.isMainline=prior.isMainline!==false&&row.isMainline!==false;}else result.push({...row});}
+  return result;
+}
+
 function createAiPlaceholderCharacter(name) {
-  const existing=characters.find(character=>sameCharacterName(character.name,name));if(existing)return existing;
+  const existing=findExistingCharacterMatch(name);if(existing)return existing;
   const placeholder={id:`char_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,createdAt:Date.now(),name:String(name||'').trim(),englishName:'',avatar:PRESET_AVATARS[0].url,gender:'',height:'',zodiac:'',orientation:'',occupation:'待補充',fixedCp:'',isHidden:true,isAiPlaceholder:true,appearance:'',personality:'',extraNotes:'由 AI 文字轉人設暫時建立，等待補完。',tags:['AI待補完'],customFields:[],relationships:[],paroValues:{},themeColor:{primary:'#a8a29e',secondary:'#57534e',mode:'gradient'}};
   characters.push(placeholder);return placeholder;
 }
@@ -954,7 +991,7 @@ async function parseAiCharacterText() {
       model:"deepseek-v4-flash", thinking:{type:"disabled"}, temperature:0, max_tokens:3000, response_format:{type:"json_object"},
       messages:[
         {role:"system",content:"你是人物設定資料整理器。只能整理使用者明確提供的事實，不得補寫未提供的劇情。只輸出有效 JSON。稱呼表中的自己可以保留為 selfRelationship；其他人物名稱須維持原文。"},
-        {role:"user",content:JSON.stringify({task:"把文字整理成人物卡草稿、固定CP草稿與此人物對他人的單向稱呼關係。職業與身分合併到 occupation；無法分類但重要的資料放 extraNotes。不要建立原文沒有的反向關係。",existingCharacterNames:existingNames,source,schema:{character:{name:"中文姓名",englishName:"英文名",gender:"性別",height:"身高",zodiac:"星座",orientation:"攻／受等左右位",occupation:"身份與職業",fixedCp:"固定CP姓名",appearance:"外貌",personality:"性格與語氣",extraNotes:"其他設定",tags:["原文明確出現的組織、世界觀或陣營Tag"]},cp:{partnerName:"固定CP姓名",r18:"此人物的R18相關設定",thoughts:"此人物對CP的看法"},relationships:[{targetName:"角色名",callName:"稱呼",opinion:"關係或看法",isMainline:true}],selfRelationship:{callName:"我",opinion:"自我描述"}}})}
+        {role:"user",content:JSON.stringify({task:"把文字整理成人物卡草稿、固定CP草稿與此人物對他人的單向稱呼關係。判斷人物是否對應 existingCharacterNames；若是，matchedExistingName 必須逐字使用名單中的名稱，無法肯定則留空。職業與身分合併到 occupation；無法分類但重要的資料放 extraNotes。不要建立原文沒有的反向關係。",existingCharacterNames:existingNames,source,schema:{character:{name:"中文姓名",matchedExistingName:"確認為同一人時填 existingCharacterNames 中的原名，否則空白",englishName:"英文名",gender:"性別",height:"身高",zodiac:"星座",orientation:"攻／受等左右位",occupation:"身份與職業",fixedCp:"固定CP姓名",appearance:"外貌",personality:"性格與語氣",extraNotes:"其他設定",tags:["原文明確出現的組織、世界觀或陣營Tag"]},cp:{partnerName:"固定CP姓名",partnerMatchedExistingName:"確認同一人時填名單原名，否則空白",r18:"此人物的R18相關設定",thoughts:"此人物對CP的看法"},relationships:[{targetName:"角色名",targetMatchedExistingName:"確認同一人時填名單原名，否則空白",callName:"稱呼",opinion:"關係或看法",isMainline:true}],selfRelationship:{callName:"我",opinion:"自我描述"}}})}
       ]
     });
     const parsed=parseAiJsonContent(data.choices[0].message.content),char=parsed.character||{};
@@ -963,10 +1000,12 @@ async function parseAiCharacterText() {
     const extraNotes=[char.extraNotes,selfNote].filter(Boolean).join('\n');
     const fields={wizName:char.name,wizEnglishName:char.englishName,wizGender:char.gender,wizHeight:char.height,wizZodiac:char.zodiac,wizOrientation:char.orientation,wizOccupation:char.occupation,wizFixedCp:char.fixedCp,wizAppearance:char.appearance,wizPersonality:char.personality,wizExtraNotes:extraNotes,wizTags:Array.isArray(char.tags)?char.tags.join(', '):char.tags};
     for(const [id,value] of Object.entries(fields))if(value!==undefined&&value!==null)document.getElementById(id).value=String(value).trim();
-    wizardAiRelations=(Array.isArray(parsed.relationships)?parsed.relationships:[]).filter(row=>row&&String(row.targetName||'').trim()).map(row=>({targetName:String(row.targetName).trim(),callName:String(row.callName||'').trim(),opinion:String(row.opinion||'').trim(),isMainline:row.isMainline!==false}));
-    wizardAiCpDraft=parsed.cp&&typeof parsed.cp==='object'?{partnerName:String(parsed.cp.partnerName||char.fixedCp||'').trim(),r18:String(parsed.cp.r18||'').trim(),thoughts:String(parsed.cp.thoughts||'').trim()}:char.fixedCp?{partnerName:String(char.fixedCp).trim(),r18:'',thoughts:''}:null;
+    const sourceMatch=findExistingCharacterMatch(char.name,char.matchedExistingName);wizardAiMatchedCharacterId=sourceMatch?.id||'';if(sourceMatch)document.getElementById('wizName').value=sourceMatch.name;
+    wizardAiRelations=(Array.isArray(parsed.relationships)?parsed.relationships:[]).filter(row=>row&&String(row.targetName||'').trim()).map(row=>{const match=findExistingCharacterMatch(row.targetName,row.targetMatchedExistingName);return {targetName:match?.name||String(row.targetName).trim(),callName:String(row.callName||'').trim(),opinion:String(row.opinion||'').trim(),isMainline:row.isMainline!==false};});
+    const cpRaw=parsed.cp&&typeof parsed.cp==='object'?parsed.cp:null,cpMatch=findExistingCharacterMatch(cpRaw?.partnerName||char.fixedCp,cpRaw?.partnerMatchedExistingName);
+    wizardAiCpDraft=cpRaw?{partnerName:cpMatch?.name||String(cpRaw.partnerName||char.fixedCp||'').trim(),r18:String(cpRaw.r18||'').trim(),thoughts:String(cpRaw.thoughts||'').trim()}:char.fixedCp?{partnerName:cpMatch?.name||String(char.fixedCp).trim(),r18:'',thoughts:''}:null;
     const matched=wizardAiRelations.filter(row=>characters.some(character=>sameCharacterName(character.name,row.targetName))).length,missing=wizardAiRelations.length-matched,partner=characters.find(character=>sameCharacterName(character.name,wizardAiCpDraft?.partnerName||char.fixedCp));
-    const preview=document.getElementById("aiCharacterParsePreview");preview.hidden=false;preview.innerHTML=`<strong>已整理：${escapeHtml(char.name)}</strong><span>${wizardAiRelations.length} 條稱呼關係（${matched} 位已在卡庫${missing?`、${missing} 位會建立空白草稿卡`:''}）</span><span>${char.fixedCp?`固定 CP：${escapeHtml(char.fixedCp)}（${partner?'將連接現有人物':'將建立同名草稿並建立 CP 卡'}）`:'沒有固定 CP'}</span>`;
+    const preview=document.getElementById("aiCharacterParsePreview");preview.hidden=false;preview.innerHTML=`<strong>${sourceMatch?'將合併現有人物':'已整理新人物'}：${escapeHtml(sourceMatch?.name||char.name)}</strong><span>${wizardAiRelations.length} 條稱呼關係（${matched} 位已對應卡庫${missing?`、${missing} 位會建立空白草稿卡`:''}）</span><span>${char.fixedCp?`固定 CP：${escapeHtml(wizardAiCpDraft?.partnerName||char.fixedCp)}（${partner?'將合併相同人物組合的 CP 資料':'將建立同名草稿並建立 CP 卡'}）`:'沒有固定 CP'}</span>`;
     renderWizTagChips();renderWizFinalCardPreview();wizardCurrentStep=1;updateWizardStepUI();button.innerHTML='<i class="fa-solid fa-rotate"></i> 重新解析並更新草稿';
   } catch (error) { alert(`AI 文字解析失敗：${error.message}`); }
   finally { hideToast();button.disabled=false; }
@@ -1146,13 +1185,13 @@ function finishWizard() {
     return;
   }
 
-  const matchedPlaceholder=characters.find(character=>character.isAiPlaceholder&&sameCharacterName(character.name,name));
+  const matchedRecord=characters.find(character=>character.id===wizardAiMatchedCharacterId)||(findExistingCharacterMatch(name)?.isAiPlaceholder?findExistingCharacterMatch(name):null);
   const relationshipRows=wizardAiRelations.filter(row=>!sameCharacterName(row.targetName,name)).map(row=>{const target=createAiPlaceholderCharacter(row.targetName);return {...row,targetName:target.name};});
   const requestedPartner=wizardAiCpDraft?.partnerName||'';
   const preparedPartner=requestedPartner&&!sameCharacterName(requestedPartner,name)?createAiPlaceholderCharacter(requestedPartner):null;
   const charData = {
-    id: matchedPlaceholder?.id || `char_${Date.now()}`,
-    createdAt: matchedPlaceholder?.createdAt || Date.now(),
+    id: matchedRecord?.id || `char_${Date.now()}`,
+    createdAt: matchedRecord?.createdAt || Date.now(),
     name: name,
     englishName: document.getElementById("wizEnglishName").value.trim(),
     avatar: document.getElementById("wizAvatarUrl").value.trim() || PRESET_AVATARS[0].url,
@@ -1178,14 +1217,19 @@ function finishWizard() {
     }
   };
 
-  if(matchedPlaceholder)characters[characters.indexOf(matchedPlaceholder)]=charData;else characters.push(charData);
+  if(matchedRecord){
+    const placeholder=!!matchedRecord.isAiPlaceholder;
+    Object.assign(charData,{name:matchedRecord.name||charData.name,englishName:placeholder?(charData.englishName||matchedRecord.englishName):(matchedRecord.englishName||charData.englishName),avatar:placeholder?charData.avatar:(matchedRecord.avatar||charData.avatar),gender:matchedRecord.gender||charData.gender,height:matchedRecord.height||charData.height,zodiac:matchedRecord.zodiac||charData.zodiac,orientation:matchedRecord.orientation||charData.orientation,occupation:placeholder?(charData.occupation||matchedRecord.occupation):(matchedRecord.occupation||charData.occupation),fixedCp:matchedRecord.fixedCp||charData.fixedCp,isHidden:placeholder?false:!!matchedRecord.isHidden,isAiPlaceholder:false,appearance:mergeUniqueText(placeholder?'':matchedRecord.appearance,charData.appearance),personality:mergeUniqueText(placeholder?'':matchedRecord.personality,charData.personality),extraNotes:mergeUniqueText(placeholder?'':matchedRecord.extraNotes,charData.extraNotes),tags:[...new Set([...(matchedRecord.tags||[]),...charData.tags].filter(tag=>tag!=='AI待補完'))],customFields:Array.isArray(matchedRecord.customFields)?matchedRecord.customFields:[],relationships:mergeRelationshipRows(matchedRecord.relationships,relationshipRows),paroValues:matchedRecord.paroValues||{},themeColor:placeholder?charData.themeColor:(matchedRecord.themeColor||charData.themeColor)});
+    characters[characters.indexOf(matchedRecord)]=charData;
+  }else characters.push(charData);
   perspectiveTargets[charData.id]=charData.relationships.map(row=>row.targetName);
   const partnerName=wizardAiCpDraft?.partnerName||charData.fixedCp,partner=characters.find(character=>character.id!==charData.id&&sameCharacterName(character.name,partnerName));
   if(partner){
-    const exists=cps.map(normalizeCpRecord).some(cp=>{const ids=(cp.members||[]).map(member=>member.charId);return ids.includes(charData.id)&&ids.includes(partner.id);});
-    if(!exists)cps.push({id:`cp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,name:`${charData.name} × ${partner.name}`,type:'cp',relationType:'',members:[{charId:charData.id,position:charData.orientation||'',r18:wizardAiCpDraft?.r18||'',thoughts:wizardAiCpDraft?.thoughts||''},{charId:partner.id,position:partner.orientation||'',r18:'',thoughts:''}],sections:[]});
+    const normalized=cps.map(normalizeCpRecord),existingCp=normalized.find(cp=>{const ids=(cp.members||[]).map(member=>member.charId);return ids.includes(charData.id)&&ids.includes(partner.id);});
+    if(existingCp){const member=existingCp.members.find(item=>item.charId===charData.id);if(member){member.position=member.position||charData.orientation||'';member.r18=mergeUniqueText(member.r18,wizardAiCpDraft?.r18);member.thoughts=mergeUniqueText(member.thoughts,wizardAiCpDraft?.thoughts);}cps[cps.findIndex(item=>item.id===existingCp.id)]=existingCp;}
+    else cps.push({id:`cp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,name:`${charData.name} × ${partner.name}`,type:'cp',relationType:'',members:[{charId:charData.id,position:charData.orientation||'',r18:wizardAiCpDraft?.r18||'',thoughts:wizardAiCpDraft?.thoughts||''},{charId:partner.id,position:partner.orientation||'',r18:'',thoughts:''}],sections:[]});
   }
-  wizardAiRelations=[];wizardAiCpDraft=null;
+  wizardAiRelations=[];wizardAiCpDraft=null;wizardAiMatchedCharacterId='';
   saveStateToLocalStorage();
   syncGlobalTags();
   renderAllViews();
@@ -1203,7 +1247,7 @@ function cancelWizard() {
     if (!confirm("確定要放棄新建角色？已輸入的內容將會遺失。")) return;
   }
   closeModal("newCharWizardModal");
-  wizardAiRelations=[];wizardAiCpDraft=null;
+  wizardAiRelations=[];wizardAiCpDraft=null;wizardAiMatchedCharacterId='';
 }
 
 function updateModalAvatarPreview(url) {
@@ -2199,6 +2243,7 @@ function openParoModal(paroId = null) {
         <span>${c.name}</span>
       </label>
     `).join('');
+    document.getElementById("aiParoImportEntry").hidden = false;
   } else {
     document.getElementById("paroModalTitle").innerText = "新建 Paro 世界觀";
     document.getElementById("paroId").value = "";
@@ -2214,9 +2259,56 @@ function openParoModal(paroId = null) {
         <span>${c.name}</span>
       </label>
     `).join('');
+    document.getElementById("aiParoImportEntry").hidden = true;
   }
 
   modal.classList.add("active");
+}
+
+function openAiParoTextModal() {
+  const paroId=document.getElementById('paroId').value,paro=paros.find(item=>item.id===paroId);
+  if(!paro){alert('請先儲存 Paro，再使用 AI 文字整合。');return;}
+  aiParoTargetId=paro.id;aiParoImportDraft=null;
+  document.getElementById('aiParoTargetLabel').textContent=`整合目標：${paro.name}`;
+  document.getElementById('aiParoSourceText').value='';
+  document.getElementById('aiParoParsePreview').hidden=true;
+  document.getElementById('aiParoApplyBtn').hidden=true;
+  document.getElementById('aiParoParseBtn').hidden=false;
+  document.getElementById('aiParoParseBtn').disabled=false;
+  document.getElementById('aiParoTextModal').classList.add('active');
+}
+
+function normalizeParoFieldName(value){return String(value||'').replace(/[\s：:／/・._-]/g,'').toLocaleLowerCase();}
+
+async function parseAiParoText() {
+  const paro=paros.find(item=>item.id===aiParoTargetId),source=document.getElementById('aiParoSourceText').value.trim();
+  if(!paro){alert('找不到要整合的 Paro。');return;}if(!source){alert('請先貼上要整理的文字。');return;}if(!deepseekSettings.apiKey){alert('請先在 AI 設定中填入 DeepSeek API Key。');return;}
+  const button=document.getElementById('aiParoParseBtn');button.disabled=true;showToast(`AI 正在辨識「${paro.name}」的欄位與人物……`);
+  try {
+    const directory=characters.map(character=>({id:character.id,name:character.name,englishName:character.englishName||'',isDraft:!!character.isAiPlaceholder}));
+    const data=await requestDeepSeek({model:'deepseek-v4-flash',thinking:{type:'disabled'},temperature:0,max_tokens:5000,response_format:{type:'json_object'},messages:[
+      {role:'system',content:'你是 PARO 設定資料整理器。只能整理使用者提供的事實，不得自行補寫。只輸出有效 JSON。必須保留每個格子的原意與文字。'},
+      {role:'user',content:JSON.stringify({task:'把輸入中的一或多個表格、條列或散文整理成此 PARO 的人物欄位。每個資料欄都要拆成獨立 field。優先對應 existingFields；matchedFieldId 必須逐字使用既有 ID。人物若能確定對應 characterDirectory，matchedCharacterId 必須逐字使用其 ID；括號內可能是本名或別名，繁簡、常見同音字或極小筆誤可視為同一人，但不確定就留空。若區塊標題清楚說明資料意義、表頭卻顯然誤植（例如區塊是社交軟體 ID 而欄名仍是代表花），fieldName 應採用語意正確且簡潔的名稱。不要輸出角色欄本身為資料欄。',paro:{id:paro.id,name:paro.name,description:paro.description||'',existingFields:(paro.fields||[]).map(field=>({id:field.id,name:field.name,type:field.type,options:field.options||[]}))},characterDirectory:directory,source,schema:{fields:[{sourceName:'原始欄名',matchedFieldId:'既有欄位ID或空白',fieldName:'建議欄位名',type:'text 或 select',options:['僅確定適合固定選項時填']}],rows:[{sourceCharacterName:'原文角色名',matchedCharacterId:'角色目錄ID或空白',matchedCharacterName:'角色目錄中的原名或空白',values:[{matchedFieldId:'既有欄位ID或空白',fieldName:'與 fields.fieldName 相同',value:'原文值'}]}]}})}
+    ]});
+    const parsed=parseAiJsonContent(data.choices[0].message.content),rawFields=Array.isArray(parsed.fields)?parsed.fields:[],rawRows=Array.isArray(parsed.rows)?parsed.rows:[];
+    const fields=rawFields.filter(field=>String(field?.fieldName||field?.sourceName||'').trim()).map(field=>({sourceName:String(field.sourceName||'').trim(),matchedFieldId:String(field.matchedFieldId||'').trim(),fieldName:String(field.fieldName||field.sourceName||'').trim(),type:field.type==='select'?'select':'text',options:Array.isArray(field.options)?field.options.map(String).map(value=>value.trim()).filter(Boolean):[]}));
+    const rows=rawRows.filter(row=>String(row?.sourceCharacterName||'').trim()).map(row=>{const character=findParoCharacterMatch(row.sourceCharacterName,row.matchedCharacterId,row.matchedCharacterName);return {sourceCharacterName:String(row.sourceCharacterName).trim(),matchedCharacterId:character?.id||'',matchedCharacterName:character?.name||'',values:Array.isArray(row.values)?row.values.filter(value=>String(value?.value??'').trim()!=='').map(value=>({matchedFieldId:String(value.matchedFieldId||'').trim(),fieldName:String(value.fieldName||'').trim(),value:String(value.value).trim()})):[]};});
+    if(!fields.length||!rows.length)throw new Error('沒有辨識到可填入的欄位與人物資料。');
+    aiParoImportDraft={fields,rows};
+    const unresolved=rows.filter(row=>!row.matchedCharacterId),cellCount=rows.reduce((sum,row)=>sum+row.values.length,0),preview=document.getElementById('aiParoParsePreview');
+    preview.hidden=false;preview.innerHTML=`<strong>辨識完成：${fields.length} 個欄位、${rows.length} 位人物、${cellCount} 格資料</strong><span>欄位：${fields.map(field=>escapeHtml(field.fieldName)).join('、')}</span><span>${unresolved.length?`${unresolved.length} 位未找到現有卡片，確認後會建立草稿：${unresolved.map(row=>escapeHtml(row.sourceCharacterName)).join('、')}`:'所有人物都已對應現有卡片（包含可辨識的別名／近似姓名）'}</span><small>確認後只更新上述格子，不會清除其他 Paro 資料。</small>`;
+    document.getElementById('aiParoApplyBtn').hidden=false;button.hidden=true;
+  } catch(error){alert(`AI Paro 辨識失敗：${error.message}`);} finally {hideToast();button.disabled=false;}
+}
+
+function applyAiParoImport() {
+  const paro=paros.find(item=>item.id===aiParoTargetId),draft=aiParoImportDraft;if(!paro||!draft)return;
+  paro.fields=Array.isArray(paro.fields)?paro.fields:[];paro.members=Array.isArray(paro.members)?paro.members:[];
+  const fieldMap=new Map();
+  for(const incoming of draft.fields){let field=paro.fields.find(item=>item.id===incoming.matchedFieldId)||paro.fields.find(item=>normalizeParoFieldName(item.name)===normalizeParoFieldName(incoming.fieldName));if(!field){field={id:`field_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,name:incoming.fieldName,type:incoming.type,options:incoming.type==='select'?incoming.options:null,description:'由 AI 文字整合建立'};paro.fields.push(field);}fieldMap.set(normalizeParoFieldName(incoming.fieldName),field);if(incoming.matchedFieldId)fieldMap.set(incoming.matchedFieldId,field);}
+  let created=0,updated=0;
+  for(const row of draft.rows){let character=findParoCharacterMatch(row.sourceCharacterName,row.matchedCharacterId,row.matchedCharacterName);if(!character){character=createAiPlaceholderCharacter(row.sourceCharacterName);created++;}if(!paro.members.includes(character.id))paro.members.push(character.id);if(!character.paroValues)character.paroValues={};if(!character.paroValues[paro.id])character.paroValues[paro.id]={};for(const cell of row.values){const field=fieldMap.get(cell.matchedFieldId)||fieldMap.get(normalizeParoFieldName(cell.fieldName))||paro.fields.find(item=>normalizeParoFieldName(item.name)===normalizeParoFieldName(cell.fieldName));if(field){character.paroValues[paro.id][field.id]=cell.value;updated++;}}}
+  saveStateToLocalStorage();renderParoList();closeModal('aiParoTextModal');openParoModal(paro.id);showToast(`已整合 ${updated} 格 Paro 資料${created?`，並建立 ${created} 張待補草稿卡`:''}。`);setTimeout(hideToast,2400);aiParoImportDraft=null;
 }
 
 function addParoFieldRow(name = "", type = "text", options = "", desc = "", existingFieldId = null) {
