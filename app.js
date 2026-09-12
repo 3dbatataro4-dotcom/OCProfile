@@ -433,13 +433,14 @@ function createCharacterCardHtml(char) {
   const tagsHtml = (char.tags || []).map(t => `<span class="tag-pill">${t}</span>`).join('');
 
   return `
-    <div class="char-card" style="--char-theme-primary:${theme.primary}; --char-theme-bg:${themeBg};">
+    <div class="char-card" style="--char-theme-primary:${theme.primary}; --char-theme-secondary:${theme.secondary}; --char-theme-bg:${themeBg};">
+      <div class="char-theme-cover" aria-hidden="true"></div>
       <div class="char-card-header">
         <div class="char-avatar-wrapper">
           <img class="char-avatar" src="${char.avatar}" alt="${char.name}" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
         </div>
         <div class="char-basic-info">
-          <h3 class="char-name">${char.name} ${char.englishName ? `<small>(${char.englishName})</small>` : ''}</h3>
+          <h3 class="char-name">${char.name} ${char.englishName ? `<small>${char.englishName}</small>` : ''}</h3>
           <div class="char-meta-row">
             ${char.gender ? `<span class="char-meta-item"><i class="fa-solid fa-venus-mars"></i> ${char.gender}</span>` : ''}
             ${char.height ? `<span class="char-meta-item"><i class="fa-solid fa-ruler-vertical"></i> ${char.height}</span>` : ''}
@@ -447,7 +448,7 @@ function createCharacterCardHtml(char) {
             ${char.orientation ? `<span class="char-meta-item"><i class="fa-solid fa-arrows-left-right"></i> ${char.orientation}</span>` : ''}
           </div>
           ${char.occupation ? `<div class="char-meta-row" style="margin-top:0.2rem;"><span class="char-meta-item"><i class="fa-solid fa-briefcase"></i> ${char.occupation}</span></div>` : ''}
-          ${char.fixedCp ? `<div class="char-meta-row" style="margin-top:0.2rem; color:var(--accent-gold);"><span class="char-meta-item"><i class="fa-solid fa-heart"></i> CP: ${char.fixedCp}</span></div>` : ''}
+          ${char.fixedCp ? `<div class="char-meta-row char-cp-row"><span class="char-meta-item"><i class="fa-solid fa-heart"></i> CP: ${char.fixedCp}</span></div>` : ''}
         </div>
       </div>
 
@@ -494,8 +495,8 @@ function createCharacterCardHtml(char) {
         <button class="btn btn-xs btn-outline" onclick="toggleHideCharacter('${char.id}')">
           <i class="fa-solid ${char.isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i> ${char.isHidden ? '取消隱藏' : '隱藏'}
         </button>
-        <div>
-          <button class="btn btn-xs btn-primary" onclick="openCharacterModal('${char.id}')">
+        <div class="char-card-actions">
+          <button class="btn btn-xs btn-primary char-edit-btn" onclick="openCharacterModal('${char.id}')">
             <i class="fa-solid fa-pen"></i> 編輯
           </button>
           <button class="btn btn-xs btn-danger" onclick="deleteCharacter('${char.id}')">
