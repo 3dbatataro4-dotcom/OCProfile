@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=21.19">
-  <link rel="stylesheet" href="forum.css?v=21.19">
+  <link rel="stylesheet" href="style.css?v=21.22">
+  <link rel="stylesheet" href="forum.css?v=21.22">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.19">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.22">
 </head>
 <body>
 
@@ -987,6 +987,9 @@
           <button type="button" class="btn btn-xs btn-outline mt-2" onclick="addParoFieldRow()">
             <i class="fa-solid fa-plus"></i> 新增自訂欄位
           </button>
+          <button type="button" class="btn btn-xs btn-primary mt-2" id="aiParoImportEntry" onclick="openAiParoTextModal()">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> AI 文字整合到此 Paro
+          </button>
         </div>
 
         <div class="form-group mt-3">
@@ -999,6 +1002,29 @@
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal('paroModal')">取消</button>
         <button class="btn btn-primary" onclick="saveParoForm()">儲存 Paro 設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Paro text merge modal -->
+  <div class="modal-backdrop" id="aiParoTextModal">
+    <div class="modal-box modal-md">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-wand-magic-sparkles"></i> AI 文字整合到 Paro</h3>
+        <button class="close-btn" onclick="closeModal('aiParoTextModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="ai-paro-help">貼上表格、條列或散文皆可。可以分多次整理；每次只更新這次辨識到的格子，既有的其他內容不會消失。</p>
+        <div class="form-group">
+          <label id="aiParoTargetLabel">整合目標</label>
+          <textarea id="aiParoSourceText" rows="12" placeholder="例如：&#10;【現代 Paro：大學生】科系選擇&#10;| 角色 | 科系 | 年級 |&#10;| 安德烈 | 人工智慧系 | 大二 |"></textarea>
+        </div>
+        <div class="ai-paro-preview" id="aiParoParsePreview" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('aiParoTextModal')">取消</button>
+        <button class="btn btn-primary" id="aiParoParseBtn" onclick="parseAiParoText()"><i class="fa-solid fa-wand-magic-sparkles"></i> 辨識並預覽</button>
+        <button class="btn btn-primary" id="aiParoApplyBtn" onclick="applyAiParoImport()" hidden><i class="fa-solid fa-check"></i> 確認整合</button>
       </div>
     </div>
   </div>
@@ -1566,12 +1592,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=21.19"></script>
-  <script src="forum-chat-core.js?v=21.19"></script>
-  <script src="forum-core.js?v=21.19"></script>
-  <script src="forum-chat.js?v=21.19"></script>
-  <script src="forum.js?v=21.19"></script>
-  <script src="cloud-sync-core.js?v=21.19"></script>
-  <script src="cloud-sync.js?v=21.19"></script>
+  <script src="app.js?v=21.22"></script>
+  <script src="forum-chat-core.js?v=21.22"></script>
+  <script src="forum-core.js?v=21.22"></script>
+  <script src="forum-chat.js?v=21.22"></script>
+  <script src="forum.js?v=21.22"></script>
+  <script src="cloud-sync-core.js?v=21.22"></script>
+  <script src="cloud-sync.js?v=21.22"></script>
 </body>
 </html>
