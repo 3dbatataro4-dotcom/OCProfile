@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=19.1">
-  <link rel="stylesheet" href="forum.css?v=19.1">
+  <link rel="stylesheet" href="style.css?v=21.3">
+  <link rel="stylesheet" href="forum.css?v=21.3">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=19.1">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.3">
 </head>
 <body>
 
@@ -62,17 +62,9 @@
         <i class="fa-solid fa-rotate-left"></i> <span class="desktop-only">恢復全部預設資料</span>
       </button>
 
-      <!-- Cloud Sync & Backup Buttons -->
-      <button class="btn btn-outline" onclick="OCCloud.open('workshop')" title="手動雲端同步與衝突檢查">
-        <i class="fa-solid fa-cloud-arrow-up"></i> <span class="desktop-only">雲端快照</span>
-      </button>
-
-      <button class="btn btn-outline" onclick="exportDataJson()" title="備份 JSON">
-        <i class="fa-solid fa-download"></i> <span class="desktop-only">備份</span>
-      </button>
-
-      <button class="btn btn-outline" onclick="openImportOptionsModal()" title="匯入備份">
-        <i class="fa-solid fa-upload"></i> <span class="desktop-only">匯入</span>
+      <!-- Unified Backup Center -->
+      <button class="btn btn-outline" onclick="OCCloud.open('workshop')" title="雲端同步、手動備份與讀取">
+        <i class="fa-solid fa-box-archive"></i> <span class="desktop-only">備份中心</span>
       </button>
       <input type="file" id="jsonFileInput" accept=".json,.jason,application/json" style="display:none" onchange="handleImportJson(event)">
       
@@ -130,6 +122,12 @@
           <label><i class="fa-solid fa-tag"></i> 標籤：</label>
           <select id="tagFilter" onchange="renderCharacterCards()">
             <option value="">全部標籤</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label><i class="fa-solid fa-arrow-down-wide-short"></i> 排序：</label>
+          <select id="characterSort" onchange="renderCharacterCards()">
+            <option value="new">從新到舊</option><option value="old">從舊到新</option>
           </select>
         </div>
       </div>
@@ -897,10 +895,11 @@
   <div class="modal-backdrop" id="avatarGalleryModal">
     <div class="modal-box modal-md">
       <div class="modal-header">
-        <h3><i class="fa-solid fa-images"></i> 選擇預設頭像 (62 張)</h3>
+        <h3><i class="fa-solid fa-images"></i> <span id="avatarGalleryTitle">選擇預設頭像</span></h3>
         <button class="close-btn" onclick="closeModal('avatarGalleryModal')">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="avatar-add-toolbar"><input type="url" id="customPresetAvatarUrl" placeholder="貼上圖片網址，登記為自訂預設頭像"><button class="btn btn-primary" onclick="addCustomPresetAvatar()"><i class="fa-solid fa-plus"></i> 加入</button></div>
         <div class="avatar-gallery-grid" id="avatarGalleryGrid">
           <!-- Populated by app.js -->
         </div>
@@ -1146,7 +1145,7 @@
           <label>旁白邊條色<input type="color" id="vnNarratorBorderColor" value="#b8aa98"></label>
           <label>旁白文字色<input type="color" id="vnNarratorTextColor" value="#fffaf0"></label>
           <label>BGM 音量 <span id="vnBgmVolumeLabel">70%</span><input type="range" id="vnBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="updateVisualNovelVolumeLabel(this.value)"></label>
-          <label>打字音效音量 <span id="vnTypewriterSoundVolumeLabel">40%</span><input type="range" id="vnTypewriterSoundVolume" min="0" max="1" step="0.05" value="0.4" oninput="updateVisualNovelTypeSoundVolumeLabel(this.value)"></label>
+          <label>打字音效音量 <span id="vnTypewriterSoundVolumeLabel">60%</span><input type="range" id="vnTypewriterSoundVolume" min="0" max="1" step="0.05" value="0.6" oninput="updateVisualNovelTypeSoundVolumeLabel(this.value)"></label>
           <label>文字大小<select id="vnFontSizeSelect"><option value="0.9">小 (0.9rem)</option><option value="1.0">標準 (1.0rem)</option><option value="1.15">大 (1.15rem)</option><option value="1.3">特大 (1.3rem)</option></select></label>
         </div>
         <div class="form-group">
@@ -1159,8 +1158,8 @@
           <label class="checkbox-label"><input type="checkbox" id="vnTypewriterSound"> 逐字與下一句提示音</label>
         </div>
         <div class="form-group mt-2">
-          <label><i class="fa-solid fa-comment-dots"></i> AI 角色說話者分配指令 / 稱呼對應 (選填)：</label>
-          <textarea id="vnAiCustomPrompt" rows="2" placeholder="可在此填寫額外線索或別名對應，例如：&#10;白狼 = 安基洛斯&#10;隊長 / 長官 = 索托斯&#10;文中若出現「黑衣青年」請分配給某角色"></textarea>
+          <textarea id="vnAiCustomPrompt" hidden></textarea>
+          <button type="button" class="btn btn-outline" onclick="openVisualNovelCharacterProfiles()"><i class="fa-solid fa-address-card"></i> 人物頭像／名稱與說話者對應</button>
         </div>
         <div class="vn-ai-actions">
           <button class="btn btn-magic" onclick="generateVisualNovelWithAi(false)"><i class="fa-solid fa-brain"></i> AI 製作完整腳本</button>
@@ -1230,7 +1229,7 @@
           <button class="close-btn" onclick="closeVisualNovelPlayer()">&times;</button>
         </div>
       </header>
-      <main class="vn-stage" id="vnStage" onclick="advanceVisualNovel(event)">
+      <main class="vn-stage" id="vnStage" onclick="handleVisualNovelStageClick(event)">
         <div class="vn-floating-toast" id="vnFloatingToast" style="display:none;"></div>
         <div class="vn-visual-area">
           <div class="vn-story-color" id="vnStoryColor"></div>
@@ -1291,11 +1290,16 @@
           <div class="vn-setting-control-group">
             <label class="vn-setting-label">
               <span><i class="fa-solid fa-keyboard"></i> 打字音效音量</span>
-              <span id="vnSettingsTypeSoundLabel">40%</span>
+              <span id="vnSettingsTypeSoundLabel">60%</span>
             </label>
             <div class="vn-setting-input-row">
-              <input type="range" id="vnPlayerTypeSoundVolume" min="0" max="1" step="0.05" value="0.4" oninput="setVisualNovelTypeSoundVolume(this.value, event)">
+              <input type="range" id="vnPlayerTypeSoundVolume" min="0" max="1" step="0.05" value="0.6" oninput="setVisualNovelTypeSoundVolume(this.value, event)">
             </div>
+          </div>
+          <div class="vn-setting-control-group vn-script-edit-setting">
+            <button class="btn btn-primary btn-block" id="vnScriptEditModeBtn" onclick="toggleVisualNovelScriptEditMode(event)"><i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式</button>
+            <p class="vn-setting-hint">開啟後，雙擊人物頭像可更正說話人；點空白舞台不會播放下一句。</p>
+            <button class="btn btn-outline btn-block" id="vnOpenFullScriptEditorBtn" onclick="openCurrentVisualNovelEditor()" style="display:none"><i class="fa-solid fa-align-left"></i> 前往完整文本編輯器</button>
           </div>
         </div>
       </aside>
@@ -1305,6 +1309,18 @@
         <button onclick="navigateVisualNovelChapter(1)"><i class="fa-solid fa-forward-step"></i><span>下一章</span></button>
       </footer>
       <audio id="vnBgmAudio" loop></audio><audio id="vnBgmAudioNext" loop></audio><audio id="vnSeAudio"></audio>
+    </div>
+  </div>
+
+  <div class="modal-backdrop vn-speaker-editor-backdrop" id="vnSpeakerEditorModal">
+    <div class="modal-box modal-sm" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3><i class="fa-solid fa-user-pen"></i> 更正說話人</h3><button class="close-btn" onclick="closeVnSpeakerEditor()">&times;</button></div>
+      <div class="modal-body">
+        <label>選擇本篇已有角色<select id="vnSpeakerCharacterSelect" onchange="syncVnSpeakerCustomInput(this.value)"></select></label>
+        <label>或手動輸入說話人<input type="text" id="vnSpeakerCustomInput" placeholder="角色名稱／旁白／路人"></label>
+        <p class="vn-speaker-preview" id="vnSpeakerLinePreview"></p>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeVnSpeakerEditor()">取消</button><button class="btn btn-primary" onclick="saveVnSpeakerCorrection()">保存更正</button></div>
     </div>
   </div>
 
@@ -1529,12 +1545,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=19.7"></script>
-  <script src="forum-chat-core.js?v=19.7"></script>
-  <script src="forum-core.js?v=19.7"></script>
-  <script src="forum-chat.js?v=19.7"></script>
-  <script src="forum.js?v=19.7"></script>
-  <script src="cloud-sync-core.js?v=19.7"></script>
-  <script src="cloud-sync.js?v=19.7"></script>
+  <script src="app.js?v=21.3"></script>
+  <script src="forum-chat-core.js?v=21.3"></script>
+  <script src="forum-core.js?v=21.3"></script>
+  <script src="forum-chat.js?v=21.3"></script>
+  <script src="forum.js?v=21.3"></script>
+  <script src="cloud-sync-core.js?v=21.3"></script>
+  <script src="cloud-sync.js?v=21.3"></script>
 </body>
 </html>
