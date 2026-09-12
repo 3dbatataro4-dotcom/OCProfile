@@ -226,6 +226,8 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
 
 /* Interaction polish and new media/chat surfaces. */
 #forum-root .ff-btn,#forum-root .ff-card,#forum-root .ff-tag,#forum-root .ff-avatar{transition:transform .18s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease,opacity .18s ease}
+#forum-root .ff-main{animation:ff-view-shift .14s ease-out both}
+@keyframes ff-view-shift{from{opacity:.72;transform:translateY(2px)}to{opacity:1;transform:none}}
 #forum-root .ff-btn:hover,#forum-root .ff-tag:hover{transform:translateY(-1px)}
 #forum-root .ff-feed-card:hover,.ff-user-tile:hover{transform:translateY(-2px);box-shadow:0 8px 20px #00000012!important}
 #forum-root .ff-avatar:hover{transform:scale(1.04)}
@@ -242,7 +244,7 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
 .ff-dm-msg div{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;font-size:14px}
 .ff-dm-msg small{display:block;margin-top:6px;color:var(--ff-muted);font-size:10px}
 .ff-dm-compose textarea{min-height:110px}
-@media(prefers-reduced-motion:reduce){#forum-root .ff-feed-card,.ff-comment,.ff-user-tile,.ff-dm-msg{animation:none}}
+@media(prefers-reduced-motion:reduce){#forum-root .ff-feed-card,.ff-comment,.ff-user-tile,.ff-dm-msg,#forum-root .ff-main{animation:none}}
 
 /* World/PARO forum switcher, scoped management, and post pagination. */
 #forum-root .ff-forum-switch-label{display:grid;gap:2px;min-width:190px}
@@ -423,6 +425,12 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
 @keyframes ff-status-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.ff-status.is-loading .ff-status-spinner{animation-duration:1.8s}}
 @media(max-width:760px){.ff-status.is-loading{left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom,0px));max-width:none}}
+@media(max-width:820px){
+  body.forum-open #forum-root .ff-mobile-nav{display:flex!important;visibility:visible!important;opacity:1!important;position:fixed!important;left:0!important;right:0!important;bottom:0!important;width:100vw!important;max-width:none!important;z-index:2200!important;box-sizing:border-box;padding:7px max(10px,env(safe-area-inset-right,0px)) calc(7px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));background:color-mix(in srgb,var(--ff-panel) 94%,transparent);border-top:1px solid var(--ff-line);box-shadow:0 -8px 24px rgba(0,0,0,.16);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+  body.forum-open #tab-forum,body.forum-open #forum-root{transform:none!important;filter:none!important;contain:none!important;perspective:none!important}
+  body.forum-open #forum-root{padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))!important}
+  body.forum-open #forum-root .ff-main{padding-bottom:calc(95px + env(safe-area-inset-bottom,0px))!important}
+}
 @media(max-width:760px){
   #forum-root .ff-top{flex-wrap:nowrap;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}
   #forum-root .ff-brand-wrap{min-width:0;width:100%;flex:none;overflow:hidden;gap:9px}
@@ -437,3 +445,5 @@ button.ff-avatar:focus-visible{outline:2px solid var(--accent-gold);outline-offs
   #forum-root .ff-top>.ff-actions .ff-back::after{content:'返回';font-size:10px}
   #forum-root .ff-post-heading h3{font-size:18px!important;line-height:1.55}
 }
+.ff-user-select { display:flex; align-items:center; gap:.35rem; width:max-content; margin:0 0 .5rem auto; color:var(--ff-muted); font-size:.76rem; cursor:pointer; }
+.ff-user-select input { accent-color:var(--ff-primary); }
