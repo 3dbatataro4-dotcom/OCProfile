@@ -88,6 +88,7 @@
 .oc-cloud-time-list article { display:grid;gap:3px;min-width:0; }
 .oc-cloud-time-list time { color:var(--cloud-text);font-size:14px;font-weight:700;overflow-wrap:anywhere; }
 .oc-cloud-time-list small b { color:var(--cloud-accent);font-weight:700; }
+.oc-cloud-version b::before { content:' · ';color:var(--cloud-muted);font-weight:400; }
 .oc-cloud-sync-options { display:grid;grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr);gap:12px;align-items:stretch; }
 .oc-cloud-note { padding:13px 15px;border-radius:14px;background:var(--cloud-raised); }
 .oc-cloud-note > span { display:flex;align-items:center;gap:8px; }
@@ -141,4 +142,6 @@
   .oc-cloud-manual-actions { grid-template-columns:1fr 1fr; }
   .oc-cloud-manual-actions button { min-height:50px;padding:8px; }
   .oc-cloud-sync-options { grid-template-columns:1fr; }
+  .oc-cloud-version { display:grid;gap:1px; }
+  .oc-cloud-version b::before { content:''; }
 }
