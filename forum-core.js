@@ -78,7 +78,9 @@
       else board.theme={preset:String(board.theme.preset||((board.theme.primary||board.theme.secondary)?'custom':'system')),primary:String(board.theme.primary||''),secondary:String(board.theme.secondary||''),surfaceTint:String(board.theme.surfaceTint||'')};
       const defaults=board.mode==='world'?WORLD_TERMS:FANDOM_TERMS;board.terminology={...defaults,...(board.terminology&&typeof board.terminology==='object'?board.terminology:{})};
       board.aiInstruction=String(board.aiInstruction||'');
-      board.linkedParoSourceId=board.linkedParoSourceId?String(board.linkedParoSourceId):null;
+      board.userTypes=tags(board.userTypes?.length?board.userTypes:['萌新','角色廚','作品廚','CP廚','單推','CB廚','逆CP廚','創作者']);
+      board.userCreationRules=String(board.userCreationRules||'');
+      board.linkedParoSourceId=board.mode==='world'&&board.linkedParoSourceId?String(board.linkedParoSourceId):null;
       board.description=String(board.description||'');
       board.worldview=String(board.worldview||'');
       if(index===0&&!board.generation&&data.generation)board.generation=clone(data.generation);
