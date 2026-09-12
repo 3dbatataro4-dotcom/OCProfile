@@ -5,7 +5,9 @@
   const e = s => String(s ?? '').replace(/[&<>"']/g, x => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[x]));
   const presets = { deepseek: { name:'DeepSeek', type:'openai', baseUrl:'https://api.deepseek.com', model:'deepseek-chat', models:['deepseek-chat','deepseek-reasoner'] }, openai: { name:'OpenAI 相容', type:'openai', baseUrl:'https://api.openai.com/v1', model:'gpt-5-mini', models:['gpt-5-mini','gpt-4.1-mini','gpt-4.1'] }, gemini: { name:'Gemini', type:'gemini', baseUrl:'https://generativelanguage.googleapis.com/v1beta', model:'gemini-2.5-flash', models:['gemini-2.5-flash','gemini-2.5-pro','gemini-2.5-flash-lite'] } };
   const labels = { chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄', favoriteFolders:'收藏資料夾', tagCatalog:'論壇 Tag', boards:'論壇空間', characters:'人物副本', worlds:'世界觀副本', factions:'陣營副本', relationships:'CP 關係副本', loreEntries:'注意詞條', accounts:'我的帳號', users:'虛擬同好', posts:'貼文／創作', comments:'留言', profiles:'AI 連線設定（含金鑰）' };
-  let state, view = 'feed', currentPost = null, busy = false, controller = null, status = '', pendingImport = null;
+  let state, view = 'feed', currentPost = null, busy = false, controller = null, status = '', pendingImport = null, userListScroll = 0;
+  const selectedUserIds=new Set();
+  const forumViewHistory=[];
   let filter = { folder:'', board:'', subBoard:'', tag:'', tags:[], search:'', sort:'new', dateRange:'all' }, feedPage=1, searchDrawerOpen=false, editingUser = null, editingProfile = null, editingSnapshot = null, editingBoard = null, previousTab = 'tab-cards', dmUser = null;
   let replyDrawerState = { open: false, postId: null, parentId: null, ocId: null };
   let bookDraft = [];
@@ -283,7 +285,7 @@
     }
     if (!['compose','edit-post','user','profile','snapshots','snapshot','board','forum-settings','forum-new','lore','import','backup'].includes(view)) render();
   }
-  function go(next) { if(next===view&&view==='compose')return;if(next==='compose')bookDraft=[];if(['feed','fan','favorites'].includes(next)&&next!==view)feedPage=1; view = next; render(); document.getElementById('tab-forum')?.scrollTo({top:0}); }
+  function go(next,fromBack=false) { if(next===view&&view==='compose')return;if(!fromBack&&next!==view)forumViewHistory.push(view);if(next==='compose')bookDraft=[];if(['feed','fan','favorites'].includes(next)&&next!==view)feedPage=1; view = next; render(); document.getElementById('tab-forum')?.scrollTo({top:0}); }
   function renderPreservingPosition() {
     const panel=$('tab-forum'),panelTop=panel?.scrollTop||0,windowTop=window.scrollY||0,drawerTop=$('ff-search-drawer')?.scrollTop||0;
     render();
@@ -425,6 +427,16 @@
     const brandDisplay = current.displayName || (isWorld ? current.name : '同人放映室');
 
     $('forum-root').innerHTML = `<svg width="0" height="0" aria-hidden="true" style="position:absolute"><filter id="ff-avatar-gray" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="gamma" amplitude="1" exponent="2.5" offset="0"/><feFuncG type="gamma" amplitude="1" exponent="2.5" offset="0"/><feFuncB type="gamma" amplitude="1" exponent="2.5" offset="0"/></feComponentTransfer></filter></svg><header class="ff-top"><div class="ff-brand-wrap"><span class="ff-brand-mark">同<span>✦</span></span><div class="ff-brand"><label class="ff-forum-switch-label"><span>${e(brandDisplay)}</span><select id="ff-forum-switch" aria-label="切換世界觀或 PARO 論壇">${state.boards.map(b=>option(b.id,b.name,b.id===current.id)).join('')}<option value="__new__">＋ 新建論壇…</option></select></label><small>${e(current.englishName||'THE FANDOM ARCHIVE')}</small></div></div><nav class="ff-workspaces" aria-label="論壇工作區">${btn(isWorld?'世界大廳':'同好廣場','nav:feed',!backend&&view!=='compose'?'active':'')}${btn(isWorld?'發布動態':'創作發布','nav:compose',view==='compose'?'active':'')}${btn('管理中心','nav:users',backend?'active':'')}</nav><div class="ff-actions">${btn('<i class="fa-solid fa-circle-half-stroke"></i>','theme','ff-icon')}${btn('← 返回工坊','exit','ff-back')}</div></header><div class="ff-layout"><aside class="ff-sidebar"><nav aria-label="論壇導覽">${navGroup(isWorld?'WORLD / 世界導覽':'DISCOVER / 同好廣場',tabs.slice(0,isWorld?2:3))}${navGroup('CHAT / 私人聊天',[['dm','comments','私訊']])}${navGroup(isWorld?'CREATE / 動態發布':'CREATE / 創作空間',tabs.slice(isWorld?2:3,isWorld?3:4))}${navGroup('MANAGE / 管理中心',tabs.slice(isWorld?3:4))}</nav><div class="ff-sidebar-bottom"><span class="ff-live-dot"></span> ${g.enabled?'同好正在活動':'隨時，為愛發電'}<p>${e(current.slogan||'每個故事，都值得有人回應。')}</p></div></aside><main class="ff-main"><div class="ff-breadcrumb">${e(current.englishName||'THE FANDOM ARCHIVE')} <span>/</span> ${backend?'管理中心':view==='compose'?(isWorld?'動態發布':'創作空間'):(isWorld?'世界大廳':'同好廣場')}</div>${(screens[view] || feed)()}</main></div><div class="ff-status" id="ff-status" role="status">${e(status || (g.enabled ? '排程已啟用，網頁保持開啟時運作。' : '你的作品，有人在認真喜歡。先補充世界觀，再邀請第一批同好。'))}</div>${renderReplyDrawer()}<div class="ff-scroll-controls"><button type="button" class="ff-btn ff-scroll-btn" data-action="scroll-top" title="回到頂部">↑</button><button type="button" class="ff-btn ff-scroll-btn" data-action="scroll-bottom" title="移到底部">↓</button></div>`;
+    if(!isWorld&&view==='users'){
+      const invite=$('forum-root').querySelector('[data-action="seed-users"]');if(invite)invite.textContent='AI 邀請網路同好';
+      const intro=$('forum-root').querySelector('.ff-heading + .ff-muted');if(intro)intro.textContent='AI 用戶是作品外的讀者、粉絲與創作者；他們把 OC 與世界觀視為大型 IP，各論壇名單互相獨立。';
+      const roleLabels=$('forum-root').querySelectorAll('.ff-user-tile .ff-meta small');boardUsers().forEach((u,i)=>{if(roleLabels[i])roleLabels[i].textContent=u.role||'網路同好';});
+    }
+    if(!isWorld&&view==='user')$('ff-user-forum-role')?.closest('.ff-field')?.setAttribute('hidden','');
+    if(view==='users'){
+      const rows=boardUsers(),actions=$('forum-root').querySelector('.ff-heading .ff-actions');if(actions)actions.insertAdjacentHTML('beforeend',btn('全選','select-all-users','ff-small')+btn('刪除勾選','delete-selected-users','ff-small ff-danger'));
+      $('forum-root').querySelectorAll('.ff-user-tile').forEach((tile,index)=>{const u=rows[index];if(!u||u.owned)return;tile.insertAdjacentHTML('afterbegin',`<label class="ff-user-select"><input type="checkbox" data-user-select="${e(u.id)}" ${selectedUserIds.has(u.id)?'checked':''}> 選取</label>`);});
+    }
     if(isWorld){const top=$('forum-root').querySelector('.ff-workspaces');const set=(action,text)=>{const node=top?.querySelector(`[data-action="${action}"]`);if(node)node.textContent=text;};set('nav:feed',terms.home||'世界大廳');set('nav:compose',terms.publish||'發布動態');set('nav:users',terms.manage||'世界管理');}
     $('forum-root').insertAdjacentHTML('beforeend','<nav class="ff-mobile-nav" aria-label="手機主要導覽">'+[[ 'feed','comments',isWorld?'大廳':'廣場'],['favorites','star','收藏'],['compose','plus','發布'],['dm','comments','私訊'],['users','sliders','管理']].map(([v,icon,t])=>btn('<i class="fa-solid fa-'+icon+'"></i><span>'+t+'</span>',v==='feed'?'plaza':'nav:'+v,(view===v||(v==='feed'&&view==='fan')||(v==='users'&&backend))?'active':'')).join('')+'</nav>'+(isWorld?'': '<div class="ff-plaza-drawer" id="ff-plaza-drawer" hidden><strong>同好廣場</strong>'+btn('全部貼文','plaza-feed')+btn('純同人板塊','plaza-fan')+'</div>'));
     if($('ff-forum-switch'))$('ff-forum-switch').value=current.id;
@@ -432,6 +444,18 @@
     chatUI.afterRender();
     if(retryError&&!busy)$('forum-root').querySelector('.ff-main').insertAdjacentHTML('afterbegin','<div class="ff-notice ff-retry-notice" role="alert">'+e(retryError)+'<div class="ff-actions">'+btn('重試失敗的生成','retry-ai')+btn('略過','dismiss-retry')+'</div></div>');
     if (view === 'profile') updateModels();
+    updateBoardModeFields();
+  }
+  function updateBoardModeFields(){
+    const mode=$('ff-edit-board-mode'),paro=$('ff-edit-board-linked-paro')?.closest('.ff-field');
+    if(paro)paro.hidden=mode?.value!=='world';
+    const aiField=$('ff-edit-board-ai-instruction')?.closest('.ff-field');
+    if(aiField&&!$('ff-edit-board-user-types')){
+      const b=state.boards.find(x=>x.id===editingBoard)||activeBoard();
+      aiField.insertAdjacentHTML('beforebegin',field('自訂同好類型（每行一個）',area('ff-edit-board-user-types',userTypes(b).join('\n'),'style="min-height:125px"'))+field('AI／手動新建用戶規則',area('ff-edit-board-user-rules',b.userCreationRules||'','placeholder="例如：考據黨偏好長文；黑粉容易挑起爭論，但不得人身攻擊。" style="min-height:140px"')+btn('AI 給我靈感並修飾','polish-user-rules','ff-small')));
+    }
+    const roleSelect=$('ff-user-role');
+    if(roleSelect){const value=roleSelect.value,types=userTypes();roleSelect.innerHTML=types.map(x=>`<option value="${e(x)}">${e(x)}</option>`).join('');roleSelect.value=types.includes(value)?value:inferUserType(user(editingUser)||{},types);}
   }
   function feed() {
     const current=activeBoard(),isWorld=current.mode==='world',posts=boardPosts(),comments=state.comments.filter(c=>posts.some(p=>p.id===c.postId));
@@ -696,7 +720,9 @@
   }
   function generation() {
     const board=activeBoard(),g=generationFor(board.id);
-    return `<div class="ff-heading"><div><h2>${e(board.name)} · 生成與排程</h2><p class="ff-heading-note">每個論壇各自保存生成範圍、氣氛與排程。</p></div>${btn(busy?'停止本次生成':'暫停此論壇生成','stop')}</div><div class="ff-card"><div class="ff-grid">${field('目前世界觀／PARO',`<div class="ff-static-field">${e(board.name)}</div>`)}${field('指定 Tag（留空隨機；逗號分隔）',input('ff-gen-tags',g.tags))}${field('貼文類型',select('ff-gen-type',['隨機','創作','閒聊','企劃','CP文','推薦','發癲'].map(x=>[x,x]),g.type))}${field('每篇／每次追加留言數',input('ff-gen-comments',g.comments,'number','min="1" max="20"'))}${field('每批最少篇數（與最多相同＝固定篇數）',input('ff-gen-min',g.min,'number','min="1" max="50"'))}${field('每批最多篇數',input('ff-gen-max',g.max,'number','min="1" max="50"'))}${field('自動生成間隔（分鐘）',input('ff-gen-interval',g.interval,'number','min="1" max="1440"'))}<label class="ff-field"><input type="checkbox" id="ff-gen-new" ${g.allowNew?'checked':''}> 允許逐步加入新用戶</label></div>${field('發帖專用模型（留言維持目前模型）',select('ff-gen-creation-profile',[['','沿用目前模型'],['inherit','工坊模型'],...state.profiles.map(p=>[p.id,p.name+' · '+p.model])],g.creationProfile||''))}${field('這一輪的創作方向／指示',area('ff-gen-prompt',g.prompt))}${field('圈內氣氛與禁止話題',area('ff-gen-atmosphere',g.atmosphere))}<div class="ff-notice">AI 會同時閱讀這個論壇的世界觀、人物副本與注意詞條，並依每位用戶在此世界中的身分發言。</div><div class="ff-actions">${btn('保存生成設定','save-generation')}${btn('現在生成一批','generate','ff-primary')}${btn(g.enabled?'暫停自動排程':'啟用自動排程','toggle-schedule')}</div></div>`;
+    const scopeLabel=board.mode==='world'?'目前世界觀／PARO':'目前作品／IP';
+    const modeNotice=board.mode==='world'?'AI 會閱讀世界觀、人物副本與注意詞條，並依每位居民在此世界中的身分發言。':'AI 會閱讀作品設定、人物副本與注意詞條；所有用戶都會以作品外的讀者、粉絲或創作者視角發言。';
+    return `<div class="ff-heading"><div><h2>${e(board.name)} · 生成與排程</h2><p class="ff-heading-note">每個論壇各自保存生成範圍、氣氛與排程。</p></div>${btn(busy?'停止本次生成':'暫停此論壇生成','stop')}</div><div class="ff-card"><div class="ff-grid">${field(scopeLabel,`<div class="ff-static-field">${e(board.name)}</div>`)}${field('指定 Tag（留空隨機；逗號分隔）',input('ff-gen-tags',g.tags))}${field('貼文類型',select('ff-gen-type',['隨機','創作','閒聊','企劃','CP文','推薦','發癲'].map(x=>[x,x]),g.type))}${field('每篇／每次追加留言數',input('ff-gen-comments',g.comments,'number','min="1" max="20"'))}${field('每批最少篇數（與最多相同＝固定篇數）',input('ff-gen-min',g.min,'number','min="1" max="50"'))}${field('每批最多篇數',input('ff-gen-max',g.max,'number','min="1" max="50"'))}${field('自動生成間隔（分鐘）',input('ff-gen-interval',g.interval,'number','min="1" max="1440"'))}<label class="ff-field"><input type="checkbox" id="ff-gen-new" ${g.allowNew?'checked':''}> 允許逐步加入新用戶</label></div>${field('發帖專用模型（留言維持目前模型）',select('ff-gen-creation-profile',[['','沿用目前模型'],['inherit','工坊模型'],...state.profiles.map(p=>[p.id,p.name+' · '+p.model])],g.creationProfile||''))}${field('這一輪的創作方向／指示',area('ff-gen-prompt',g.prompt))}${field('圈內氣氛與禁止話題',area('ff-gen-atmosphere',g.atmosphere))}<div class="ff-notice">${modeNotice}</div><div class="ff-actions">${btn('保存生成設定','save-generation')}${btn('現在生成一批','generate','ff-primary')}${btn(g.enabled?'暫停自動排程':'啟用自動排程','toggle-schedule')}</div></div>`;
   }
   function usersView() {
     const rows=boardUsers(),board=activeBoard();
@@ -707,7 +733,13 @@
     const dialog=document.createElement('dialog');
     dialog.id='ff-invite-users-dialog';dialog.className='ff-delete-dialog';
     dialog.innerHTML=`<h2>AI 邀請世界居民</h2><p class="ff-muted">設定這一批居民的數量與傾向。留空時會依目前世界觀建立多樣化的一般居民。</p><div class="ff-grid">${field('生成數量',input('ff-invite-count','6','number','min="1" max="30"'))}${field('用戶類型／群體',input('ff-invite-type','','text','placeholder="例如：黑粉、水軍、理性考據派"'))}</div>${field('額外生成指令（選填）',area('ff-invite-instruction','','placeholder="例如：喜歡挑事吵架，希望作品炎上；但每個帳號仍要有不同說話方式。" style="min-height:130px"'))}<div class="ff-notice">類型與指令會影響這批居民的立場、個性和發言習慣，但仍會遵守目前論壇的世界觀與注意詞條。</div><div class="ff-actions">${btn('開始邀請','invite-users-confirm','ff-primary')}${btn('取消','invite-users-cancel')}</div>`;
-    $('forum-root').append(dialog);dialog.showModal();
+    $('forum-root').append(dialog);
+    if(activeBoard().mode!=='world'){
+      dialog.querySelector('h2').textContent='AI 邀請網路同好';
+      dialog.querySelector('p').textContent='設定這一批網路用戶的數量與傾向。所有人都會把 OC 與世界觀視為一部作品／大型 IP。';
+      dialog.querySelector('.ff-notice').textContent='類型與指令會影響立場、個性和發言習慣；AI 仍只能以作品外的讀者、粉絲或創作者視角活動。';
+    }
+    dialog.showModal();
   }
   function accountsView() {
     const posts=boardPosts(),postIds=new Set(posts.map(p=>p.id));
@@ -817,7 +849,10 @@
     if(!p.baseUrl||!p.model)throw new Error('AI 設定不完整：請確認 API 網址與模型名稱。');
     let effectiveSystem = system;
     const promptBoard=payload?.lore?.board||activeBoard();
-    if(promptBoard?.mode==='world')effectiveSystem += '\n\n【世界模式】這是世界內部的真實社群，不是同人論壇。所有用戶都以世界居民身分發言，使用該論壇的專屬用語與世界設定。';
+    if(promptBoard?.mode==='world')effectiveSystem += '\n\n【世界／PARO 模式】這是世界內部的真實社群，不是同人論壇。所有用戶都以世界居民身分發言，可依世界觀擁有學生、教師、店員、職員或陣營成員等身分，並使用論壇的專屬用語。';
+    else effectiveSystem += '\n\n【同人社區模式】這是現實網路上的大型 IP 同好社區。lore 中的 OC、故事、世界觀、陣營與關係都是一部虛構作品的設定；用戶只能是讀者、粉絲、同人作者、繪師、考據黨、CP 粉、黑粉或其他網路用戶。嚴禁用戶把自己寫成作品世界居民，嚴禁聲稱親眼見過、實際認識、同住、同校或曾與角色互動。討論角色時必須使用觀看作品、閱讀設定、追更、嗑 CP、分析劇情或創作同人的外部觀眾視角。';
+    const modeTask=promptBoard?.mode==='world'?'以世界內居民視角完成任務。':'以作品外網路同好視角完成任務；把所有 OC 與世界觀視為虛構 IP 設定，禁止第一人稱聲稱見過角色、與角色相識或生活在作品世界。';
+    payload={...payload,task:String(payload?.task||'')+'\n\n【本次模式硬性要求】'+modeTask};
     if(payload?.lore?.board?.aiInstruction){
       effectiveSystem += `\n\n【論壇專屬社群與行為指令】\n${payload.lore.board.aiInstruction}`;
     }
@@ -875,18 +910,27 @@
 角色辨識以 lore.identityIndex 的穩定 ID、名稱及性別為準，作品不同或同名也不得合併。lore.characters 才是本次詳細設定；不在詳細設定的角色，不能猜測其關係、性格或經歷。不把用戶暱稱當成角色姓名。若回憶與人物設定衝突，以本次人物設定為準。
 shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允許簡短應援或頂帖，其餘依性格自由長短。memories.summary只寫360字以內的社交關係與偏好摘要，不複述文章，也不儲存角色事實推測。
 把角色設定當成完整作品中的人物。多數用戶熟知人物與關係，少量是萌新。用戶有固定 ID、個性、用語、支持角色和 CP、CB、單推、逆 CP 等立場；可以跨作品追星。發言有長有短，避免人人使用相同句型或都長篇分析。約50%的同好abstractStyle=true：ID、簽名與發言可更抽象，使用荒謬比喻、諧音、跳躍聯想、emoji、短促怪叫、發癲式應援、故意口語錯字等，每人挑符合個性的不同習慣，不能所有人複製同一套梗。抽象發言仍須具體回應文章或對話，不篡改角色正史。abstractStyle=false的用戶維持自然同人社群語氣，不強制發癲。abstractStyle與10%的dynamicName是獨立屬性，可重疊；不因抽象風格自動添加豎線後綴。
-只有 lore.canon、人物／世界觀副本與 lore.referenceEntries 注意詞條是正史；其他貼文只是作者創作與推測。必須遵守 lore.board.worldview 的世界規則，並讓每位用戶依 forumRole 在該世界中發言，例如校園 PARO 的學生、教師或職員。分清原作事實、嗑糖解讀與 AU，不把同人創作默認成官方設定。依氣氛設定表現爭議與對家互動。
+只有 lore.canon、人物／世界觀副本與 lore.referenceEntries 注意詞條是正史；其他貼文只是作者創作與推測。分清原作事實、嗑糖解讀與 AU，不把同人創作默認成官方設定。依 lore.board.mode 嚴格區分「作品外的網路同好」與「世界內居民」，不得混用兩種視角。依氣氛設定表現爭議與對家互動。
 保留已有用戶的性格與記憶，依互動對象的帳號 ID 和官方／同人身分作出反應。記憶與關係更新只記錄本次實際互動，勿杜撰不存在的歷史。不要替人類控制的 owned 帳號發言。只有dynamicName=true的用戶（約10%）可提供displaySuffix，依本次內容與喜歡的角色換一句動態應援梗，例如今天也在為XX打摳、我要當XXX的狗，不含豎線與固定名稱。其他用戶displaySuffix留空，保持一般暱稱。這是同一用戶換展示句，不能建立新ID或冒充其他人。`;
   function candidates(lore,targetId,excludedAuthorId='') {
     const boardId=lore.board?.id||activeBoardId(),all=boardUsers(boardId).filter(x=>!x.owned&&x.id!==excludedAuthorId), target=all.find(x=>x.id===targetId);
     const matches=all.filter(u=>C.list(u.charIds).some(id=>lore.selectedIds.includes(id)));
-    return [...new Map([...(target?[target]:[]),...sample(matches,5),...sample(all,5)].map(u=>[u.id,u])).values()].slice(0,9).map(u=>({id:u.id,name:u.name,handle:handle(u),signature:u.signature,abstractStyle:!!u.abstractStyle,dynamicName:!!u.dynamicName,dynamicSuffix:u.dynamicSuffix,role:u.role,forumRole:u.forumRoles?.[boardId]||u.role,personality:u.personality,supports:u.supports,charIds:u.charIds,shortReplies:!!u.shortReplies,memory:clip(u.memory,360),links:C.list(u.links).slice(-5).map(l=>({userId:l.userId,note:clip(l.note,80)})),recentHistory:C.list(u.history).slice(-3).map(h=>({postId:h.postId,partnerId:h.partnerId,note:clip(h.note,90)}))}));
+    const isWorld=lore.board?.mode==='world';
+    return [...new Map([...(target?[target]:[]),...sample(matches,5),...sample(all,5)].map(u=>[u.id,u])).values()].slice(0,9).map(u=>({id:u.id,name:u.name,handle:handle(u),signature:u.signature,abstractStyle:!!u.abstractStyle,dynamicName:!!u.dynamicName,dynamicSuffix:u.dynamicSuffix,role:u.role,forumRole:isWorld?(u.forumRoles?.[boardId]||u.role):u.role,personality:u.personality,supports:u.supports,charIds:u.charIds,shortReplies:!!u.shortReplies,memory:clip(u.memory,360),links:C.list(u.links).slice(-5).map(l=>({userId:l.userId,note:clip(l.note,80)})),recentHistory:C.list(u.history).slice(-3).map(h=>({postId:h.postId,partnerId:h.partnerId,note:clip(h.note,90)}))}));
   }
   function newUser(raw={},owned=false,boardId=activeBoardId()) {
     const colors=()=> '#'+Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
     const charIds=C.list(raw.charIds).filter(x=>state.characters.some(c=>c.id===x));
     const id=C.id(),favorite=state.characters.find(c=>c.id===charIds[0]);
-    return {id,abstractStyle:typeof raw.abstractStyle==='boolean'?raw.abstractStyle:undefined,handle:uniqueHandle(raw.handle||((favorite?.name||raw.name||'同好')+'_應援中'),id),signature:clip(raw.signature,160),name:clip(raw.name||'新同好',80),owned,official:false,gender:raw.gender==='男'?'男':'女',role:String(raw.role||'作品廚'),forumIds:owned?[]:[boardId],forumRoles:owned?{}:{[boardId]:String(raw.worldRole||raw.forumRole||raw.role||'世界居民')},personality:String(raw.personality||''),supports:String(raw.supports||''),charIds,color:favorite?.themeColor?.primary||colors(),color2:raw.avatarStyle==='角色漸層'?(favorite?.themeColor?.secondary||colors()):colors(),memory:'',links:[],history:[]};
+    const board=state.boards?.find(b=>b.id===boardId),isWorld=board?.mode==='world',role=inferUserType(raw,userTypes(board));
+    return {id,abstractStyle:typeof raw.abstractStyle==='boolean'?raw.abstractStyle:undefined,handle:uniqueHandle(raw.handle||((favorite?.name||raw.name||'同好')+'_應援中'),id),signature:clip(raw.signature,160),name:clip(raw.name||'新同好',80),owned,official:false,gender:raw.gender==='男'?'男':'女',role,forumIds:owned?[]:[boardId],forumRoles:owned?{}:{[boardId]:String(isWorld?(raw.worldRole||raw.forumRole||role||'世界居民'):(role||'網路同好'))},personality:String(raw.personality||''),supports:String(raw.supports||''),charIds,color:favorite?.themeColor?.primary||colors(),color2:raw.avatarStyle==='角色漸層'?(favorite?.themeColor?.secondary||colors()):colors(),memory:'',links:[],history:[]};
+  }
+  function userTypes(board=activeBoard()){return C.tags(board?.userTypes?.length?board.userTypes:['萌新','角色廚','作品廚','CP廚','單推','CB廚','逆CP廚','創作者']);}
+  function inferUserType(raw,types=userTypes()){
+    const wanted=String(raw.role||'').trim(),exact=types.find(x=>x.toLowerCase()===wanted.toLowerCase());if(exact)return exact;
+    const text=[raw.personality,raw.supports,raw.signature,wanted].filter(Boolean).join(' ');
+    const hints=[['創作者',/寫文|繪師|畫圖|創作|作者|產糧/],['CP廚',/CP|嗑|配對|愛情|戀愛/],['CB廚',/CB|友情|搭檔|組合/],['逆CP廚',/逆CP|逆家|拆逆/],['單推',/單推|唯粉|只推/],['角色廚',/角色廚|推角|角色粉/],['作品廚',/作品廚|全員|劇情|世界觀|考據/],['萌新',/萌新|新入坑|剛入坑/]];
+    return hints.find(([name,re])=>types.includes(name)&&re.test(text))?.[0]||types.find(x=>x!=='萌新')||types[0]||'作品廚';
   }
   function applyMemory(raw,participants,p,commentId) {
     for(const m of C.list(raw.memories).slice(0,20)) {
@@ -916,10 +960,17 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     const lore=context(boardId),existing=boardUsers(boardId);
     let abstractCount=existing.filter(u=>u.abstractStyle).length;const styleAssignments=Array.from({length:count},(_,i)=>{const abstractStyle=abstractCount<Math.round((existing.length+i+1)*.5);if(abstractStyle)abstractCount++;return {index:i,abstractStyle};});
     const requestedType=String(request.type||'').trim(),instruction=String(request.instruction||'').trim();
-    const raw=await callAI({task:`建立 ${count} 位不同的固定 AI 用戶。每人必須依 lore.board.worldview 與注意詞條獲得一個具體 worldRole，例如校園 PARO 中的年級、班級、社團、教師或職員；發言視角必須符合身分。其餘要求：嚴格依 styleAssignments 分配自然或抽象網路風格。暱稱、handle 與簽名要彼此不同；有喜歡角色時才使用角色梗。${requestedType?`\n本批指定用戶類型：${requestedType}。必須讓角色立場、行為與語氣明確符合此類型，但不同帳號要有個體差異。`:''}${instruction?`\n使用者對本批居民的額外指令：${instruction}`:'\n未指定類型時，建立包含萌新、角色廚、作品廚、CP 廚、單推或創作者的多樣居民。'}`,lore,requestedType,instruction,styleAssignments,existingNames:existing.map(x=>({name:x.name,handle:handle(x)})),schema:{users:[{name:'固定暱稱',abstractStyle:'遵照同索引styleAssignments的boolean',handle:'公開ID，不含@',signature:'60字內個性簽名',avatarStyle:'角色漸層或隨機尾色',gender:'男或女',role:'符合指定類型的同好身分',worldRole:'在目前世界觀中的具體身分',personality:'符合指定類型的立場、語氣與行為習慣',supports:'支持或反對的角色、CP、作品及其態度',charIds:['最關注角色ID']}] }},SYSTEM);
+    const identityRule=lore.board?.mode==='world'
+      ?'每人必須依世界觀與注意詞條獲得具體 worldRole，例如年級、班級、職業或陣營；以世界居民身分發言。'
+      :'每人都是作品世界外的網路用戶，把 OC、故事與世界觀視為虛構大型 IP；可為讀者、粉絲、同人作者、繪師、考據黨、CP 粉或黑粉。不得設定 worldRole，不得聲稱親眼見過、認識或曾與角色互動。';
+    const availableTypes=userTypes(lore.board),creationRules=String(lore.board?.userCreationRules||'').trim();
+    const raw=await callAI({task:`建立 ${count} 位不同的固定 AI 用戶。${identityRule} 每人的 role 必須從 availableTypes 選擇最符合個性、立場與支持對象的一項，不可全部使用同一類型。${creationRules?`\n論壇自訂新建規則：${creationRules}`:''} 其餘要求：嚴格依 styleAssignments 分配自然或抽象網路風格。暱稱、handle 與簽名要彼此不同；有喜歡角色時才使用角色梗。${requestedType?`\n本批指定用戶類型：${requestedType}。必須讓角色立場、行為與語氣明確符合此類型，但不同帳號要有個體差異。`:''}${instruction?`\n使用者對本批用戶的額外指令：${instruction}`:'\n未指定類型時，依 availableTypes 建立多樣用戶。'}`,lore,availableTypes,requestedType,instruction,styleAssignments,existingNames:existing.map(x=>({name:x.name,handle:handle(x)})),schema:{users:[{name:'固定暱稱',abstractStyle:'遵照同索引styleAssignments的boolean',handle:'公開ID，不含@',signature:'60字內個性簽名',avatarStyle:'角色漸層或隨機尾色',gender:'男或女',role:'必須精確使用 availableTypes 其中一項',worldRole:"僅 world 模式填寫具體世界身分；fandom 模式必須留空",personality:'符合指定類型的立場、語氣與行為習慣',supports:'支持或反對的角色、CP、作品及其態度',charIds:['最關注角色ID']}] }},SYSTEM);
     if(!Array.isArray(raw.users)||!raw.users.length)throw new Error('模型沒有提供有效用戶。');
     const additions=raw.users.slice(0,count).map((x,i)=>x&&typeof x.name==='string'?newUser({...x,abstractStyle:styleAssignments[i].abstractStyle},false,boardId):null).filter(Boolean);
     if(!additions.length)throw new Error('模型用戶格式不正確。');
+    if(!requestedType&&additions.length>1&&new Set(additions.map(u=>u.role)).size===1){
+      additions.forEach((u,i)=>{const source=raw.users[i]||{},inferred=inferUserType({...source,role:''},availableTypes);u.role=inferred===additions[0].role?(availableTypes[i%availableTypes.length]||inferred):inferred;if(lore.board?.mode!=='world')u.forumRoles[boardId]=u.role;});
+    }
     if(stopped)return;
     for(const u of additions){u.handle=uniqueHandle(u.handle,u.id);state.users.push(u);}assignNameStyles();save();
   }
@@ -971,7 +1022,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
         u.updates=C.list(u.updates);u.updates.push({id:C.id(),content:[...content].slice(0,100).join(''),createdAt:Date.now()});save();refreshLive();return;
       }
       const g=generationFor(boardId),profile=g.creationProfile?creationProfile(g.creationProfile):undefined;
-      const raw=await callAI({task:'這位虛擬同好剛和使用者互動完，受到啟發後額外發一篇公開論壇貼文。內容可以是感想、抱怨、追更碎念、同人腦洞或想繼續更文的宣言；必須符合自己的 forumRole 與目前世界觀。',lore,users:[persona],source:{kind:source.kind,postTitle:source.post?.title||'',postContent:clip(source.post?.content,1200),message:clip(source.text,500),reply:clip(source.reply,500)},recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'這位虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'貼文標題',content:'公開貼文正文',type:'閒聊、感想、抱怨或創作',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'本次受互動啟發發布貼文'}]}},SYSTEM,profile);
+      const raw=await callAI({task:'這位虛擬用戶剛和使用者互動完，受到啟發後額外發一篇公開貼文。內容可以是感想、抱怨、追更碎念、同人腦洞或想繼續更文的宣言；嚴格遵守目前論壇模式的視角規則。',lore,users:[persona],source:{kind:source.kind,postTitle:source.post?.title||'',postContent:clip(source.post?.content,1200),message:clip(source.text,500),reply:clip(source.reply,500)},recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'這位虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'貼文標題',content:'公開貼文正文',type:'閒聊、感想、抱怨或創作',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'本次受互動啟發發布貼文'}]}},SYSTEM,profile);
       const r=raw.post;if(!r||r.authorId!==id||typeof r.title!=='string'||!r.title.trim()||typeof r.content!=='string'||!r.content.trim()||stopped)return;
       const p={id:C.id(),authorId:id,authorSnapshot:authorSnapshot(u,r.displaySuffix),boardId,title:r.title,content:r.content,tags:C.tags(r.tags),charIds:C.list(r.charIds).filter(x=>lore.selectedIds.includes(x)),type:String(r.type||'閒聊'),kind:'post',fan:true,canon:false,starred:false,createdAt:Date.now()};
       simulateLikes(p,p);state.posts.push(p);u.history=C.list(u.history);u.history.push({at:p.createdAt,postId:p.id,note:'受互動啟發發表 '+p.type+'：'+p.title});applyMemory(raw,new Set([id]),p);save();refreshLive();
@@ -987,7 +1038,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       note(`正在生成第 ${i+1}／${count} 篇貼文…`);
       if(g.allowNew&&Math.random()<.2){await seedUsers(1);if(stopped)break;}
       const boardId=g.boardId||activeBoardId(),lore=context(boardId),users=candidates(lore);
-      const raw=await callAI({task:'由一位現有虛擬用戶依自己的 forumRole 在目前世界觀論壇發表貼文，可以是角色故事、校園或世界內日常、企劃、推薦、閒聊或發癲。嚴格參考注意詞條。',type:g.type,tags:C.tags(g.tags),direction:g.prompt,atmosphere:g.atmosphere,lore,users,recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'現有虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'標題',content:'完整文章',type:'創作或閒聊等',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'發表企劃或作品的記錄'}]}},SYSTEM,g.creationProfile?creationProfile(g.creationProfile):undefined);
+      const raw=await callAI({task:'由一位現有虛擬用戶在目前論壇發表貼文，可以是創作、角色或劇情討論、企劃、推薦、閒聊或發癲。嚴格參考注意詞條，並嚴格遵守目前論壇模式的視角規則。',type:g.type,tags:C.tags(g.tags),direction:g.prompt,atmosphere:g.atmosphere,lore,users,recentTitles:boardPosts(boardId).slice(-25).map(x=>x.title),schema:{post:{authorId:'現有虛擬用戶ID',displaySuffix:'僅dynamicName=true時填本次動態應援句，其他留空',title:'標題',content:'完整文章',type:'創作或閒聊等',tags:['論壇Tag'],charIds:['本次人物ID']},memories:[{userId:'作者ID',summary:'長期記憶摘要',event:'發表企劃或作品的記錄'}]}},SYSTEM,g.creationProfile?creationProfile(g.creationProfile):undefined);
       const r=raw.post;
       if(!r||!users.some(u=>u.id===r.authorId)||typeof r.title!=='string'||!r.title.trim()||typeof r.content!=='string'||!r.content.trim())throw new Error('模型貼文格式不正確；已完成的其他貼文仍保留。');
       if(stopped)break;
@@ -1184,9 +1235,9 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     if(a==='nav'){
       if(arg==='forum-settings')editingBoard=activeBoardId();
       if(arg==='forum-new')editingBoard=null;
-      return go(arg);
+      const restoreUsers=arg==='users'&&view==='user';go(arg);if(restoreUsers)requestAnimationFrame(()=>window.scrollTo({top:userListScroll,behavior:'instant'}));return;
     }
-    if(a==='exit'){document.body.classList.remove('forum-open');switchTab(previousTab);return;}
+    if(a==='exit'){document.body.classList.remove('forum-open','forum-entering');switchTab(previousTab);return;}
     if(a==='theme'){toggleThemeMode();setTimeout(()=>applyForumTheme(),0);return;}
     if(a==='user-update-page'||a.startsWith('user-update-page:')){
       userUpdatePage = Math.max(1, Number(arg || full.slice(17)) || 1);
@@ -1455,7 +1506,9 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       $('ff-invite-users-dialog')?.close();$('ff-invite-users-dialog')?.remove();
       return job(()=>seedUsers(count,boardId,request));
     }
-    if(a==='user'){editingUser=arg;return go('user');}
+    if(a==='user'){userListScroll=window.scrollY;editingUser=arg;return go('user');}
+    if(a==='select-all-users'){const ids=boardUsers().filter(u=>!u.owned).map(u=>u.id),all=ids.every(id=>selectedUserIds.has(id));ids.forEach(id=>all?selectedUserIds.delete(id):selectedUserIds.add(id));return render();}
+    if(a==='delete-selected-users'){const ids=new Set([...selectedUserIds].filter(id=>boardUsers().some(u=>u.id===id&&!u.owned)));if(!ids.size)throw new Error('請先勾選要刪除的用戶。');if(!confirm(`確定刪除勾選的 ${ids.size} 位用戶？既有貼文仍會保留作者快照。`))return;state.users=state.users.filter(u=>!ids.has(u.id));selectedUserIds.clear();save();render();note('已刪除勾選用戶。');return;}
     if(a==='new-owned'||a==='new-user'){const u=newUser({name:a==='new-owned'?'我的新同人帳號':'新同好'},a==='new-owned');(u.owned?state.accounts:state.users).push(u);assignNameStyles();save();editingUser=u.id;return go('user');}
     if(a==='identity'){state.activeUser=arg;save();return render();}
     if(a==='user-theme'||a==='user-random'){
@@ -1464,7 +1517,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     }
     if(a==='save-user'){
       const u=user(editingUser);if(!val('ff-user-name').trim())throw new Error('請填寫暱稱。');
-      Object.assign(u,{name:val('ff-user-name').trim(),abstractStyle:!u.owned&&val('ff-user-style')==='abstract',handle:uniqueHandle(val('ff-user-handle'),u.id),signature:clip(val('ff-user-signature').trim(),160),owned:val('ff-user-kind')!=='virtual',official:val('ff-user-kind')==='official',gender:val('ff-user-gender'),avatar:safeImage(val('ff-user-avatar')),color:val('ff-user-color'),color2:val('ff-user-color2'),role:val('ff-user-role'),supports:val('ff-user-supports'),charIds:picks('ff-user-chars'),personality:val('ff-user-personality'),memory:val('ff-user-memory')});if(!u.owned){u.forumIds=C.tags([...C.list(u.forumIds),activeBoardId()]);u.forumRoles={...u.forumRoles,[activeBoardId()]:val('ff-user-forum-role').trim()||u.role||'世界居民'};}save();note('用戶設定已保存。');return render();
+      Object.assign(u,{name:val('ff-user-name').trim(),abstractStyle:!u.owned&&val('ff-user-style')==='abstract',handle:uniqueHandle(val('ff-user-handle'),u.id),signature:clip(val('ff-user-signature').trim(),160),owned:val('ff-user-kind')!=='virtual',official:val('ff-user-kind')==='official',gender:val('ff-user-gender'),avatar:safeImage(val('ff-user-avatar')),color:val('ff-user-color'),color2:val('ff-user-color2'),role:val('ff-user-role'),supports:val('ff-user-supports'),charIds:picks('ff-user-chars'),personality:val('ff-user-personality'),memory:val('ff-user-memory')});if(!u.owned){const board=activeBoard();u.forumIds=C.tags([...C.list(u.forumIds),board.id]);u.forumRoles={...u.forumRoles,[board.id]:board.mode==='world'?(val('ff-user-forum-role').trim()||u.role||'世界居民'):(u.role||'網路同好')};}save();note('用戶設定已保存。');return render();
     }
     if(a==='generate-user-style'){
       const u=state.users.find(x=>x.id===editingUser);if(!u)throw new Error('請選擇一位虛擬同好。');
@@ -1513,6 +1566,11 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       if(stopped)return;
       showInstructionOptimizeModal(currentInst,suggested);
     });
+    if(a==='polish-user-rules')return job(async()=>{
+      const types=C.tags(val('ff-edit-board-user-types').split(/\n|,/)),current=val('ff-edit-board-user-rules').trim();
+      const raw=await callAI({task:'請替論壇設計並修飾簡潔、可執行的 AI／手動新建用戶規則。依類型分配不同立場、語氣與行為，避免所有人同質化；保留使用者已寫的要求。',forum:{name:val('ff-edit-board-name'),mode:val('ff-edit-board-mode'),userTypes:types,currentRules:current},schema:{rules:'繁體中文的新建用戶規則'}},SYSTEM);
+      const rules=String(raw.rules||raw.content||'').trim();if(!rules)throw new Error('AI 未提供有效規則，請重試。');$('ff-edit-board-user-rules').value=rules;note('AI 已填入建議規則，確認後請保存論壇設定。');
+    });
     if(a==='apply-optimized-instruction'){
       const valText=val('ff-opt-suggested-input').trim();
       if($('ff-edit-board-ai-instruction')) $('ff-edit-board-ai-instruction').value = valText;
@@ -1537,7 +1595,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       const name=val('ff-edit-board-name').trim();if(!name)throw new Error('請填寫論壇中文名稱。');
       const mode=val('ff-edit-board-mode')==='world'?'world':'fandom';
       const displayName=val('ff-edit-board-display-name').trim()||(mode==='world'?name:'同人放映室');
-      const linkedParoSourceId=val('ff-edit-board-linked-paro')||null;
+      const linkedParoSourceId=mode==='world'?(val('ff-edit-board-linked-paro')||null):null;
       const primary=val('ff-edit-board-theme-primary'), secondary=val('ff-edit-board-theme-secondary'),preset=val('ff-edit-board-theme-preset')||'system';
       const aiInstruction=val('ff-edit-board-ai-instruction').trim();
       const id=C.id(),board={id,name,kind:mode==='world'?'paro':'fandom',mode,displayName,subBoards:[],theme:{preset,primary,secondary,surfaceTint:''},terminology:{home:val('ff-term-home'),feed:val('ff-term-feed'),members:val('ff-term-members'),publish:val('ff-term-publish'),manage:val('ff-term-manage')},aiInstruction,linkedParoSourceId,englishName:val('ff-edit-board-english').trim()||'Fandom Archive',slogan:val('ff-edit-board-slogan').trim()||'Every story deserves an echo.',description:val('ff-edit-board-description').trim(),worldview:val('ff-edit-board-worldview').trim(),generation:{...generationDefaults,boardId:id}};board.subBoards=readSections(board);if(!board.subBoards.length)throw new Error('請至少建立一個子論壇版塊。');
@@ -1603,12 +1661,13 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       const name=val('ff-edit-board-name').trim();if(!name)throw new Error('請填寫論壇名稱。');
       const mode=val('ff-edit-board-mode')==='world'?'world':'fandom';
       const displayName=val('ff-edit-board-display-name').trim()||(mode==='world'?name:'同人放映室');
-      const linkedParoSourceId=val('ff-edit-board-linked-paro')||null;
+      const linkedParoSourceId=mode==='world'?(val('ff-edit-board-linked-paro')||null):null;
       const primary=val('ff-edit-board-theme-primary'), secondary=val('ff-edit-board-theme-secondary'),preset=val('ff-edit-board-theme-preset')||'system';
       const aiInstruction=val('ff-edit-board-ai-instruction').trim();
       const prevParo = b.linkedParoSourceId;
       const subBoards=readSections(b);if(!subBoards.length)throw new Error('請至少保留一個子論壇版塊。');
-      Object.assign(b,{name,kind:mode==='world'?'paro':'fandom',mode,displayName,linkedParoSourceId,subBoards,theme:{preset,primary,secondary,surfaceTint:''},terminology:{home:val('ff-term-home'),feed:val('ff-term-feed'),members:val('ff-term-members'),publish:val('ff-term-publish'),manage:val('ff-term-manage')},aiInstruction,englishName:val('ff-edit-board-english').trim()||'Fandom Archive',slogan:val('ff-edit-board-slogan').trim()||'Every story deserves an echo.',description:val('ff-edit-board-description').trim(),worldview:val('ff-edit-board-worldview').trim()});
+      Object.assign(b,{name,kind:mode==='world'?'paro':'fandom',mode,displayName,linkedParoSourceId,subBoards,userTypes:C.tags(val('ff-edit-board-user-types').split(/\n|,/)),userCreationRules:val('ff-edit-board-user-rules').trim(),theme:{preset,primary,secondary,surfaceTint:''},terminology:{home:val('ff-term-home'),feed:val('ff-term-feed'),members:val('ff-term-members'),publish:val('ff-term-publish'),manage:val('ff-term-manage')},aiInstruction,englishName:val('ff-edit-board-english').trim()||'Fandom Archive',slogan:val('ff-edit-board-slogan').trim()||'Every story deserves an echo.',description:val('ff-edit-board-description').trim(),worldview:val('ff-edit-board-worldview').trim()});
+      if(mode!=='world')for(const u of state.users)if(C.list(u.forumIds).includes(b.id))u.forumRoles={...u.forumRoles,[b.id]:u.role||'網路同好'};
       for(const p of boardPosts(b.id)){const s=subBoardOf(b,p.subBoardId)||subBoards[0];p.subBoardId=s.id;p.subBoard=s.name;}
       if(linkedParoSourceId && linkedParoSourceId !== prevParo) syncParoCharacters(b.id, linkedParoSourceId);
       save();editingBoard=b.id;render();note('論壇設定已保存。');return;
@@ -1701,6 +1760,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       activeSwipeItem = null;
     }, { passive: true });
     $('forum-root').addEventListener('change',async event=>{
+      if(event.target.matches('[data-user-select]')){event.target.checked?selectedUserIds.add(event.target.dataset.userSelect):selectedUserIds.delete(event.target.dataset.userSelect);return;}
       if(event.target.id==='ff-drawer-reply-author'||event.target.id==='ff-reply-author'){
         if(event.target.value==='__select_oc__'){
           showOcPickerModal();
@@ -1709,6 +1769,7 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
       }
       if(event.target.matches('[data-admin-post]'))$('ff-admin-count').textContent='已選 '+$('forum-root').querySelectorAll('[data-admin-post]:checked').length+' 項';
       if(event.target.id==='ff-profile-type')updateModels();
+      if(event.target.id==='ff-edit-board-mode')updateBoardModeFields();
       if(event.target.id==='ff-forum-switch'){const id=event.target.value;if(id==='__new__')go('forum-new');else await action('board-filter:'+id);return;}
       if(event.target.id==='ff-import-file'){
         const input=event.target;
@@ -1729,7 +1790,8 @@ shortReplies=true 的用戶約佔30%，留言只寫1至2句、80字以內，允�
     bootForum();
   }
 
-  window.OCForum={render,exportState(){return C.portable(state);},importState(data){const old=state;try{state=C.validate(C.clone(data));if(!state.accounts.some(u=>u.id===state.activeUser))state.activeUser=state.accounts[0]?.id||'';save();render();return true;}catch(err){state=old;throw new Error('論壇備份無法還原：'+err.message);}},toggleEntry(force){const menu=$('mobileExportSubmenu');if(menu){menu.classList.toggle('active',force??!menu.classList.contains('active'));$('mobileExportMenuButton')?.setAttribute('aria-expanded',String(menu.classList.contains('active')));}},open(){window.OCForum.toggleEntry(false);if(typeof hideMobileCardSubmenu==='function')hideMobileCardSubmenu();previousTab=document.querySelector('.tab-content.active')?.id||'tab-cards';if(previousTab==='tab-forum')previousTab='tab-cards';document.body.classList.add('forum-open');switchTab('tab-forum');if(!state){try{const stored=localStorage.getItem(KEY);state=stored?C.validate(JSON.parse(stored)):C.initial();}catch{state=C.initial();}}render();}};
+  window.OCForum={render,exportState(){return C.portable(state);},importState(data){const old=state;try{state=C.validate(C.clone(data));if(!state.accounts.some(u=>u.id===state.activeUser))state.activeUser=state.accounts[0]?.id||'';save();render();return true;}catch(err){state=old;throw new Error('論壇備份無法還原：'+err.message);}},toggleEntry(force){const menu=$('mobileExportSubmenu');if(menu){menu.classList.toggle('active',force??!menu.classList.contains('active'));$('mobileExportMenuButton')?.setAttribute('aria-expanded',String(menu.classList.contains('active')));}},open(){window.OCForum.toggleEntry(false);if(typeof hideMobileCardSubmenu==='function')hideMobileCardSubmenu();previousTab=document.querySelector('.tab-content.active')?.id||'tab-cards';if(previousTab==='tab-forum')previousTab='tab-cards';document.body.classList.add('forum-open','forum-entering');switchTab('tab-forum');if(!state){try{const stored=localStorage.getItem(KEY);state=stored?C.validate(JSON.parse(stored)):C.initial();}catch{state=C.initial();}}render();setTimeout(()=>document.body.classList.remove('forum-entering'),520);}};
+  window.OCForum.handleBack=()=>{if(forumViewHistory.length){go(forumViewHistory.pop(),true);return true;}document.body.classList.remove('forum-open','forum-entering');switchTab(previousTab||'tab-cards',true);return true;};
   window.OCForum.cloudSnapshot=()=>{if(busy)throw new Error('請等待 AI 生成完成後再同步。');return CloudSyncCore.snapshot('forum',state);};
   window.OCForum.applyCloud=data=>{if(busy)throw new Error('AI 正在生成，請稍後同步。');const old=state;state=C.validate({...state,...data});if(!state.accounts.some(u=>u.id===state.activeUser))state.activeUser=state.accounts[0]?.id||'';try{save();}catch(err){state=old;throw err;}render();};
   window.OCForum.resetToInitial=()=>{if(busy)throw new Error('AI 正在生成，請稍後重置。');state=C.initial();assignNameStyles();save();render();};
