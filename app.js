@@ -367,7 +367,7 @@ function updateBadges() {
 
 function switchTab(tabId, fromBack = false) {
   const previous=document.querySelector('.tab-content.active')?.id;
-  if(!fromBack&&previous&&previous!==tabId)appTabHistory.push(previous);
+  if(!fromBack&&previous&&previous!==tabId&&previous!=='tab-forum')appTabHistory.push(previous);
   document.querySelectorAll(".nav-tab").forEach(tab => tab.classList.remove("active"));
   document.querySelectorAll(".tab-content").forEach(content => content.classList.remove("active"));
 
@@ -5089,7 +5089,32 @@ function setupEventListeners() {
       event.stopPropagation();
     }
   };
-  try{history.replaceState({ocBase:true},'');history.pushState({ocGuard:true},'');window.addEventListener('popstate',()=>{const active=[...document.querySelectorAll('.modal-backdrop.active')].filter(node=>getComputedStyle(node).display!=='none').at(-1);let handled=false;if(active){handled=true;if(active.id==='visualNovelPlayerModal')closeVisualNovelPlayer();else if(active.id==='documentReaderModal')closeModal('documentReaderModal',true);else if(active.id==='vnSpeakerEditorModal')closeVnSpeakerEditor();else if(active.id==='vnCharacterProfilesModal'||active.id==='vnProfileAvatarPickerModal')active.remove();else closeModal(active.id);}else if(document.body.classList.contains('forum-open')&&window.OCForum?.handleBack){handled=window.OCForum.handleBack();}else if(document.querySelector('.tab-content.active')?.id!=='tab-cards'){handled=true;switchTab(appTabHistory.pop()||'tab-cards',true);}if(handled)history.pushState({ocGuard:true},'');else history.back();});}catch(error){}
+  try{
+    const ensureBackGuard=()=>{if(!history.state?.ocGuard){history.replaceState({ocBase:true},'');history.pushState({ocGuard:true},'');}};
+    ensureBackGuard();
+    window.addEventListener('pageshow',ensureBackGuard);
+    window.addEventListener('popstate',()=>{
+      const active=[...document.querySelectorAll('.modal-backdrop.active')].filter(node=>getComputedStyle(node).display!=='none').at(-1);
+      let handled=false;
+      if(active){
+        handled=true;
+        if(active.id==='visualNovelPlayerModal')closeVisualNovelPlayer();
+        else if(active.id==='documentReaderModal')closeModal('documentReaderModal',true);
+        else if(active.id==='vnSpeakerEditorModal')closeVnSpeakerEditor();
+        else if(active.id==='vnCharacterProfilesModal'||active.id==='vnProfileAvatarPickerModal')active.remove();
+        else closeModal(active.id);
+      }else if(document.body.classList.contains('forum-open')&&window.OCForum?.handleBack){
+        handled=window.OCForum.handleBack();
+      }else if(document.querySelector('.tab-content.active')?.id!=='tab-cards'){
+        handled=true;
+        let target='tab-cards';
+        while(appTabHistory.length){const candidate=appTabHistory.pop();if(candidate&&candidate!=='tab-forum'){target=candidate;break;}}
+        switchTab(target,true);
+      }
+      if(handled)history.pushState({ocGuard:true},'');
+      else setTimeout(()=>history.back(),0);
+    });
+  }catch(error){}
 }
 
 function showToast(msg) {
