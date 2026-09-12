@@ -5,7 +5,7 @@
   const e = s => String(s ?? '').replace(/[&<>"']/g, x => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[x]));
   const presets = { deepseek: { name:'DeepSeek', type:'openai', baseUrl:'https://api.deepseek.com', model:'deepseek-chat', models:['deepseek-chat','deepseek-reasoner'] }, openai: { name:'OpenAI 相容', type:'openai', baseUrl:'https://api.openai.com/v1', model:'gpt-5-mini', models:['gpt-5-mini','gpt-4.1-mini','gpt-4.1'] }, gemini: { name:'Gemini', type:'gemini', baseUrl:'https://generativelanguage.googleapis.com/v1beta', model:'gemini-2.5-flash', models:['gemini-2.5-flash','gemini-2.5-pro','gemini-2.5-flash-lite'] } };
   const labels = { chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄', favoriteFolders:'收藏資料夾', tagCatalog:'論壇 Tag', boards:'論壇空間', characters:'人物副本', worlds:'世界觀副本', factions:'陣營副本', relationships:'CP 關係副本', loreEntries:'注意詞條', accounts:'我的帳號', users:'虛擬同好', posts:'貼文／創作', comments:'留言', profiles:'AI 連線設定（含金鑰）' };
-  let state, view = 'feed', currentPost = null, busy = false, controller = null, status = '', pendingImport = null, userListScroll = 0, mobileManageDrawerOpen = false, mobileManageClickTimer = null;
+  let state, view = 'feed', currentPost = null, busy = false, controller = null, status = '', pendingImport = null, userListScroll = 0, mobileManageDrawerOpen = false, mobileManageClickTimer = null, liveRefreshFrame = 0;
   const selectedUserIds=new Set();
   const forumViewHistory=[];
   let filter = { folder:'', board:'', subBoard:'', tag:'', tags:[], search:'', sort:'new', dateRange:'all' }, feedPage=1, searchDrawerOpen=false, editingUser = null, editingProfile = null, editingSnapshot = null, editingBoard = null, previousTab = 'tab-cards', dmUser = null;
@@ -286,7 +286,9 @@
       note('✦ 論壇有新動態，可在完成輸入後查看。');
       return;
     }
-    if (!['compose','edit-post','user','profile','snapshots','snapshot','board','forum-settings','forum-new','lore','import','backup'].includes(view)) render();
+    if (['compose','edit-post','user','profile','snapshots','snapshot','board','forum-settings','forum-new','lore','import','backup'].includes(view)) return;
+    if(liveRefreshFrame)cancelAnimationFrame(liveRefreshFrame);
+    liveRefreshFrame=requestAnimationFrame(()=>{liveRefreshFrame=0;if(view==='dm')chatUI.refresh();else renderPreservingReadingState();});
   }
   function go(next,fromBack=false) { if(next===view&&view==='compose')return;if(!fromBack&&next!==view)forumViewHistory.push(view);if(next==='compose')bookDraft=[];if(['feed','fan','favorites'].includes(next)&&next!==view)feedPage=1; view = next; render(); document.getElementById('tab-forum')?.scrollTo({top:0}); }
   function renderPreservingPosition() {
@@ -297,6 +299,12 @@
       window.scrollTo({top:windowTop,left:window.scrollX||0,behavior:'instant'});
       const drawer=$('ff-search-drawer');if(drawer)drawer.scrollTop=drawerTop;
     });
+  }
+  function renderPreservingReadingState(){
+    const panel=$('tab-forum'),panelTop=panel?.scrollTop||0,windowTop=window.scrollY||0;
+    const openDetails=[...$('forum-root').querySelectorAll('details')].map((node,index)=>node.open?index:-1).filter(index=>index>=0);
+    render();
+    requestAnimationFrame(()=>{for(const index of openDetails){const node=$('forum-root').querySelectorAll('details')[index];if(node)node.open=true;}if(panel)panel.scrollTop=panelTop;window.scrollTo({top:windowTop,left:window.scrollX||0,behavior:'instant'});});
   }
   function showOcPickerModal() {
     const boardId = activeBoardId();
