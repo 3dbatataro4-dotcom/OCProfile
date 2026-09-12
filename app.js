@@ -882,9 +882,13 @@ function openCharacterModal(charId = null) {
 
 /* ========== Batch 6: New Character Creation Wizard ========== */
 let wizardCurrentStep = 1;
+let wizardAiRelations = [];
+let wizardAiCpDraft = null;
 
 function openNewCharacterWizard() {
   wizardCurrentStep = 1;
+  wizardAiRelations = [];
+  wizardAiCpDraft = null;
   const defaultAvatar = PRESET_AVATARS[0].url;
   document.getElementById("wizName").value = "";
   document.getElementById("wizEnglishName").value = "";
@@ -910,6 +914,62 @@ function openNewCharacterWizard() {
   renderWizTagChips();
   updateWizardStepUI();
   document.getElementById("newCharWizardModal").classList.add("active");
+}
+
+function openAiCharacterTextModal() {
+  document.getElementById("aiCharacterParsePreview").hidden = true;
+  document.getElementById("aiCharacterParseBtn").innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> 解析並填入精靈';
+  document.getElementById("aiCharacterTextModal").classList.add("active");
+}
+
+function parseAiJsonContent(content) {
+  const clean = String(content || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try { return JSON.parse(clean); } catch (error) {
+    const start = clean.indexOf("{"), end = clean.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(clean.slice(start, end + 1));
+    throw error;
+  }
+}
+
+function sameCharacterName(left, right) {
+  const normalize=value=>String(value||'').replace(/[\u200B-\u200D\uFEFF]/g,'').trim().toLocaleLowerCase();
+  return normalize(left)===normalize(right);
+}
+
+function createAiPlaceholderCharacter(name) {
+  const existing=characters.find(character=>sameCharacterName(character.name,name));if(existing)return existing;
+  const placeholder={id:`char_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,createdAt:Date.now(),name:String(name||'').trim(),englishName:'',avatar:PRESET_AVATARS[0].url,gender:'',height:'',zodiac:'',orientation:'',occupation:'待補充',fixedCp:'',isHidden:true,isAiPlaceholder:true,appearance:'',personality:'',extraNotes:'由 AI 文字轉人設暫時建立，等待補完。',tags:['AI待補完'],customFields:[],relationships:[],paroValues:{},themeColor:{primary:'#a8a29e',secondary:'#57534e',mode:'gradient'}};
+  characters.push(placeholder);return placeholder;
+}
+
+async function parseAiCharacterText() {
+  const source = document.getElementById("aiCharacterSourceText").value.trim();
+  if (!source) { alert("請先貼上人物設定文字。"); return; }
+  if (!deepseekSettings.apiKey) { alert("請先在 AI 設定中填入 DeepSeek API Key。"); return; }
+  const button = document.getElementById("aiCharacterParseBtn");
+  button.disabled = true; showToast("AI 正在整理人物卡、CP 與稱呼關係……");
+  try {
+    const existingNames = characters.map(character => character.name);
+    const data = await requestDeepSeek({
+      model:"deepseek-v4-flash", thinking:{type:"disabled"}, temperature:0, max_tokens:3000, response_format:{type:"json_object"},
+      messages:[
+        {role:"system",content:"你是人物設定資料整理器。只能整理使用者明確提供的事實，不得補寫未提供的劇情。只輸出有效 JSON。稱呼表中的自己可以保留為 selfRelationship；其他人物名稱須維持原文。"},
+        {role:"user",content:JSON.stringify({task:"把文字整理成人物卡草稿、固定CP草稿與此人物對他人的單向稱呼關係。職業與身分合併到 occupation；無法分類但重要的資料放 extraNotes。不要建立原文沒有的反向關係。",existingCharacterNames:existingNames,source,schema:{character:{name:"中文姓名",englishName:"英文名",gender:"性別",height:"身高",zodiac:"星座",orientation:"攻／受等左右位",occupation:"身份與職業",fixedCp:"固定CP姓名",appearance:"外貌",personality:"性格與語氣",extraNotes:"其他設定",tags:["原文明確出現的組織、世界觀或陣營Tag"]},cp:{partnerName:"固定CP姓名",r18:"此人物的R18相關設定",thoughts:"此人物對CP的看法"},relationships:[{targetName:"角色名",callName:"稱呼",opinion:"關係或看法",isMainline:true}],selfRelationship:{callName:"我",opinion:"自我描述"}}})}
+      ]
+    });
+    const parsed=parseAiJsonContent(data.choices[0].message.content),char=parsed.character||{};
+    if(!String(char.name||'').trim())throw new Error("AI 沒有辨識出人物姓名。");
+    const selfNote=parsed.selfRelationship&&typeof parsed.selfRelationship==='object'?[parsed.selfRelationship.callName&&`自稱：${parsed.selfRelationship.callName}`,parsed.selfRelationship.opinion].filter(Boolean).join('；'):'';
+    const extraNotes=[char.extraNotes,selfNote].filter(Boolean).join('\n');
+    const fields={wizName:char.name,wizEnglishName:char.englishName,wizGender:char.gender,wizHeight:char.height,wizZodiac:char.zodiac,wizOrientation:char.orientation,wizOccupation:char.occupation,wizFixedCp:char.fixedCp,wizAppearance:char.appearance,wizPersonality:char.personality,wizExtraNotes:extraNotes,wizTags:Array.isArray(char.tags)?char.tags.join(', '):char.tags};
+    for(const [id,value] of Object.entries(fields))if(value!==undefined&&value!==null)document.getElementById(id).value=String(value).trim();
+    wizardAiRelations=(Array.isArray(parsed.relationships)?parsed.relationships:[]).filter(row=>row&&String(row.targetName||'').trim()).map(row=>({targetName:String(row.targetName).trim(),callName:String(row.callName||'').trim(),opinion:String(row.opinion||'').trim(),isMainline:row.isMainline!==false}));
+    wizardAiCpDraft=parsed.cp&&typeof parsed.cp==='object'?{partnerName:String(parsed.cp.partnerName||char.fixedCp||'').trim(),r18:String(parsed.cp.r18||'').trim(),thoughts:String(parsed.cp.thoughts||'').trim()}:char.fixedCp?{partnerName:String(char.fixedCp).trim(),r18:'',thoughts:''}:null;
+    const matched=wizardAiRelations.filter(row=>characters.some(character=>sameCharacterName(character.name,row.targetName))).length,missing=wizardAiRelations.length-matched,partner=characters.find(character=>sameCharacterName(character.name,wizardAiCpDraft?.partnerName||char.fixedCp));
+    const preview=document.getElementById("aiCharacterParsePreview");preview.hidden=false;preview.innerHTML=`<strong>已整理：${escapeHtml(char.name)}</strong><span>${wizardAiRelations.length} 條稱呼關係（${matched} 位已在卡庫${missing?`、${missing} 位會建立空白草稿卡`:''}）</span><span>${char.fixedCp?`固定 CP：${escapeHtml(char.fixedCp)}（${partner?'將連接現有人物':'將建立同名草稿並建立 CP 卡'}）`:'沒有固定 CP'}</span>`;
+    renderWizTagChips();renderWizFinalCardPreview();wizardCurrentStep=1;updateWizardStepUI();button.innerHTML='<i class="fa-solid fa-rotate"></i> 重新解析並更新草稿';
+  } catch (error) { alert(`AI 文字解析失敗：${error.message}`); }
+  finally { hideToast();button.disabled=false; }
 }
 
 function updateWizardStepUI() {
@@ -1086,9 +1146,13 @@ function finishWizard() {
     return;
   }
 
+  const matchedPlaceholder=characters.find(character=>character.isAiPlaceholder&&sameCharacterName(character.name,name));
+  const relationshipRows=wizardAiRelations.filter(row=>!sameCharacterName(row.targetName,name)).map(row=>{const target=createAiPlaceholderCharacter(row.targetName);return {...row,targetName:target.name};});
+  const requestedPartner=wizardAiCpDraft?.partnerName||'';
+  const preparedPartner=requestedPartner&&!sameCharacterName(requestedPartner,name)?createAiPlaceholderCharacter(requestedPartner):null;
   const charData = {
-    id: `char_${Date.now()}`,
-    createdAt: Date.now(),
+    id: matchedPlaceholder?.id || `char_${Date.now()}`,
+    createdAt: matchedPlaceholder?.createdAt || Date.now(),
     name: name,
     englishName: document.getElementById("wizEnglishName").value.trim(),
     avatar: document.getElementById("wizAvatarUrl").value.trim() || PRESET_AVATARS[0].url,
@@ -1097,14 +1161,15 @@ function finishWizard() {
     zodiac: document.getElementById("wizZodiac").value.trim(),
     orientation: document.getElementById("wizOrientation").value.trim(),
     occupation: document.getElementById("wizOccupation").value.trim(),
-    fixedCp: document.getElementById("wizFixedCp").value.trim(),
+    fixedCp: preparedPartner?.name || document.getElementById("wizFixedCp").value.trim(),
     isHidden: false,
+    isAiPlaceholder: false,
     appearance: document.getElementById("wizAppearance").value.trim(),
     personality: document.getElementById("wizPersonality").value.trim(),
     extraNotes: document.getElementById("wizExtraNotes").value.trim(),
     tags: document.getElementById("wizTags").value.split(',').map(t => t.trim()).filter(Boolean),
     customFields: [],
-    relationships: [],
+    relationships: relationshipRows,
     paroValues: {},
     themeColor: {
       primary: document.getElementById("wizPrimaryColor").value,
@@ -1113,7 +1178,14 @@ function finishWizard() {
     }
   };
 
-  characters.push(charData);
+  if(matchedPlaceholder)characters[characters.indexOf(matchedPlaceholder)]=charData;else characters.push(charData);
+  perspectiveTargets[charData.id]=charData.relationships.map(row=>row.targetName);
+  const partnerName=wizardAiCpDraft?.partnerName||charData.fixedCp,partner=characters.find(character=>character.id!==charData.id&&sameCharacterName(character.name,partnerName));
+  if(partner){
+    const exists=cps.map(normalizeCpRecord).some(cp=>{const ids=(cp.members||[]).map(member=>member.charId);return ids.includes(charData.id)&&ids.includes(partner.id);});
+    if(!exists)cps.push({id:`cp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,name:`${charData.name} × ${partner.name}`,type:'cp',relationType:'',members:[{charId:charData.id,position:charData.orientation||'',r18:wizardAiCpDraft?.r18||'',thoughts:wizardAiCpDraft?.thoughts||''},{charId:partner.id,position:partner.orientation||'',r18:'',thoughts:''}],sections:[]});
+  }
+  wizardAiRelations=[];wizardAiCpDraft=null;
   saveStateToLocalStorage();
   syncGlobalTags();
   renderAllViews();
@@ -1131,6 +1203,7 @@ function cancelWizard() {
     if (!confirm("確定要放棄新建角色？已輸入的內容將會遺失。")) return;
   }
   closeModal("newCharWizardModal");
+  wizardAiRelations=[];wizardAiCpDraft=null;
 }
 
 function updateModalAvatarPreview(url) {
@@ -1362,7 +1435,7 @@ function renderCallNameMatrix() {
   }
 
   const targetNames = perspectiveTargets[currentSubject.id];
-  const targetChars = activeChars.filter(c => c.id !== currentSubject.id && targetNames.includes(c.name));
+  const targetChars = characters.filter(c => c.id !== currentSubject.id && (!c.isHidden || c.isAiPlaceholder) && targetNames.some(name=>sameCharacterName(name,c.name)));
   const tbody = document.getElementById("callNameTableBody");
 
   tbody.innerHTML = targetChars.length ? targetChars.map(target => {
