@@ -1,7 +1,7 @@
 (function(root){
   'use strict';
-  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
-  const mapFields=new Set(['collapsedBooks','perspectiveTargets']);
+  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','visualNovelPreferences','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
+  const mapFields=new Set(['visualNovelPreferences','collapsedBooks','perspectiveTargets']);
   const banned=new Set(['apikey','apikeys','key','authorization','accesstoken','refreshtoken','password','secret','servicekey','servicerole','profiles','activeprofile','deepseeksettings','generation','session','sessions']);
   const clone=x=>JSON.parse(JSON.stringify(x));
   function postgresSafeText(value){
