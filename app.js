@@ -576,6 +576,7 @@ function normalizeCpRecord(cp) {
       name: cp.name || "未命名關係",
       type: cp.type === "other" ? "other" : "cp",
       relationType: cp.relationType || "",
+      gradientColors: Array.isArray(cp.gradientColors) ? cp.gradientColors.filter(color => /^#[0-9a-f]{6}$/i.test(color)).slice(0, 3) : [],
       members: cp.members.map(member => ({
         charId: member.charId,
         position: member.position ?? member.role ?? "",
@@ -600,6 +601,7 @@ function normalizeCpRecord(cp) {
     name: cp.name || "未命名關係",
     type: cp.type === "other" ? "other" : "cp",
     relationType: cp.relationType || "",
+    gradientColors: Array.isArray(cp.gradientColors) ? cp.gradientColors.filter(color => /^#[0-9a-f]{6}$/i.test(color)).slice(0, 3) : [],
     members: (cp.memberIds || []).map(charId => {
       const pos = positions.find(item => item.charId === charId);
       return { charId, position: pos?.role || pos?.position || "", r18: "", thoughts: "" };
@@ -610,6 +612,20 @@ function normalizeCpRecord(cp) {
 
 function normalizeCpCollection(records) {
   return (Array.isArray(records) ? records : []).map(normalizeCpRecord).filter(Boolean);
+}
+
+function resolveCpGradientColors(cp, memberChars) {
+  const custom = (cp?.gradientColors || []).filter(color => /^#[0-9a-f]{6}$/i.test(color)).slice(0, 3);
+  const automatic = (memberChars || []).map(char => char?.themeColor?.primary).filter(color => /^#[0-9a-f]{6}$/i.test(color)).slice(0, 3);
+  const colors = custom.length ? custom : automatic;
+  if (!colors.length) return ["#d97706", "#ec4899"];
+  if (colors.length === 1) return [colors[0], colors[0]];
+  return colors;
+}
+
+function cpGradientCss(colors) {
+  const stops = colors.length >= 3 ? `${colors[0]} 0%, ${colors[1]} 50%, ${colors[2]} 100%` : `${colors[0]} 0%, ${colors[1]} 100%`;
+  return `linear-gradient(110deg, ${stops})`;
 }
 
 function renderCpModule() {
@@ -624,46 +640,48 @@ function renderCpModule() {
   grid.innerHTML = cps.map(rawCp => {
     const cp = normalizeCpRecord(rawCp);
     const memberChars = (cp.members || []).map(member => characters.find(c => c.id === member.charId)).filter(Boolean);
+    const gradientColors = resolveCpGradientColors(cp, memberChars);
+    const gradientCss = cpGradientCss(gradientColors);
     const avatarsHtml = memberChars.map(c => `
       <img class="cp-avatar-img" src="${c.avatar}" title="${c.name}" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
     `).join('');
 
     const positionsHtml = (cp.members || []).map(member => {
       const char = memberChars.find(c => c.id === member.charId);
-      return char ? `<span class="badge" style="background:var(--bg-secondary); border:1px solid var(--accent-gold); color:var(--accent-coffee);">${char.name}: ${member.position || '未定'}</span>` : '';
+      return char ? `<span class="cp-position-pill">${escapeHtml(char.name)}: ${escapeHtml(member.position || '未定')}</span>` : '';
     }).join(' ');
 
     const memberDetailsHtml = (cp.members || []).map(member => {
       const char = characters.find(c => c.id === member.charId);
       if (!char) return '';
-      return `<div class="cp-member-card"><strong>${char.name}</strong>${cp.type !== 'other' && member.r18 ? `<div><small>R18／互動狀況：</small><span style="white-space:pre-line;">${member.r18}</span></div>` : ''}${member.thoughts ? `<div><small>對關係／其他成員的看法：</small><span style="white-space:pre-line;">${member.thoughts}</span></div>` : ''}</div>`;
+      return `<div class="cp-member-card"><strong>${escapeHtml(char.name)}</strong>${cp.type !== 'other' && member.r18 ? `<div><small>R18／互動狀況：</small><span style="white-space:pre-line;">${escapeHtml(member.r18)}</span></div>` : ''}${member.thoughts ? `<div><small>對關係／其他成員的看法：</small><span style="white-space:pre-line;">${escapeHtml(member.thoughts)}</span></div>` : ''}</div>`;
     }).join('');
 
     const sectionsHtml = (cp.sections || []).map(sec => `
       <div class="cp-section-box mt-2">
-        <strong style="color:var(--accent-coffee);"><i class="fa-solid fa-bookmark"></i> ${sec.title}</strong>
-        <p style="white-space:pre-line; color:var(--text-main); margin-top:0.2rem;">${sec.content}</p>
+        <strong><i class="fa-solid fa-bookmark"></i> ${escapeHtml(sec.title)}</strong>
+        <p>${escapeHtml(sec.content)}</p>
       </div>
     `).join('');
 
     return `
-      <div class="cp-card">
-        <div class="cp-card-header">
-          <div style="display:flex; align-items:center; gap:0.8rem;">
-            <div class="cp-avatars-row">${avatarsHtml}</div>
-            <div>
-              <h3 style="font-size:1.05rem;">${cp.name} <span class="cp-type-badge">${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}</span></h3>
-              <div style="margin-top:0.2rem;">${positionsHtml}</div>
-            </div>
-          </div>
-          <div>
+      <div class="cp-card" style="--cp-color-1:${gradientColors[0]};--cp-color-2:${gradientColors[1]};--cp-color-3:${gradientColors[2] || gradientColors[1]};--cp-gradient:${gradientCss};">
+        <div class="cp-theme-cover" aria-hidden="true"></div>
+        <div class="cp-card-hero">
+          <div class="cp-avatars-row">${avatarsHtml}</div>
+          <div class="cp-card-actions">
             <button class="btn btn-xs btn-outline" onclick="openCpModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
             <button class="btn btn-xs btn-danger" onclick="deleteCp('${cp.id}')">&times;</button>
           </div>
         </div>
-
-        ${memberDetailsHtml}
-        ${sectionsHtml}
+        <div class="cp-card-content">
+          <div class="cp-card-title-row">
+            <div><small class="cp-card-kicker">${cp.type === 'other' ? 'RELATIONSHIP ARCHIVE' : 'COUPLE ARCHIVE'}</small><h3>${escapeHtml(cp.name)} <span class="cp-type-badge">${cp.type === 'other' ? escapeHtml(cp.relationType || '其他關係') : 'CP'}</span></h3></div>
+          </div>
+          <div class="cp-position-list">${positionsHtml}</div>
+          <div class="cp-member-details">${memberDetailsHtml}</div>
+          <div class="cp-sections">${sectionsHtml}</div>
+        </div>
       </div>
     `;
   }).join('');
@@ -684,10 +702,11 @@ function openCpModal(cpId = null) {
     document.getElementById("cpName").value = cp.name;
     document.getElementById("cpType").value = cp.type || "cp";
     document.getElementById("cpRelationType").value = cp.relationType || "";
+    document.getElementById("cpUseCustomGradient").checked = !!cp.gradientColors?.length;
 
     cbContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
-        <input type="checkbox" value="${c.id}" ${ (cp.members || []).some(member => member.charId === c.id) ? 'checked' : '' } onchange="renderCpMemberInputs()">
+        <input type="checkbox" value="${c.id}" ${ (cp.members || []).some(member => member.charId === c.id) ? 'checked' : '' } onchange="renderCpMemberInputs(); updateCpGradientEditor()">
         <span>${c.name}</span>
       </label>
     `).join('');
@@ -699,10 +718,11 @@ function openCpModal(cpId = null) {
     document.getElementById("cpName").value = "";
     document.getElementById("cpType").value = "cp";
     document.getElementById("cpRelationType").value = "";
+    document.getElementById("cpUseCustomGradient").checked = false;
 
     cbContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
-        <input type="checkbox" value="${c.id}" ${ (activeChars.slice(0, 2).map(x=>x.id)).includes(c.id) ? 'checked' : '' } onchange="renderCpMemberInputs()">
+        <input type="checkbox" value="${c.id}" ${ (activeChars.slice(0, 2).map(x=>x.id)).includes(c.id) ? 'checked' : '' } onchange="renderCpMemberInputs(); updateCpGradientEditor()">
         <span>${c.name}</span>
       </label>
     `).join('');
@@ -715,8 +735,23 @@ function openCpModal(cpId = null) {
   modal.dataset.editingMembers = JSON.stringify(cpId ? normalizeCpRecord(cps.find(item => item.id === cpId)).members : []);
   toggleCpTypeFields(false);
   renderCpMemberInputs();
+  updateCpGradientEditor(cpId ? normalizeCpRecord(cps.find(item => item.id === cpId)).gradientColors : null);
   modal.classList.add("active");
   captureEditorModalSnapshot("documentModal");
+}
+
+function updateCpGradientEditor(savedColors = null) {
+  const custom = !!document.getElementById("cpUseCustomGradient")?.checked;
+  const selectedChars = Array.from(document.querySelectorAll("#cpCharCheckboxes input:checked")).map(input => characters.find(char => char.id === input.value)).filter(Boolean);
+  const autoColors = resolveCpGradientColors({ gradientColors:[] }, selectedChars);
+  const stored = Array.isArray(savedColors) && savedColors.length ? savedColors : null;
+  const inputs = [1,2,3].map(index => document.getElementById(`cpGradientColor${index}`));
+  const colors = stored || inputs.map(input => input?.value).filter(Boolean);
+  const defaults = [autoColors[0], autoColors[1], autoColors[2] || autoColors[1]];
+  inputs.forEach((input,index) => { if(input){if(stored || !custom)input.value=(colors[index] || defaults[index]);input.disabled=!custom;} });
+  const previewColors = custom ? inputs.map(input => input?.value).filter(Boolean) : autoColors;
+  const preview = document.getElementById("cpGradientPreview");if(preview)preview.style.background=cpGradientCss(previewColors);
+  const hint = document.getElementById("cpGradientModeHint");if(hint)hint.textContent=custom?'使用手動指定的三色漸層':'自動混合已選成員的主題色（最多三色）';
 }
 
 function toggleCpTypeFields(rerender = true) {
@@ -804,6 +839,7 @@ function saveCpForm() {
     name,
     type,
     relationType,
+    gradientColors: document.getElementById("cpUseCustomGradient").checked ? [1,2,3].map(index => document.getElementById(`cpGradientColor${index}`).value).filter(Boolean) : [],
     members,
     sections: customSections
   };
