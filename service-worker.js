@@ -1,4 +1,4 @@
-const CACHE_NAME = "oc-profile-app-v21-31-vn-media-preload";
+const CACHE_NAME = "oc-profile-app-v21-32-safe-chapter-merge";
 const APP_SHELL = ["./", "./index.html", "./style.css", "./data.js", "./app.js", "./forum.css", "./forum-chat.css", "./forum-chat-core.js", "./forum-chat.js", "./forum-core.js", "./forum.js", "./cloud-sync-core.js", "./cloud-sync.js", "./cloud-sync.css", "./manifest.webmanifest", "./app-icon-192.png", "./app-icon-512.png"];
 
 self.addEventListener("install", event => {
