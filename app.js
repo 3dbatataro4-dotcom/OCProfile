@@ -58,6 +58,7 @@ let currentVisualNovelEvents = [];
 let currentVisualNovelIndex = -1;
 let visualNovelAutoPlay = false;
 let visualNovelAutoTimer = null;
+let visualNovelAutoScheduleToken = 0;
 let visualNovelChapterTimer = null;
 let visualNovelOpeningTimer = null;
 let visualNovelCgLayerIndex = 0;
@@ -4040,7 +4041,7 @@ function typeVisualNovelText(element, text) {
       clearTimeout(state.timer); visualNovelTyping = null;
       renderVisualNovelInlineText(element, state.text);
       if (feed) feed.scrollTop = feed.scrollHeight;
-      if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(300, Math.round(1500 / visualNovelAutoSpeed)));
+      if (visualNovelAutoPlay) scheduleVisualNovelAutoAdvance(Math.max(300, Math.round(1500 / visualNovelAutoSpeed)));
       return;
     }
     const character = state.visibleText[state.index++];
@@ -4050,6 +4051,18 @@ function typeVisualNovelText(element, text) {
     state.timer = setTimeout(typeNextCharacter, nextDelay);
   };
   state.timer = setTimeout(typeNextCharacter, 28);
+}
+
+function cancelVisualNovelAutoAdvance() {
+  visualNovelAutoScheduleToken++;
+  clearTimeout(visualNovelAutoTimer);
+  visualNovelAutoTimer=null;
+}
+
+function scheduleVisualNovelAutoAdvance(delay) {
+  cancelVisualNovelAutoAdvance();
+  const token=visualNovelAutoScheduleToken;
+  visualNovelAutoTimer=setTimeout(()=>{if(token!==visualNovelAutoScheduleToken)return;visualNovelAutoTimer=null;advanceVisualNovel();},delay);
 }
 
 function finishVisualNovelTyping(showFull = true) {
@@ -4163,8 +4176,14 @@ function getMissingVisualNovelDialogueIndexes(upToIndex=currentVisualNovelIndex)
 
 function repairMissingVisualNovelDialogueRows(upToIndex=currentVisualNovelIndex,announce=true) {
   const missing=getMissingVisualNovelDialogueIndexes(upToIndex);if(!missing.length)return false;
-  rebuildVisualNovelPlaybackAfterScriptEdit(upToIndex);
-  if(announce)showVnFloatingToast(`已自動補回 ${missing.length} 句未顯示台詞`);
+  const feed=document.getElementById('vnStoryFeed'),savedIndex=currentVisualNovelIndex,typewriter=currentVisualNovelSettings.typewriterEnabled,oldHeight=feed.scrollHeight,oldTop=feed.scrollTop,wasNearBottom=oldHeight-feed.clientHeight-oldTop<80;
+  finishVisualNovelTyping(true);const index=missing[0];currentVisualNovelSettings.typewriterEnabled=typewriter;
+  currentVisualNovelIndex=index;executeVisualNovelEvent(currentVisualNovelEvents[index]);
+  const inserted=feed.querySelector(`.vn-feed-entry[data-event-index="${index}"]`);if(inserted){const next=[...feed.querySelectorAll('.vn-feed-entry[data-event-index]')].find(row=>row!==inserted&&Number(row.dataset.eventIndex)>index);if(next)feed.insertBefore(inserted,next);}
+  currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=savedIndex;
+  visualNovelHistory.sort((a,b)=>Number(a.key.split(':').at(-1))-Number(b.key.split(':').at(-1)));
+  requestAnimationFrame(()=>{feed.scrollTop=wasNearBottom?feed.scrollHeight:oldTop+(feed.scrollHeight-oldHeight);});
+  if(announce)showVnFloatingToast(`已補回第 ${index+1} 句，正在正常播放`);
   return true;
 }
 
@@ -4215,7 +4234,7 @@ function clearVisualNovelBookmark(docId) {
 function advanceVisualNovel(event) {
   event?.stopPropagation?.();
   if (event) playVisualNovelAdvanceSound();
-  clearTimeout(visualNovelAutoTimer);
+  cancelVisualNovelAutoAdvance();
   if (visualNovelChapterTimer||visualNovelOpeningTimer) return;
   if (finishVisualNovelTyping(true)) return;
   if(repairMissingVisualNovelDialogueRows(currentVisualNovelIndex,true))return;
@@ -4246,7 +4265,7 @@ function advanceVisualNovel(event) {
     }
     return;
   }
-  if (visualNovelAutoPlay && !visualNovelTyping) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(500, Math.round(3000 / visualNovelAutoSpeed)));
+  if (visualNovelAutoPlay && !visualNovelTyping) scheduleVisualNovelAutoAdvance(Math.max(500, Math.round(3000 / visualNovelAutoSpeed)));
 }
 
 function advanceVisualNovelFast() {
@@ -4534,8 +4553,8 @@ function toggleVisualNovelAutoPlay(event) {
   visualNovelAutoPlay = !visualNovelAutoPlay;
   document.getElementById("vnAutoPlayBtn").classList.toggle("active", visualNovelAutoPlay);
   showVnFloatingToast(visualNovelAutoPlay ? `自動播放：開啟 (${visualNovelAutoSpeed}x)` : "自動播放：關閉");
-  if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(500, Math.round(3000 / visualNovelAutoSpeed)));
-  else clearTimeout(visualNovelAutoTimer);
+  if (visualNovelAutoPlay) scheduleVisualNovelAutoAdvance(Math.max(500, Math.round(3000 / visualNovelAutoSpeed)));
+  else cancelVisualNovelAutoAdvance();
 }
 
 function toggleVisualNovelTypeSound(event) {
