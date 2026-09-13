@@ -95,5 +95,10 @@
     }
     return validate(out);
   }
-  const api={collections,mapFields,scrub,stable,equal,postgresSafeText,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  function delta(remote,next,note=''){
+    remote=validate(remote);next=validate(next);if(remote.scope!==next.scope)throw new Error('增量同步區域不相符。');const changes=[],orders={};
+    for(const group of collections[next.scope]){const before=new Map(remote.data[group].map(row=>[String(row.id),row])),after=new Map(next.data[group].map(row=>[String(row.id),row])),start=changes.length;for(const id of new Set([...before.keys(),...after.keys()])){const value=after.get(id);if(!equal(before.get(id),value))changes.push({group,id,value:value===undefined?null:scrub(clone(value))});}if(changes.length>start)orders[group]=next.data[group].map(row=>String(row.id));}
+    return {format:'oc-cloud-delta',version:1,scope:next.scope,note:postgresSafeText(String(note||'')).slice(0,16),changes,orders};
+  }
+  const api={collections,mapFields,scrub,stable,equal,postgresSafeText,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge,delta};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
