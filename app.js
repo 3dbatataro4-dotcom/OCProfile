@@ -4183,7 +4183,6 @@ function repairMissingVisualNovelDialogueRows(upToIndex=currentVisualNovelIndex,
   currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=savedIndex;
   visualNovelHistory.sort((a,b)=>Number(a.key.split(':').at(-1))-Number(b.key.split(':').at(-1)));
   requestAnimationFrame(()=>{feed.scrollTop=wasNearBottom?feed.scrollHeight:oldTop+(feed.scrollHeight-oldHeight);});
-  if(announce)showVnFloatingToast(`已補回第 ${index+1} 句，正在正常播放`);
   return true;
 }
 
