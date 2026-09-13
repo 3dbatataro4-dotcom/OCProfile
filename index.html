@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=21.45">
-  <link rel="stylesheet" href="forum.css?v=21.45">
+  <link rel="stylesheet" href="style.css?v=21.46">
+  <link rel="stylesheet" href="forum.css?v=21.46">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.45">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.46">
 </head>
 <body>
 
@@ -890,6 +890,16 @@
           </div>
         </div>
 
+        <div class="form-group cp-gradient-editor">
+          <div class="cp-gradient-editor-head"><label class="checkbox-label"><input type="checkbox" id="cpUseCustomGradient" onchange="updateCpGradientEditor()"> 手動調整卡片漸層</label><small id="cpGradientModeHint">自動混合已選成員的主題色（最多三色）</small></div>
+          <div class="cp-gradient-preview" id="cpGradientPreview" aria-label="CP 卡片漸層預覽"></div>
+          <div class="cp-gradient-colors">
+            <label>第一色<input type="color" id="cpGradientColor1" value="#d97706" oninput="updateCpGradientEditor()"></label>
+            <label>第二色<input type="color" id="cpGradientColor2" value="#ec4899" oninput="updateCpGradientEditor()"></label>
+            <label>第三色<input type="color" id="cpGradientColor3" value="#8b5cf6" oninput="updateCpGradientEditor()"></label>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>每位人物的獨立設定：</label>
           <div id="cpMemberDetailsContainer"></div>
@@ -1600,12 +1610,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=21.45"></script>
-  <script src="forum-chat-core.js?v=21.45"></script>
-  <script src="forum-core.js?v=21.45"></script>
-  <script src="forum-chat.js?v=21.45"></script>
-  <script src="forum.js?v=21.45"></script>
-  <script src="cloud-sync-core.js?v=21.45"></script>
-  <script src="cloud-sync.js?v=21.45"></script>
+  <script src="app.js?v=21.46"></script>
+  <script src="forum-chat-core.js?v=21.46"></script>
+  <script src="forum-core.js?v=21.46"></script>
+  <script src="forum-chat.js?v=21.46"></script>
+  <script src="forum.js?v=21.46"></script>
+  <script src="cloud-sync-core.js?v=21.46"></script>
+  <script src="cloud-sync.js?v=21.46"></script>
 </body>
 </html>
