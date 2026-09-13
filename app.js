@@ -62,6 +62,8 @@ let visualNovelChapterTimer = null;
 let visualNovelCgLayerIndex = 0;
 let visualNovelPendingCgSource = "";
 const visualNovelCgPreloads = new Map();
+const visualNovelAvatarPreloads = new Map();
+const visualNovelAudioPreloads = new Map();
 let visualNovelHistory = [];
 let currentVisualNovelSettings = {};
 let visualNovelTyping = null;
@@ -3566,7 +3568,6 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   currentVisualNovelDocId = doc.id;
   currentVisualNovelSpeakerAliases = parseVisualNovelSpeakerAliases(doc.visualNovel?.aiCustomPrompt);
   currentVisualNovelEvents = parseVisualNovelScript(doc.visualNovel.scriptText);
-  preloadVisualNovelCgs(currentVisualNovelEvents);
   currentVisualNovelIndex = -1;
   visualNovelScriptEditMode = false;
   document.getElementById('vnPlayer')?.classList.remove('vn-script-editing');
@@ -3575,6 +3576,7 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   if (!preserveHistory) visualNovelHistory = [];
   const settings = { ...getDefaultVisualNovelSettings(doc), ...(doc.visualNovel.settings || {}) };
   currentVisualNovelSettings = settings;
+  preloadVisualNovelChapterMedia(doc, currentVisualNovelEvents, settings);
   ensureVisualNovelAudioContext();
   if (settings.fontSize) visualNovelFontSize = Number(settings.fontSize);
   finishVisualNovelTyping(false);
@@ -3628,6 +3630,75 @@ function preloadVisualNovelCg(source) {
 function preloadVisualNovelCgs(events) {
   [...new Set((events || []).filter(event => event.type === "cg").map(event => event.value))]
     .forEach(preloadVisualNovelCg);
+}
+
+function preloadVisualNovelAvatar(source) {
+  const url = String(source || "").trim();
+  if (!url) return Promise.resolve(false);
+  if (visualNovelAvatarPreloads.has(url)) return visualNovelAvatarPreloads.get(url);
+  const promise = new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => image.decode ? image.decode().catch(() => {}).finally(() => resolve(true)) : resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = url;
+  });
+  visualNovelAvatarPreloads.set(url, promise);
+  return promise;
+}
+
+function preloadVisualNovelAudio(source) {
+  const url = normalizeVisualNovelAudioSource(source);
+  if (!url || url.toLowerCase() === "none") return Promise.resolve(false);
+  if (visualNovelAudioPreloads.has(url)) return visualNovelAudioPreloads.get(url);
+  const promise = new Promise(resolve => {
+    const audio = new Audio();
+    let settled = false;
+    const finish = success => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      audio.removeEventListener("canplaythrough", ready);
+      audio.removeEventListener("loadeddata", ready);
+      audio.removeEventListener("error", failed);
+      resolve(success);
+    };
+    const ready = () => finish(true);
+    const failed = () => finish(false);
+    const timeout = setTimeout(() => finish(audio.readyState >= 2), 8000);
+    audio.preload = "auto";
+    audio.addEventListener("canplaythrough", ready, { once:true });
+    audio.addEventListener("loadeddata", ready, { once:true });
+    audio.addEventListener("error", failed, { once:true });
+    audio.src = url;
+    audio.load();
+  });
+  visualNovelAudioPreloads.set(url, promise);
+  return promise;
+}
+
+function preloadVisualNovelChapterMedia(doc, events, settings) {
+  preloadVisualNovelCgs(events);
+  const audioSources = (events || [])
+    .filter(event => event.type === "bgm" || event.type === "se")
+    .map(event => event.value);
+  audioSources.push(settings?.globalBgm);
+  [...new Set(audioSources)].forEach(preloadVisualNovelAudio);
+
+  const profiles = doc?.visualNovel?.characterProfiles || [];
+  const avatarSources = new Set();
+  (events || []).filter(event => event.type === "dialogue").forEach(event => {
+    const rawSpeaker = stripInvisibleFormatting(event.speaker).trim();
+    if (["旁白", "系統", "narrator", "system"].includes(rawSpeaker.toLowerCase())) return;
+    let character = currentVisualNovelSpeakerAliases?.aliasToChar?.get(rawSpeaker)
+      || currentVisualNovelSpeakerAliases?.aliasToChar?.get(normalizedImportName(rawSpeaker));
+    if (!character) {
+      const resolved = normalizeVisualNovelSpeaker(rawSpeaker, characters);
+      character = characters.find(item => normalizedImportName(item.name) === normalizedImportName(resolved));
+    }
+    const profile = profiles.find(item => item.charId === character?.id);
+    avatarSources.add(profile?.avatar || character?.avatar || DEFAULT_VN_AVATAR);
+  });
+  avatarSources.forEach(preloadVisualNovelAvatar);
 }
 
 function resetVisualNovelCg() {
