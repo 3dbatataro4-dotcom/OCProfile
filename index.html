@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=21.36">
-  <link rel="stylesheet" href="forum.css?v=21.36">
+  <link rel="stylesheet" href="style.css?v=21.37">
+  <link rel="stylesheet" href="forum.css?v=21.37">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.36">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.37">
 </head>
 <body>
 
@@ -1344,6 +1344,8 @@
             </div>
           </div>
           <div class="vn-setting-control-group vn-script-edit-setting">
+            <button class="btn btn-outline btn-block" onclick="diagnoseCurrentVisualNovelScript(event)"><i class="fa-solid fa-stethoscope"></i> 檢查並修復本章劇本</button>
+            <p class="vn-setting-hint">逐行核對原稿、播放事件與已顯示台詞；發現漏句會立即依原稿重建。</p>
             <button class="btn btn-primary btn-block" id="vnScriptEditModeBtn" onclick="toggleVisualNovelScriptEditMode(event)"><i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式</button>
             <p class="vn-setting-hint">開啟後，雙擊人物頭像可更正說話人；點空白舞台不會播放下一句。</p>
             <button class="btn btn-outline btn-block" id="vnOpenFullScriptEditorBtn" onclick="openCurrentVisualNovelEditor()" style="display:none"><i class="fa-solid fa-align-left"></i> 前往完整文本編輯器</button>
@@ -1592,12 +1594,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=21.36"></script>
-  <script src="forum-chat-core.js?v=21.36"></script>
-  <script src="forum-core.js?v=21.36"></script>
-  <script src="forum-chat.js?v=21.36"></script>
-  <script src="forum.js?v=21.36"></script>
-  <script src="cloud-sync-core.js?v=21.36"></script>
-  <script src="cloud-sync.js?v=21.36"></script>
+  <script src="app.js?v=21.37"></script>
+  <script src="forum-chat-core.js?v=21.37"></script>
+  <script src="forum-core.js?v=21.37"></script>
+  <script src="forum-chat.js?v=21.37"></script>
+  <script src="forum.js?v=21.37"></script>
+  <script src="cloud-sync-core.js?v=21.37"></script>
+  <script src="cloud-sync.js?v=21.37"></script>
 </body>
 </html>
