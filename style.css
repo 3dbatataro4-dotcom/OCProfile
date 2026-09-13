@@ -284,6 +284,14 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .cp-member-card small { color:color-mix(in srgb,var(--cp-color-2) 62%,var(--text-muted)); font-weight:750; }
 .cp-member-card textarea { min-height:78px; resize:vertical; }
 .cp-member-editor { --cp-color-1:var(--accent-gold); --cp-color-2:var(--accent-coffee); }
+.cp-member-editor-head { display:flex; align-items:center; justify-content:space-between; gap:.65rem; margin-bottom:.55rem; }
+.cp-member-editor-head>strong { margin:0; color:var(--text-main); }
+.cp-member-order-actions { display:flex; gap:.35rem; }
+.cp-member-order-actions .btn { min-height:32px; border-color:color-mix(in srgb,var(--accent-gold) 30%,var(--border-color)); background:color-mix(in srgb,var(--accent-gold) 7%,var(--bg-card)); }
+.cp-member-order-actions .btn:disabled { opacity:.32; transform:none; cursor:not-allowed; }
+.cp-member-editor.cp-member-just-moved { animation:cpMemberMoved .34s cubic-bezier(.2,.8,.2,1); }
+@keyframes cpMemberMoved { from{transform:scale(.985);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent-gold) 20%,transparent)} to{transform:none;box-shadow:none} }
+@media(max-width:520px){.cp-member-order-actions .btn span{display:none}.cp-member-order-actions .btn{width:34px;padding:.35rem;justify-content:center}}
 .cp-sections { display:grid; gap:.55rem; margin-top:.7rem; }
 .cp-section-box { margin:0!important; padding:.7rem .82rem; border:1px solid color-mix(in srgb,var(--cp-color-2) 18%,var(--border-color)); border-radius:12px; background:color-mix(in srgb,var(--cp-color-2) 5%,var(--bg-secondary)); font-size:.82rem; }
 .cp-section-box strong { color:color-mix(in srgb,var(--cp-color-2) 70%,var(--text-main)); }
@@ -292,10 +300,13 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .cp-gradient-editor-head { display:flex; justify-content:space-between; align-items:center; gap:.65rem; flex-wrap:wrap; }
 .cp-gradient-editor-head small { color:var(--text-muted); }
 .cp-gradient-preview { height:54px; margin:.65rem 0; border:3px solid var(--bg-card); border-radius:12px; box-shadow:0 0 0 1px var(--border-color),0 7px 18px rgba(0,0,0,.1); }
+.cp-gradient-count-label { display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin-bottom:.65rem; color:var(--text-muted); font-size:.78rem; }
+.cp-gradient-count-label select { min-height:36px; padding:.4rem 2rem .4rem .65rem; border:1px solid var(--border-color); border-radius:9px; color:var(--text-main); background:var(--bg-card); }
 .cp-gradient-colors { display:grid; grid-template-columns:repeat(3,1fr); gap:.55rem; }
 .cp-gradient-colors label { display:flex; align-items:center; justify-content:space-between; gap:.35rem; color:var(--text-muted); font-size:.75rem; }
 .cp-gradient-colors input[type="color"] { width:42px; height:32px; padding:2px; border:1px solid var(--border-color); border-radius:8px; background:var(--bg-card); cursor:pointer; }
 .cp-gradient-colors input:disabled { opacity:.42; cursor:not-allowed; }
+.cp-gradient-colors label.is-unused { opacity:.38; }
 @media(max-width:520px){.cp-grid{grid-template-columns:1fr}.cp-theme-cover{height:82px}.cp-theme-cover::after{height:82px}.cp-avatar-img{width:66px;height:66px;margin-right:-14px}.cp-avatars-row{margin-top:-35px}.cp-card-actions .btn-outline{font-size:0;width:36px}.cp-card-actions .btn-outline i{font-size:.8rem}.cp-gradient-colors{grid-template-columns:1fr}.cp-card-content{padding-inline:.9rem}}
 
 /* Factions List & Custom Sections */
