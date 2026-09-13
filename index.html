@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=21.31">
-  <link rel="stylesheet" href="forum.css?v=21.31">
+  <link rel="stylesheet" href="style.css?v=21.32">
+  <link rel="stylesheet" href="forum.css?v=21.32">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.31">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.32">
 </head>
 <body>
 
@@ -1548,12 +1548,12 @@
       </div>
       <div class="modal-body">
         <label class="import-mode-toggle">
-          <input type="checkbox" id="advancedImportModeToggle" onchange="updateImportModeDescription()">
+          <input type="checkbox" id="advancedImportModeToggle" onchange="updateImportModeDescription()" checked>
           <span class="import-toggle-track"><span></span></span>
-          <span><strong>挑選讀檔</strong><small>進階合併模式（預設關閉）</small></span>
+          <span><strong>挑選讀檔</strong><small>安全合併模式（預設開啟）</small></span>
         </label>
         <div class="import-mode-note" id="importModeDescription">
-          一般讀檔會用備份內容取代目前資料。
+          挑選讀檔會逐筆分檢書籍、同人章節與其他同名差異。
         </div>
         <p class="form-help">支援 <code>.json</code> 與誤拼副檔名 <code>.jason</code>。</p>
       </div>
@@ -1592,12 +1592,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=21.31"></script>
-  <script src="forum-chat-core.js?v=21.31"></script>
-  <script src="forum-core.js?v=21.31"></script>
-  <script src="forum-chat.js?v=21.31"></script>
-  <script src="forum.js?v=21.31"></script>
-  <script src="cloud-sync-core.js?v=21.31"></script>
-  <script src="cloud-sync.js?v=21.31"></script>
+  <script src="app.js?v=21.32"></script>
+  <script src="forum-chat-core.js?v=21.32"></script>
+  <script src="forum-core.js?v=21.32"></script>
+  <script src="forum-chat.js?v=21.32"></script>
+  <script src="forum.js?v=21.32"></script>
+  <script src="cloud-sync-core.js?v=21.32"></script>
+  <script src="cloud-sync.js?v=21.32"></script>
 </body>
 </html>
