@@ -3791,21 +3791,55 @@ function playVisualNovelAdvanceSound() {
   } catch (error) {}
 }
 
+function parseVisualNovelInlineTokens(text) {
+  const source = String(text ?? "");
+  const tokens = [];
+  const boldPattern = /\*\*([\s\S]+?)\*\*/g;
+  let cursor = 0;
+  for (const match of source.matchAll(boldPattern)) {
+    if (match.index > cursor) tokens.push({ text:source.slice(cursor, match.index), bold:false });
+    tokens.push({ text:match[1], bold:true });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < source.length) tokens.push({ text:source.slice(cursor), bold:false });
+  return tokens.length ? tokens : [{ text:source, bold:false }];
+}
+
+function renderVisualNovelInlineText(element, text, visibleCharacters = Infinity) {
+  const fragment = document.createDocumentFragment();
+  let remaining = visibleCharacters;
+  parseVisualNovelInlineTokens(text).forEach(token => {
+    if (remaining <= 0) return;
+    const visibleText = token.text.slice(0, remaining);
+    if (!visibleText) return;
+    if (token.bold) {
+      const strong = document.createElement("strong");
+      strong.className = "vn-inline-bold";
+      strong.textContent = visibleText;
+      fragment.appendChild(strong);
+    } else fragment.appendChild(document.createTextNode(visibleText));
+    remaining -= visibleText.length;
+  });
+  element.replaceChildren(fragment);
+}
+
 function typeVisualNovelText(element, text) {
   finishVisualNovelTyping(false);
   element.textContent = "";
-  const state = { element, text, index:0, timer:null };
+  const visibleText = parseVisualNovelInlineTokens(text).map(token => token.text).join("");
+  const state = { element, text, visibleText, index:0, timer:null };
   visualNovelTyping = state;
   const feed = document.getElementById("vnStoryFeed");
   const typeNextCharacter = () => {
-    if (state.index >= text.length) {
+    if (state.index >= state.visibleText.length) {
       clearTimeout(state.timer); visualNovelTyping = null;
+      renderVisualNovelInlineText(element, state.text);
       if (feed) feed.scrollTop = feed.scrollHeight;
       if (visualNovelAutoPlay) visualNovelAutoTimer = setTimeout(() => advanceVisualNovel(), Math.max(300, Math.round(1500 / visualNovelAutoSpeed)));
       return;
     }
-    const character = text[state.index++];
-    element.textContent += character;
+    const character = state.visibleText[state.index++];
+    renderVisualNovelInlineText(element, state.text, state.index);
     if (character.trim() && !/[，。！？、；：「」『』（）…—,.!?;:'"()]/.test(character) && state.index % 2 === 0) playVisualNovelTypeBeep();
     const nextDelay = character === "，" ? 100 : (character === "。" ? 200 : 28);
     state.timer = setTimeout(typeNextCharacter, nextDelay);
@@ -3815,8 +3849,8 @@ function typeVisualNovelText(element, text) {
 
 function finishVisualNovelTyping(showFull = true) {
   if (!visualNovelTyping) return false;
-  clearInterval(visualNovelTyping.timer);
-  if (showFull) visualNovelTyping.element.textContent = visualNovelTyping.text;
+  clearTimeout(visualNovelTyping.timer);
+  if (showFull) renderVisualNovelInlineText(visualNovelTyping.element, visualNovelTyping.text);
   visualNovelTyping = null;
   return true;
 }
@@ -3893,7 +3927,7 @@ function executeVisualNovelEvent(event) {
   feed.appendChild(row);
   if (currentVisualNovelSettings.typewriterEnabled !== false) typeVisualNovelText(dialogueTextElement, event.text);
   else {
-    dialogueTextElement.textContent = event.text;
+    renderVisualNovelInlineText(dialogueTextElement, event.text);
     feed.scrollTop = feed.scrollHeight;
   }
   feed.scrollTop = feed.scrollHeight;
