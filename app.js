@@ -624,7 +624,8 @@ function resolveCpGradientColors(cp, memberChars) {
 }
 
 function cpGradientCss(colors) {
-  const stops = colors.length >= 3 ? `${colors[0]} 0%, ${colors[1]} 50%, ${colors[2]} 100%` : `${colors[0]} 0%, ${colors[1]} 100%`;
+  const safeColors = colors?.length ? colors : ["#d97706"];
+  const stops = safeColors.length >= 3 ? `${safeColors[0]} 0%, ${safeColors[1]} 50%, ${safeColors[2]} 100%` : safeColors.length === 2 ? `${safeColors[0]} 0%, ${safeColors[1]} 100%` : `${safeColors[0]} 0%, ${safeColors[0]} 100%`;
   return `linear-gradient(110deg, ${stops})`;
 }
 
@@ -694,6 +695,7 @@ function openCpModal(cpId = null) {
   const secContainer = document.getElementById("cpCustomSectionsContainer");
 
   secContainer.innerHTML = '';
+  document.getElementById("cpMemberDetailsContainer").innerHTML = '';
 
   if (cpId) {
     const cp = normalizeCpRecord(cps.find(item => item.id === cpId));
@@ -703,6 +705,7 @@ function openCpModal(cpId = null) {
     document.getElementById("cpType").value = cp.type || "cp";
     document.getElementById("cpRelationType").value = cp.relationType || "";
     document.getElementById("cpUseCustomGradient").checked = !!cp.gradientColors?.length;
+    document.getElementById("cpGradientColorCount").value = String(Math.max(1, Math.min(3, cp.gradientColors?.length || 3)));
 
     cbContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
@@ -719,6 +722,7 @@ function openCpModal(cpId = null) {
     document.getElementById("cpType").value = "cp";
     document.getElementById("cpRelationType").value = "";
     document.getElementById("cpUseCustomGradient").checked = false;
+    document.getElementById("cpGradientColorCount").value = "3";
 
     cbContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
@@ -742,16 +746,20 @@ function openCpModal(cpId = null) {
 
 function updateCpGradientEditor(savedColors = null) {
   const custom = !!document.getElementById("cpUseCustomGradient")?.checked;
-  const selectedChars = Array.from(document.querySelectorAll("#cpCharCheckboxes input:checked")).map(input => characters.find(char => char.id === input.value)).filter(Boolean);
+  const colorCount = Math.max(1, Math.min(3, Number(document.getElementById("cpGradientColorCount")?.value) || 3));
+  const orderedIds = Array.from(document.querySelectorAll("#cpMemberDetailsContainer .cp-member-editor")).map(row => row.dataset.charId);
+  const selectedIds = orderedIds.length ? orderedIds : Array.from(document.querySelectorAll("#cpCharCheckboxes input:checked")).map(input => input.value);
+  const selectedChars = selectedIds.map(id => characters.find(char => char.id === id)).filter(Boolean);
   const autoColors = resolveCpGradientColors({ gradientColors:[] }, selectedChars);
   const stored = Array.isArray(savedColors) && savedColors.length ? savedColors : null;
   const inputs = [1,2,3].map(index => document.getElementById(`cpGradientColor${index}`));
   const colors = stored || inputs.map(input => input?.value).filter(Boolean);
   const defaults = [autoColors[0], autoColors[1], autoColors[2] || autoColors[1]];
-  inputs.forEach((input,index) => { if(input){if(stored || !custom)input.value=(colors[index] || defaults[index]);input.disabled=!custom;} });
-  const previewColors = custom ? inputs.map(input => input?.value).filter(Boolean) : autoColors;
+  inputs.forEach((input,index) => { if(input){if(stored || !custom)input.value=(colors[index] || defaults[index]);input.disabled=!custom || index>=colorCount;input.closest('label')?.classList.toggle('is-unused',custom&&index>=colorCount);} });
+  const countSelect=document.getElementById("cpGradientColorCount");if(countSelect)countSelect.disabled=!custom;
+  const previewColors = custom ? inputs.slice(0,colorCount).map(input => input?.value).filter(Boolean) : autoColors;
   const preview = document.getElementById("cpGradientPreview");if(preview)preview.style.background=cpGradientCss(previewColors);
-  const hint = document.getElementById("cpGradientModeHint");if(hint)hint.textContent=custom?'使用手動指定的三色漸層':'自動混合已選成員的主題色（最多三色）';
+  const hint = document.getElementById("cpGradientModeHint");if(hint)hint.textContent=custom?`使用手動指定的 ${colorCount} 色${colorCount===1?'純色':'漸層'}`:'自動混合已選成員的主題色（最多三色）';
 }
 
 function toggleCpTypeFields(rerender = true) {
@@ -766,11 +774,16 @@ function renderCpMemberInputs() {
   let savedMembers = [];
   try { savedMembers = JSON.parse(document.getElementById("cpModal").dataset.editingMembers || "[]"); } catch (e) {}
   const liveMembers = {};
-  container.querySelectorAll(".cp-member-editor").forEach(row => {
+  const liveRows = Array.from(container.querySelectorAll(".cp-member-editor"));
+  liveRows.forEach(row => {
     liveMembers[row.dataset.charId] = { position: row.querySelector(".cp-member-position").value, r18: row.querySelector(".cp-member-r18")?.value || "", thoughts: row.querySelector(".cp-member-thoughts").value };
   });
-  savedMembers = savedMembers.map(member => liveMembers[member.charId] ? { ...member, ...liveMembers[member.charId], r18: liveMembers[member.charId].r18 || member.r18 || "" } : member);
+  const savedById = new Map(savedMembers.map(member => [member.charId, member]));
+  const liveOrdered = liveRows.map(row => ({ ...(savedById.get(row.dataset.charId) || {}), charId:row.dataset.charId, ...liveMembers[row.dataset.charId] }));
+  savedMembers = [...liveOrdered, ...savedMembers.filter(member => !liveMembers[member.charId])];
   Object.entries(liveMembers).forEach(([charId, member]) => { if (!savedMembers.some(item => item.charId === charId)) savedMembers.push({ charId, ...member }); });
+  const order = new Map(savedMembers.map((member,index) => [member.charId,index]));
+  checkedBoxes.sort((a,b) => (order.get(a.value) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.value) ?? Number.MAX_SAFE_INTEGER));
   document.getElementById("cpModal").dataset.editingMembers = JSON.stringify(savedMembers);
   const isOther = document.getElementById("cpType").value === "other";
 
@@ -781,7 +794,7 @@ function renderCpMemberInputs() {
 
     return `
       <div class="cp-member-card cp-member-editor" data-char-id="${char.id}">
-        <strong>${char.name}</strong>
+        <div class="cp-member-editor-head"><strong>${escapeHtml(char.name)}</strong><div class="cp-member-order-actions"><button type="button" class="btn btn-xs btn-outline cp-member-up" onclick="moveCpMemberEditor(this,-1)" title="將此人物往前"><i class="fa-solid fa-arrow-up"></i><span>往前</span></button><button type="button" class="btn btn-xs btn-outline cp-member-down" onclick="moveCpMemberEditor(this,1)" title="將此人物往後"><i class="fa-solid fa-arrow-down"></i><span>往後</span></button></div></div>
         <div class="form-group"><label>${isOther ? '在關係中的身分／定位' : '左右位／定位'}</label><input type="text" class="cp-member-position" value="${member.position || char.orientation || ''}" placeholder="${isOther ? '如：姊姊、朋友、老師' : '如：攻、受、可逆'}"></div>
         ${isOther ? '' : '<div class="form-group"><label>R18／互動相關狀況</label><textarea class="cp-member-r18" rows="3"></textarea></div>'}
         <div class="form-group"><label>本人對這段關係／其他成員的看法</label><textarea class="cp-member-thoughts" rows="3"></textarea></div>
@@ -794,6 +807,26 @@ function renderCpMemberInputs() {
     if (r18) r18.value = member.r18 || "";
     row.querySelector(".cp-member-thoughts").value = member.thoughts || "";
   });
+  refreshCpMemberOrderButtons();
+}
+
+function syncCpMemberEditorOrder() {
+  const rows = Array.from(document.querySelectorAll("#cpMemberDetailsContainer .cp-member-editor"));
+  const members = rows.map(row => ({charId:row.dataset.charId,position:row.querySelector(".cp-member-position")?.value||"",r18:row.querySelector(".cp-member-r18")?.value||"",thoughts:row.querySelector(".cp-member-thoughts")?.value||""}));
+  document.getElementById("cpModal").dataset.editingMembers = JSON.stringify(members);
+}
+
+function refreshCpMemberOrderButtons() {
+  const rows = Array.from(document.querySelectorAll("#cpMemberDetailsContainer .cp-member-editor"));
+  rows.forEach((row,index) => {const up=row.querySelector('.cp-member-up'),down=row.querySelector('.cp-member-down');if(up)up.disabled=index===0;if(down)down.disabled=index===rows.length-1;});
+}
+
+function moveCpMemberEditor(button, direction) {
+  const row=button.closest('.cp-member-editor'),container=row?.parentElement;if(!row||!container)return;
+  const sibling=direction<0?row.previousElementSibling:row.nextElementSibling;if(!sibling)return;
+  if(direction<0)container.insertBefore(row,sibling);else container.insertBefore(sibling,row);
+  syncCpMemberEditorOrder();refreshCpMemberOrderButtons();updateCpGradientEditor();
+  row.classList.remove('cp-member-just-moved');void row.offsetWidth;row.classList.add('cp-member-just-moved');
 }
 
 function addCpSectionRow(title = "", content = "") {
@@ -839,7 +872,7 @@ function saveCpForm() {
     name,
     type,
     relationType,
-    gradientColors: document.getElementById("cpUseCustomGradient").checked ? [1,2,3].map(index => document.getElementById(`cpGradientColor${index}`).value).filter(Boolean) : [],
+    gradientColors: document.getElementById("cpUseCustomGradient").checked ? [1,2,3].slice(0,Math.max(1,Math.min(3,Number(document.getElementById("cpGradientColorCount").value)||3))).map(index => document.getElementById(`cpGradientColor${index}`).value).filter(Boolean) : [],
     members,
     sections: customSections
   };
