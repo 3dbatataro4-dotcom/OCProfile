@@ -70,6 +70,9 @@ let currentVisualNovelSettings = {};
 let visualNovelTyping = null;
 let visualNovelAudioContext = null;
 let visualNovelTypeGain = null;
+let visualNovelAudioUnlockInstalled = false;
+let visualNovelBgmDuckTimer = null;
+let visualNovelAudioResumePending = false;
 let visualNovelBgmFadeToken = 0;
 let visualNovelBgmChannelIndex = 0;
 let visualNovelFastForwardDelay = null;
@@ -92,6 +95,7 @@ function bootApp() {
   renderAllViews();
   updateFullscreenButton();
   document.addEventListener("fullscreenchange", updateFullscreenButton);
+  installVisualNovelMobileAudioUnlock();
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     navigator.serviceWorker.register("./service-worker.js").catch(error => console.warn("Service Worker 註冊失敗：", error));
   }
@@ -3941,19 +3945,38 @@ function ensureVisualNovelAudioContext() {
   }
 }
 
+function unlockVisualNovelAudioContext() {
+  const context=ensureVisualNovelAudioContext();if(!context)return;
+  const prime=()=>{try{const buffer=context.createBuffer(1,1,22050),source=context.createBufferSource();source.buffer=buffer;source.connect(visualNovelTypeGain);source.start(0);}catch(error){}};
+  if(context.state==='running')prime();else context.resume().then(prime).catch(()=>{});
+}
+
+function installVisualNovelMobileAudioUnlock() {
+  if(visualNovelAudioUnlockInstalled)return;visualNovelAudioUnlockInstalled=true;
+  const unlock=()=>{if(document.getElementById('visualNovelPlayerModal')?.classList.contains('active'))unlockVisualNovelAudioContext();};
+  document.addEventListener('pointerdown',unlock,{capture:true,passive:true});
+  document.addEventListener('touchend',unlock,{capture:true,passive:true});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.getElementById('visualNovelPlayerModal')?.classList.contains('active'))unlockVisualNovelAudioContext();});
+}
+
+function duckVisualNovelBgmForTypeSound() {
+  const channel=[document.getElementById('vnBgmAudio'),document.getElementById('vnBgmAudioNext')][visualNovelBgmChannelIndex];if(!channel||channel.paused||channel.muted)return;
+  const target=Number.isFinite(Number(currentVisualNovelSettings.bgmVolume))?Number(currentVisualNovelSettings.bgmVolume):0.7;
+  channel.volume=Math.min(channel.volume,target*0.72);clearTimeout(visualNovelBgmDuckTimer);visualNovelBgmDuckTimer=setTimeout(()=>{if(channel&&!channel.paused)channel.volume=target;},72);
+}
+
+function synthesizeVisualNovelTypeBeep() {
+  if(!visualNovelAudioContext||visualNovelAudioContext.state!=='running'||!visualNovelTypeGain)return false;
+  const oscillator=visualNovelAudioContext.createOscillator(),gain=visualNovelAudioContext.createGain(),now=visualNovelAudioContext.currentTime;
+  oscillator.type='triangle';oscillator.frequency.setValueAtTime(900,now);oscillator.frequency.exponentialRampToValueAtTime(590,now+0.045);gain.gain.setValueAtTime(0.15,now);gain.gain.exponentialRampToValueAtTime(0.00001,now+0.052);oscillator.connect(gain);gain.connect(visualNovelTypeGain);oscillator.start(now);oscillator.stop(now+0.055);duckVisualNovelBgmForTypeSound();return true;
+}
+
 function playVisualNovelTypeBeep() {
   if (!currentVisualNovelSettings.typewriterSound) return;
   try {
-    if (!ensureVisualNovelAudioContext() || visualNovelAudioContext.state !== "running") return;
-    const oscillator = visualNovelAudioContext.createOscillator();
-    const gain = visualNovelAudioContext.createGain();
-    oscillator.type = "triangle";
-    oscillator.frequency.setValueAtTime(820, visualNovelAudioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(540, visualNovelAudioContext.currentTime + 0.04);
-    gain.gain.setValueAtTime(0.075, visualNovelAudioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.00001, visualNovelAudioContext.currentTime + 0.045);
-    oscillator.connect(gain); gain.connect(visualNovelTypeGain);
-    oscillator.start(); oscillator.stop(visualNovelAudioContext.currentTime + 0.05);
+    const context=ensureVisualNovelAudioContext();if(!context)return;if(context.state==='running'){synthesizeVisualNovelTypeBeep();return;}
+    if(visualNovelAudioResumePending)return;visualNovelAudioResumePending=true;
+    context.resume().then(()=>{visualNovelAudioResumePending=false;if(context.state==='running')synthesizeVisualNovelTypeBeep();}).catch(()=>{visualNovelAudioResumePending=false;});
   } catch (error) {}
 }
 
@@ -4510,6 +4533,8 @@ function closeVisualNovelPlayer() {
   clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); clearTimeout(visualNovelOpeningTimer); visualNovelChapterTimer=null;visualNovelOpeningTimer=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
+  clearTimeout(visualNovelBgmDuckTimer);visualNovelBgmDuckTimer=null;
+  visualNovelAudioResumePending=false;
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
   channels.forEach(audio => {
     audio.pause();
