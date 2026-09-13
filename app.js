@@ -3252,12 +3252,13 @@ function deleteVisualNovelTemplate() {
 function saveVisualNovelScript(preview = false) {
   const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
   if (!doc) return;
+  migrateVisualNovelEventIndex(doc);
   const scriptText = formatVisualNovelScriptBlocks(document.getElementById("vnScriptText").value);
   if (!scriptText.trim()) { alert("腳本目前是空白的，請先產生或輸入內容。"); return; }
   const aiCustomPrompt = document.getElementById("vnAiCustomPrompt")?.value.trim() || "";
   document.getElementById("vnScriptText").value = scriptText;
   const bookmarkIndex=doc.visualNovel?.bookmarkIndex;
-  doc.visualNovel = { ...(doc.visualNovel || {}), version: 1, settings: collectVisualNovelSettings(), scriptText, aiCustomPrompt, updatedAt: new Date().toISOString() };
+  doc.visualNovel = { ...(doc.visualNovel || {}), version: 1, eventIndexVersion:2, settings: collectVisualNovelSettings(), scriptText, aiCustomPrompt, updatedAt: new Date().toISOString() };
   if(bookmarkIndex!=null)doc.visualNovel.bookmarkIndex=Math.min(bookmarkIndex,Math.max(0,parseVisualNovelScript(scriptText).length-1));
   saveStateToLocalStorage(); renderDocumentsModule(); closeModal("visualNovelEditorModal", true);
   if (preview) startVisualNovel(doc.id);
@@ -3363,6 +3364,24 @@ function formatVisualNovelScriptBlocks(scriptText) {
     .map(line => line.trimEnd())
     .filter(line => line.trim() !== "")
     .join("\n\n");
+}
+
+function getVisualNovelScriptLines(scriptText) {
+  return formatVisualNovelScriptBlocks(scriptText).split(/\r?\n/).filter(line => line.trim() !== "");
+}
+
+function encodeVisualNovelInlineLineBreaks(text) {
+  return String(text || "").replace(/\r\n?/g, "\n").replace(/\n/g, "\u2028");
+}
+
+function decodeVisualNovelInlineLineBreaks(text) {
+  return String(text || "").replace(/\u2028/g, "\n");
+}
+
+function migrateVisualNovelEventIndex(doc) {
+  if (!doc?.visualNovel || doc.visualNovel.eventIndexVersion === 2) return;
+  if (doc.visualNovel.bookmarkIndex != null) doc.visualNovel.bookmarkIndex = Math.floor(Number(doc.visualNovel.bookmarkIndex) / 2);
+  doc.visualNovel.eventIndexVersion = 2;
 }
 
 function normalizeVisualNovelSpeaker(speaker, possibleCharacters) {
@@ -3531,7 +3550,7 @@ function parseVisualNovelSpeakerAliases(customPromptText) {
 }
 
 function parseVisualNovelScript(scriptText) {
-  return formatVisualNovelScriptBlocks(scriptText).split(/\r?\n/).map(line => {
+  return getVisualNovelScriptLines(scriptText).map(line => {
     const contentLine = line.replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/, "").replace(/^[\u200B-\u200D\u2060\uFEFF]+/, "");
     const trimmedLine = contentLine.trim();
     if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank" };
@@ -3539,9 +3558,9 @@ function parseVisualNovelScript(scriptText) {
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim() };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake" };
     const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
-    if (!separator) return { type:"dialogue", speaker:"旁白", text:contentLine };
+    if (!separator) return { type:"dialogue", speaker:"旁白", text:decodeVisualNovelInlineLineBreaks(contentLine) };
     const index = contentLine.indexOf(separator);
-    return { type:"dialogue", speaker:stripInvisibleFormatting(contentLine.slice(0, index)).trim() || "旁白", text:contentLine.slice(index + separator.length) };
+    return { type:"dialogue", speaker:stripInvisibleFormatting(contentLine.slice(0, index)).trim() || "旁白", text:decodeVisualNovelInlineLineBreaks(contentLine.slice(index + separator.length)) };
   });
 }
 
@@ -3562,6 +3581,7 @@ function applyVisualNovelTheme(settings) {
 function startVisualNovel(docId, withTransition = true, preserveHistory = false) {
   const doc = documents.find(item => item.id === docId);
   if (!doc?.visualNovel?.scriptText) { openVisualNovelEditor(docId); return; }
+  migrateVisualNovelEventIndex(doc);
   clearTimeout(visualNovelAutoTimer);
   clearTimeout(visualNovelChapterTimer);
   visualNovelChapterTimer = null;
@@ -4070,7 +4090,7 @@ function bindVnSentenceEditorTarget(target,row){
   target.classList.add('vn-sentence-edit-target');target.addEventListener('dblclick',open);target.addEventListener('pointerup',event=>{if(!visualNovelScriptEditMode||event.pointerType==='mouse')return;event.stopPropagation();const index=Number(row.dataset.eventIndex),now=Date.now();if(lastVnAvatarTap.index===index&&now-lastVnAvatarTap.at<480){lastVnAvatarTap={index:-1,at:0};open(event);}else lastVnAvatarTap={index,at:now};});
 }
 
-function replaceVisualNovelScriptEvent(eventIndex,replacement){const doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!doc?.visualNovel)return false;const lines=formatVisualNovelScriptBlocks(doc.visualNovel.scriptText).split(/\r?\n/);if(eventIndex<0||eventIndex>=lines.length)return false;if(replacement===null)lines.splice(eventIndex,1);else lines[eventIndex]=replacement;doc.visualNovel.scriptText=formatVisualNovelScriptBlocks(lines.join('\n'));doc.visualNovel.updatedAt=new Date().toISOString();return true;}
+function replaceVisualNovelScriptEvent(eventIndex,replacement){const doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!doc?.visualNovel)return false;const lines=getVisualNovelScriptLines(doc.visualNovel.scriptText);if(eventIndex<0||eventIndex>=lines.length)return false;if(replacement===null)lines.splice(eventIndex,1);else lines[eventIndex]=replacement;doc.visualNovel.scriptText=formatVisualNovelScriptBlocks(lines.join('\n'));doc.visualNovel.eventIndexVersion=2;doc.visualNovel.updatedAt=new Date().toISOString();return true;}
 
 function refreshVnEditedSentence(eventIndex,row){const feed=document.getElementById('vnStoryFeed'),event=currentVisualNovelEvents[eventIndex];if(!feed||!row||!event)return;const marker=row.nextSibling,readingIndex=currentVisualNovelIndex,typewriter=currentVisualNovelSettings.typewriterEnabled;finishVisualNovelTyping(true);row.remove();currentVisualNovelIndex=eventIndex;currentVisualNovelSettings.typewriterEnabled=false;executeVisualNovelEvent(event);const replacement=feed.lastElementChild;if(marker&&replacement!==marker)feed.insertBefore(replacement,marker);currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=readingIndex;}
 
@@ -4083,7 +4103,7 @@ function syncVnSpeakerCustomInput(value){if(value!=='__custom__')document.getEle
 function closeVnSpeakerEditor(){document.getElementById('vnSpeakerEditorModal').classList.remove('active');pendingVnSpeakerEdit=null;}
 function saveVnSpeakerCorrection(){
   if(!pendingVnSpeakerEdit)return;const {eventIndex,row}=pendingVnSpeakerEdit,event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId),next=document.getElementById('vnSpeakerCustomInput').value.trim(),text=document.getElementById('vnSpeakerTextInput').value.trim();if(!event||!doc?.visualNovel||!next){alert('請填寫說話人。');return;}if(!text){alert('對話內文不可為空；若要移除，請使用「刪除這句」。');return;}
-  if(!replaceVisualNovelScriptEvent(eventIndex,`${next}｜${text}`))return;event.speaker=next;event.text=text;saveStateToLocalStorage();
+  if(!replaceVisualNovelScriptEvent(eventIndex,`${next}｜${encodeVisualNovelInlineLineBreaks(text)}`))return;event.speaker=next;event.text=text;saveStateToLocalStorage();
   const history=visualNovelHistory.find(item=>item.key===`${currentVisualNovelDocId}:${eventIndex}`);if(history){history.speaker=next;history.text=text;}
   refreshVnEditedSentence(eventIndex,row);
   closeVnSpeakerEditor();showVnFloatingToast('說話人與對話內文已更正並保存');
