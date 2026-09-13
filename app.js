@@ -62,6 +62,7 @@ let visualNovelAutoTimer = null;
 let visualNovelAutoScheduleToken = 0;
 let visualNovelChapterTimer = null;
 let visualNovelOpeningTimer = null;
+let visualNovelAwaitingNextChapterId = null;
 let visualNovelCgLayerIndex = 0;
 let visualNovelPendingCgSource = "";
 let visualNovelActiveCgSource = "";
@@ -3701,6 +3702,7 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   clearTimeout(visualNovelOpeningTimer);
   visualNovelChapterTimer = null;
   visualNovelOpeningTimer = null;
+  visualNovelAwaitingNextChapterId = null;
   currentVisualNovelDocId = doc.id;
   currentVisualNovelSpeakerAliases = parseVisualNovelSpeakerAliases(doc.visualNovel?.aiCustomPrompt);
   currentVisualNovelEvents = buildVerifiedVisualNovelEvents(doc.visualNovel.scriptText);
@@ -4483,6 +4485,7 @@ function advanceVisualNovel(event) {
   if (visualNovelChapterTimer||visualNovelOpeningTimer) return;
   if (finishVisualNovelTyping(true)) return;
   if(repairMissingVisualNovelDialogueRows(currentVisualNovelIndex,true))return;
+  if(visualNovelAwaitingNextChapterId){const nextId=visualNovelAwaitingNextChapterId;visualNovelAwaitingNextChapterId=null;if(nextId!=='__end__')startVisualNovel(nextId,true,true);return;}
   let displayed = false;
   while (++currentVisualNovelIndex < currentVisualNovelEvents.length && !displayed) displayed = executeVisualNovelEvent(currentVisualNovelEvents[currentVisualNovelIndex]);
   updateVisualNovelBookmarkBtnUI();
@@ -4490,23 +4493,10 @@ function advanceVisualNovel(event) {
     if(repairMissingVisualNovelDialogueRows(currentVisualNovelEvents.length-1,true))return;
     clearVisualNovelBookmark(currentVisualNovelDocId);
     const nextChapter = getVisualNovelChapter(1);
-    if (nextChapter) {
-      const feed = document.getElementById("vnStoryFeed");
-      const end = document.createElement("div");
-      end.className = "vn-feed-end vn-feed-next-chapter";
-      end.textContent = `— ${nextChapter.title} 即將開始 —`;
-      insertVisualNovelFeedNode(feed,end); feed.scrollTop = visualNovelTopDown ? 0 : feed.scrollHeight;
-      document.getElementById("vnPlayer")?.classList.add("vn-chapter-leaving");
-      visualNovelChapterTimer = setTimeout(() => {
-        visualNovelChapterTimer = null;
-        startVisualNovel(nextChapter.id, true, true);
-      }, 950);
-    }
-    else {
-      const feed = document.getElementById("vnStoryFeed");
-      if (!feed.querySelector(".vn-feed-end")) {
-        const end = document.createElement("div"); end.className = "vn-feed-end"; end.textContent = "— 本章故事已結束 —"; insertVisualNovelFeedNode(feed,end); feed.scrollTop = visualNovelTopDown ? 0 : feed.scrollHeight;
-      }
+    const feed = document.getElementById("vnStoryFeed");
+    visualNovelAwaitingNextChapterId=nextChapter?.id||'__end__';
+    if (!feed.querySelector(".vn-feed-end")) {
+      const end = document.createElement("div");end.className="vn-feed-end vn-feed-chapter-complete";end.innerHTML='<strong>本章節已結束</strong>'+(nextChapter?'<small>再次點擊以閱讀下一章</small>':'');insertVisualNovelFeedNode(feed,end);focusVisualNovelEntryTop(feed,end);
     }
     return;
   }
@@ -4830,7 +4820,7 @@ function toggleVisualNovelTypeSound(event) {
 }
 
 function closeVisualNovelPlayer() {
-  clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); clearTimeout(visualNovelOpeningTimer); visualNovelChapterTimer=null;visualNovelOpeningTimer=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
+  clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); clearTimeout(visualNovelOpeningTimer); visualNovelChapterTimer=null;visualNovelOpeningTimer=null;visualNovelAwaitingNextChapterId=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
   visualNovelPendingBgmSource="";
