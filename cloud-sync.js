@@ -11,17 +11,17 @@
   const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
   if(session&&(!session.user?.id||!session.access_token)){localStorage.removeItem(SESSION);session=null;}
-  const labels={chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
+  const labels={chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',visualNovelPreferences:'視覺小說閱讀偏好',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
   const baselineKey=scope=>`oc_cloud_base_${session.user.id}_${scope}`;
   const rememberRecovery=(scope,value)=>recoveryCopies.set(scope,C.clone?C.clone(value):JSON.parse(JSON.stringify(value)));
   const cacheBaseline=(scope,value)=>{try{(window.ocSafeSetLocalStorage||((key,data)=>localStorage.setItem(key,data)))(baselineKey(scope),JSON.stringify(value));}catch{localStorage.removeItem(baselineKey(scope));}};
-  function workshop(){return {characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,customPresetAvatars,collapsedBooks,perspectiveTargets};}
+  function workshop(){return {characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,visualNovelPreferences:{topDown:visualNovelTopDown},customPresetAvatars,collapsedBooks,perspectiveTargets};}
   function snapshot(scope){return scope==='forum'?OCForum.cloudSnapshot():C.snapshot(scope,workshop());}
-  function assign(d){({characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,customPresetAvatars=customPresetAvatars,collapsedBooks,perspectiveTargets}=d);}
+  function assign(d){({characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,customPresetAvatars=customPresetAvatars,collapsedBooks,perspectiveTargets}=d);if(typeof d?.visualNovelPreferences?.topDown==='boolean')visualNovelTopDown=d.visualNovelPreferences.topDown;}
   function apply(payload){
     const data=C.source(payload);
     if(payload.scope==='forum')return OCForum.applyCloud(data);
-    const old=workshop(),keys=['oc_characters','oc_paros','oc_factions','oc_rankings','oc_cps','oc_books','oc_documents','oc_visual_novel_templates','oc_collapsed_books','oc_perspective_targets'];
+    const old=workshop(),keys=['oc_characters','oc_paros','oc_factions','oc_rankings','oc_cps','oc_books','oc_documents','oc_visual_novel_templates','oc_visual_novel_top_down','oc_collapsed_books','oc_perspective_targets'];
     const stored=keys.map(k=>[k,localStorage.getItem(k)]);
     try{assign(data);normalizeVisualNovelDocuments();saveStateToLocalStorage();}catch(err){assign(old);for(const [k,v]of stored){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}throw err;}
     syncGlobalTags();renderAllViews();
