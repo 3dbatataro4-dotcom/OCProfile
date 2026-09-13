@@ -122,7 +122,20 @@
     // Read every selected area before making any changes.
     for(const scope of selected){const local=snapshot(scope),remote=await head(scope);cloudHeads[scope]=remote;let base=null;try{base=C.validate(JSON.parse(localStorage.getItem(baselineKey(scope))));}catch{}
       if(direction==='download'&&remote.revision===0){items.push({scope,local,remote:remote.payload,revision:0,changes:[],skip:true});continue;}
-      items.push({scope,local,remote:remote.payload,revision:remote.revision,note:remote.note||'',changes:C.plan(local,remote.payload,base,direction)});
+      const changes=C.plan(local,remote.payload,base,direction);
+      if(direction==='upload')changes.forEach(change=>{
+        if(change.local||!change.remote)return;
+        change.conflict=true;
+        change.choice='remote';
+        change.status='本機缺少、雲端仍存在（請確認是否真的刪除）';
+      });
+      if(direction==='download'&&scope==='workshop')changes.forEach(change=>{
+        if(change.group!=='books'&&change.group!=='documents')return;
+        change.conflict=true;
+        change.choice=change.remote?'remote':'local';
+        change.status=change.local&&change.remote?'章節／書籍內容不同':change.remote?'雲端有新增資料':'雲端缺少此筆資料';
+      });
+      items.push({scope,local,remote:remote.payload,revision:remote.revision,note:remote.note||'',changes});
     }
     preview={items,direction};
     if(items.some(p=>p.changes.some(d=>d.conflict))){render();message('已暫停同步，請選擇衝突項目的處理方式。');return;}
@@ -175,7 +188,7 @@
       modal.addEventListener('submit',event=>{event.preventDefault();run(async()=>{const form=event.target,fields=new FormData(form);const result=await request('/auth/v1/token?grant_type=password',{email:fields.get('email'),password:fields.get('password')},false);form.reset();keepSession(result);render();await refreshBackupTimes();message('登入成功，已讀取雲端備份時間。');});});
       modal.addEventListener('click',event=>{const action=event.target.closest('[data-cloud]')?.dataset.cloud;if(!action||working)return;if(action==='close')return close();if(action==='export-complete'){exportDataJson();message('完整備份已下載到裝置。');return;}if(action==='export-workshop'){exportWorkshopDataJson();message('人設卡工坊備份已下載到裝置。');return;}if(action==='export-forum'){try{exportForumDataJson();message('論壇備份已下載到裝置。');}catch(err){message(err.message);}return;}if(action==='import-auto'){modal.querySelector('[data-cloud-file]')?.click();return;}run(async()=>{if(action==='upload'||action==='download')return start(action);if(action==='restore')return restore();if(action==='confirm')return commit();if(action==='cancel'){preview=null;render();return;}if(action==='logout'){try{await request('/auth/v1/logout',{});}finally{localStorage.removeItem(SESSION);session=null;preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;render();}}});});
       modal.addEventListener('change',event=>{if(event.target.matches('[data-scope]')&&!working){const key=event.target.dataset.scope;event.target.checked?selected.add(key):selected.delete(key);preview=null;render();}});
-      modal.addEventListener('change',event=>{if(!event.target.matches('[data-cloud-file]'))return;const input=event.target,file=input.files?.[0];run(async()=>{try{const result=await importBackupFileAutomatically(file);if(result&&!result.cancelled){render();message(`已自動辨識並讀取「${result.label}」備份。`);}}finally{input.value='';}});});
+      modal.addEventListener('change',event=>{if(!event.target.matches('[data-cloud-file]'))return;const input=event.target,file=input.files?.[0];run(async()=>{try{const result=await importBackupFileAutomatically(file);if(result?.pendingReview){modal.hidden=true;document.body.style.overflow=modal.dataset.previousOverflow||'';return;}if(result&&!result.cancelled){render();message(`已自動辨識並讀取「${result.label}」備份。`);}}finally{input.value='';}});});
       modal.addEventListener('input',event=>{if(!event.target.matches('[data-upload-note]'))return;uploadNote=[...event.target.value].slice(0,16).join('');if(event.target.value!==uploadNote)event.target.value=uploadNote;const count=modal.querySelector('[data-note-count]');if(count)count.textContent=[...uploadNote].length;});
       modal.addEventListener('keydown',event=>{if(event.key==='Escape')close();if(event.key==='Tab'){const items=[...modal.querySelectorAll('button,input,select,a,summary')].filter(el=>el.getClientRects().length),first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
     }
