@@ -739,6 +739,10 @@ body.forum-entering #forum-root>.ff-top,body.forum-entering #forum-root>.ff-layo
 .vn-feed-dialogue strong { display:block; color:var(--speaker-color); margin-bottom:.35rem; }
 .vn-feed-dialogue p { margin:0; line-height:1.75; font-size:var(--vn-font-size,1.05rem); white-space:pre-wrap; }
 .vn-feed-end { width:min(920px,100%); margin:1.5rem auto; padding:1rem; color:var(--vn-primary); text-align:center; border:1px solid color-mix(in srgb,var(--vn-primary) 40%,transparent); }
+.vn-feed-chapter-complete { display:grid; gap:.3rem; border-radius:12px; background:color-mix(in srgb,var(--vn-primary) 7%,var(--vn-bg)); animation:vnChapterCompleteIn .42s cubic-bezier(.2,.8,.2,1) both; }
+.vn-feed-chapter-complete strong { font-size:1rem; letter-spacing:.08em; }
+.vn-feed-chapter-complete small { color:color-mix(in srgb,var(--vn-text) 58%,transparent); font-size:.72rem; }
+@keyframes vnChapterCompleteIn { from{opacity:0;transform:translateY(10px) scale(.99)} to{opacity:1;transform:none} }
 .vn-feed-blank { height:.7rem; }
 .vn-dialogue-area { position:absolute; z-index:4; left:50%; bottom:clamp(1rem,4vh,3rem); transform:translateX(-50%); width:min(1040px,calc(100% - 2rem)); display:flex; align-items:flex-end; gap:clamp(.6rem,2vw,1.2rem); }
 .vn-player.no-cg .vn-dialogue-area { bottom:50%; transform:translate(-50%,50%); width:min(820px,calc(100% - 2rem)); }
