@@ -15,6 +15,7 @@ let globalTags = new Set();
 let articleTags = new Set();
 let visualNovelTemplates = [];
 let customPresetAvatars = [];
+let visualNovelTopDown = false;
 
 let deepseekSettings = {
   apiKey: "",
@@ -83,6 +84,8 @@ let visualNovelFastForwardDelay = null;
 let visualNovelFastForwardTimer = null;
 let visualNovelFastForwardActive = false;
 let visualNovelSuppressContinueClick = false;
+let visualNovelSuppressEntryScroll = false;
+let visualNovelEntryScrollToken = 0;
 let visualNovelPointerDownHandled = false;
 let visualNovelAutoSpeed = 1.5;
 let visualNovelFontSize = 1.05;
@@ -212,6 +215,7 @@ function loadStateFromLocalStorage() {
 
   const savedVnTemplates = localStorage.getItem("oc_visual_novel_templates");
   if (savedVnTemplates) { try { visualNovelTemplates = JSON.parse(savedVnTemplates) || []; } catch (e) { visualNovelTemplates = []; } }
+  visualNovelTopDown = localStorage.getItem("oc_visual_novel_top_down") === "true";
   try { customPresetAvatars=JSON.parse(localStorage.getItem('oc_custom_preset_avatars')||'[]')||[]; } catch(e){ customPresetAvatars=[]; }
 
   const savedTargets = localStorage.getItem("oc_perspective_targets");
@@ -245,6 +249,7 @@ function saveStateToLocalStorage() {
   put("oc_documents", documents);
   put("oc_collapsed_books", collapsedBooks);
   put("oc_visual_novel_templates", visualNovelTemplates);
+  put("oc_visual_novel_top_down", String(visualNovelTopDown));
   put('oc_custom_preset_avatars',customPresetAvatars);
   put("oc_perspective_targets", perspectiveTargets);
   put("oc_deepseek_settings", deepseekSettings);
@@ -4110,7 +4115,6 @@ function typeVisualNovelText(element, text) {
     if (state.index >= state.visibleText.length) {
       clearTimeout(state.timer); visualNovelTyping = null;
       renderVisualNovelInlineText(element, state.text);
-      if (feed) feed.scrollTop = feed.scrollHeight;
       if (visualNovelAutoPlay) scheduleVisualNovelAutoAdvance(Math.max(300, Math.round(1500 / visualNovelAutoSpeed)));
       return;
     }
@@ -4147,7 +4151,7 @@ function executeVisualNovelEvent(event) {
   const player = document.getElementById("vnPlayer");
   if (event.type === "blank") {
     const spacer = document.createElement("div"); spacer.className = "vn-feed-blank";
-    document.getElementById("vnStoryFeed").appendChild(spacer);
+    insertVisualNovelFeedNode(document.getElementById("vnStoryFeed"), spacer);
     return false;
   }
   if (event.type === "bgm" || event.type === "se") { playVisualNovelAudio(event.type, event.value); return false; }
@@ -4209,17 +4213,38 @@ function executeVisualNovelEvent(event) {
     const text = document.createElement("p"); dialogueTextElement = text;
     card.append(name, text); row.append(frame, card);bindVnSentenceEditorTarget(frame,row);bindVnSentenceEditorTarget(card,row);
   }
-  feed.appendChild(row);
+  insertVisualNovelFeedNode(feed, row);
+  focusVisualNovelEntryTop(feed, row);
   if (currentVisualNovelSettings.typewriterEnabled !== false) typeVisualNovelText(dialogueTextElement, event.text);
   else {
     renderVisualNovelInlineText(dialogueTextElement, event.text);
-    feed.scrollTop = feed.scrollHeight;
   }
-  feed.scrollTop = feed.scrollHeight;
-  requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
   const historyKey = `${currentVisualNovelDocId}:${currentVisualNovelIndex}`;
   if (!visualNovelHistory.some(item => item.key === historyKey)) visualNovelHistory.push({ key:historyKey, speaker:isSystem ? "系統" : narrator ? "旁白" : displaySpeaker, text:event.text });
   return true;
+}
+
+function focusVisualNovelEntryTop(feed, row) {
+  if (!feed || !row || visualNovelSuppressEntryScroll) return;
+  const token = ++visualNovelEntryScrollToken;
+  feed.style.scrollBehavior = "auto";
+  const align = () => {
+    if (!row.isConnected || visualNovelSuppressEntryScroll) return;
+    feed.scrollTop = Math.max(0, row.offsetTop - 10);
+  };
+  align();
+  requestAnimationFrame(() => {
+    align();
+    requestAnimationFrame(() => { if (token === visualNovelEntryScrollToken) feed.style.removeProperty("scroll-behavior"); });
+  });
+}
+
+function insertVisualNovelFeedNode(feed, node) {
+  if (!feed || !node) return;
+  if (visualNovelTopDown) {
+    const heading = feed.querySelector(":scope > .vn-feed-chapter");
+    feed.insertBefore(node, heading?.nextSibling || feed.firstChild);
+  } else feed.appendChild(node);
 }
 
 function bindVnSentenceEditorTarget(target,row){
@@ -4235,7 +4260,7 @@ function rebuildVisualNovelPlaybackAfterScriptEdit(readingIndex=currentVisualNov
   const target=Math.min(Math.max(-1,Number(readingIndex)),currentVisualNovelEvents.length-1),typewriter=currentVisualNovelSettings.typewriterEnabled;
   feed.replaceChildren();const heading=document.createElement('div');heading.className='vn-feed-chapter';heading.textContent=doc.title;feed.appendChild(heading);visualNovelHistory=[];currentVisualNovelSettings.typewriterEnabled=false;
   for(let index=0;index<=target;index++){const event=currentVisualNovelEvents[index];currentVisualNovelIndex=index;if(event?.type==='dialogue'||event?.type==='blank')executeVisualNovelEvent(event);}
-  finishVisualNovelTyping(true);currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=target;feed.scrollTop=feed.scrollHeight;updateVisualNovelBookmarkBtnUI();
+  finishVisualNovelTyping(true);currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=target;feed.scrollTop=visualNovelTopDown?0:feed.scrollHeight;updateVisualNovelBookmarkBtnUI();
 }
 
 function getMissingVisualNovelDialogueIndexes(upToIndex=currentVisualNovelIndex) {
@@ -4249,8 +4274,8 @@ function repairMissingVisualNovelDialogueRows(upToIndex=currentVisualNovelIndex,
   const missing=getMissingVisualNovelDialogueIndexes(upToIndex);if(!missing.length)return false;
   const feed=document.getElementById('vnStoryFeed'),savedIndex=currentVisualNovelIndex,typewriter=currentVisualNovelSettings.typewriterEnabled,oldHeight=feed.scrollHeight,oldTop=feed.scrollTop,wasNearBottom=oldHeight-feed.clientHeight-oldTop<80;
   finishVisualNovelTyping(true);const index=missing[0];currentVisualNovelSettings.typewriterEnabled=typewriter;
-  currentVisualNovelIndex=index;executeVisualNovelEvent(currentVisualNovelEvents[index]);
-  const inserted=feed.querySelector(`.vn-feed-entry[data-event-index="${index}"]`);if(inserted){const next=[...feed.querySelectorAll('.vn-feed-entry[data-event-index]')].find(row=>row!==inserted&&Number(row.dataset.eventIndex)>index);if(next)feed.insertBefore(inserted,next);}
+  currentVisualNovelIndex=index;visualNovelSuppressEntryScroll=true;executeVisualNovelEvent(currentVisualNovelEvents[index]);visualNovelSuppressEntryScroll=false;
+  const inserted=feed.querySelector(`.vn-feed-entry[data-event-index="${index}"]`);if(inserted){const next=[...feed.querySelectorAll('.vn-feed-entry[data-event-index]')].find(row=>row!==inserted&&(visualNovelTopDown?Number(row.dataset.eventIndex)<index:Number(row.dataset.eventIndex)>index));if(next)feed.insertBefore(inserted,next);}
   currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=savedIndex;
   visualNovelHistory.sort((a,b)=>Number(a.key.split(':').at(-1))-Number(b.key.split(':').at(-1)));
   requestAnimationFrame(()=>{feed.scrollTop=wasNearBottom?feed.scrollHeight:oldTop+(feed.scrollHeight-oldHeight);});
@@ -4271,24 +4296,41 @@ function refreshVnEditedSentence(){rebuildVisualNovelPlaybackAfterScriptEdit(cur
 function openVnSpeakerEditor(eventIndex,row){
   const event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!event||event.type!=='dialogue'||!doc?.visualNovel)return;pendingVnSpeakerEdit={eventIndex,row};
   finishVisualNovelTyping(true);const select=document.getElementById('vnSpeakerCharacterSelect'),available=getDocumentPossibleCharacters(doc);select.innerHTML=['旁白','系統','路人',...available.map(char=>char.name)].map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')+'<option value="__custom__">手動輸入其他名稱…</option>';
-  select.value=[...select.options].some(option=>option.value===event.speaker)?event.speaker:'__custom__';document.getElementById('vnSpeakerCustomInput').value=event.speaker||'';document.getElementById('vnSpeakerTextInput').value=event.text||'';document.getElementById('vnSpeakerEditorModal').classList.add('active');
+  select.value=[...select.options].some(option=>option.value===event.speaker)?event.speaker:'__custom__';document.getElementById('vnSpeakerCustomInput').value=event.speaker||'';document.getElementById('vnSpeakerTextInput').value=event.text||'';const modal=document.getElementById('vnSpeakerEditorModal');modal.style.setProperty('--vn-primary',currentVisualNovelSettings.primaryColor||'#d97706');modal.style.setProperty('--vn-secondary',currentVisualNovelSettings.secondaryColor||currentVisualNovelSettings.primaryColor||'#7c3aed');modal.classList.add('active');
 }
 function syncVnSpeakerCustomInput(value){if(value!=='__custom__')document.getElementById('vnSpeakerCustomInput').value=value;}
 function closeVnSpeakerEditor(){document.getElementById('vnSpeakerEditorModal').classList.remove('active');pendingVnSpeakerEdit=null;}
 function saveVnSpeakerCorrection(){
   if(!pendingVnSpeakerEdit)return;const {eventIndex,row}=pendingVnSpeakerEdit,event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId),next=document.getElementById('vnSpeakerCustomInput').value.trim(),text=document.getElementById('vnSpeakerTextInput').value.trim();if(!event||!doc?.visualNovel||!next){alert('請填寫說話人。');return;}if(!text){alert('對話內文不可為空；若要移除，請使用「刪除這句」。');return;}
   if(!replaceVisualNovelScriptEvent(eventIndex,`${next}｜${encodeVisualNovelInlineLineBreaks(text)}`))return;saveStateToLocalStorage();
-  rebuildVisualNovelPlaybackAfterScriptEdit(currentVisualNovelIndex);
+  currentVisualNovelEvents=buildVerifiedVisualNovelEvents(doc.visualNovel.scriptText);
+  replaceRenderedVisualNovelDialogue(eventIndex);
   closeVnSpeakerEditor();showVnFloatingToast('說話人與對話內文已更正並保存');
+}
+
+function replaceRenderedVisualNovelDialogue(eventIndex) {
+  const feed=document.getElementById('vnStoryFeed'),oldRow=feed?.querySelector(`.vn-feed-entry[data-event-index="${eventIndex}"]`),updated=currentVisualNovelEvents[eventIndex];
+  if(!feed||!oldRow||updated?.type!=='dialogue')return;
+  const anchor=oldRow.nextSibling,savedIndex=currentVisualNovelIndex,typewriter=currentVisualNovelSettings.typewriterEnabled,oldTop=feed.scrollTop;
+  oldRow.remove();currentVisualNovelIndex=eventIndex;currentVisualNovelSettings.typewriterEnabled=false;visualNovelSuppressEntryScroll=true;executeVisualNovelEvent(updated);visualNovelSuppressEntryScroll=false;
+  const newRow=feed.querySelector(`.vn-feed-entry[data-event-index="${eventIndex}"]`);
+  if(newRow&&anchor?.parentNode===feed)feed.insertBefore(newRow,anchor);
+  currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=savedIndex;
+  const key=`${currentVisualNovelDocId}:${eventIndex}`,history=visualNovelHistory.find(item=>item.key===key);if(history){history.speaker=updated.speaker;history.text=updated.text;}
+  feed.scrollTop=oldTop;
 }
 
 function deleteVnCurrentSentence(){
   if(!pendingVnSpeakerEdit||!confirm('確定要刪除這一句對話嗎？刪除後無法由此視窗復原。'))return;const {eventIndex}=pendingVnSpeakerEdit;if(!replaceVisualNovelScriptEvent(eventIndex,null))return;
-  const readingIndex=currentVisualNovelIndex>=eventIndex?Math.max(-1,currentVisualNovelIndex-1):currentVisualNovelIndex;saveStateToLocalStorage();rebuildVisualNovelPlaybackAfterScriptEdit(readingIndex);closeVnSpeakerEditor();showVnFloatingToast('這一句已刪除');
+  const feed=document.getElementById('vnStoryFeed');feed?.querySelector(`.vn-feed-entry[data-event-index="${eventIndex}"]`)?.remove();
+  currentVisualNovelEvents=buildVerifiedVisualNovelEvents(documents.find(item=>item.id===currentVisualNovelDocId)?.visualNovel?.scriptText||'');
+  feed?.querySelectorAll('.vn-feed-entry[data-event-index]').forEach(row=>{const index=Number(row.dataset.eventIndex);if(index>eventIndex){row.dataset.eventIndex=index-1;row.dataset.sourceLineIndex=Math.max(0,Number(row.dataset.sourceLineIndex||index)-1);}});
+  visualNovelHistory=visualNovelHistory.filter(item=>item.key!==`${currentVisualNovelDocId}:${eventIndex}`).map(item=>{const [docId,indexText]=item.key.split(':');const index=Number(indexText);if(docId===currentVisualNovelDocId&&index>eventIndex)item.key=`${docId}:${index-1}`;return item;});
+  if(currentVisualNovelIndex>=eventIndex)currentVisualNovelIndex=Math.max(-1,currentVisualNovelIndex-1);ensureVisualNovelCgMatchesScript(currentVisualNovelIndex);saveStateToLocalStorage();closeVnSpeakerEditor();showVnFloatingToast('這一句已刪除');
 }
 
 function handleVisualNovelStageClick(event){if(visualNovelScriptEditMode)return;advanceVisualNovel(event);}
-function toggleVisualNovelScriptEditMode(event){event?.stopPropagation?.();visualNovelScriptEditMode=!visualNovelScriptEditMode;visualNovelAutoPlay=false;clearTimeout(visualNovelAutoTimer);document.getElementById('vnAutoPlayBtn')?.classList.remove('active');document.getElementById('vnPlayer').classList.toggle('vn-script-editing',visualNovelScriptEditMode);const button=document.getElementById('vnScriptEditModeBtn'),full=document.getElementById('vnOpenFullScriptEditorBtn');button.innerHTML=visualNovelScriptEditMode?'<i class="fa-solid fa-check"></i> 結束編輯劇本模式':'<i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式';full.style.display=visualNovelScriptEditMode?'flex':'none';showVnFloatingToast(visualNovelScriptEditMode?'編輯劇本模式：雙擊／雙點頭像或對話框即可校對':'已結束編輯劇本模式');}
+function toggleVisualNovelScriptEditMode(event){event?.stopPropagation?.();visualNovelScriptEditMode=!visualNovelScriptEditMode;visualNovelAutoPlay=false;clearTimeout(visualNovelAutoTimer);document.getElementById('vnAutoPlayBtn')?.classList.remove('active');document.getElementById('vnPlayer').classList.toggle('vn-script-editing',visualNovelScriptEditMode);const button=document.getElementById('vnScriptEditModeBtn'),full=document.getElementById('vnOpenFullScriptEditorBtn'),repair=document.getElementById('vnScriptRepairTools');button.innerHTML=visualNovelScriptEditMode?'<i class="fa-solid fa-check"></i> 結束編輯劇本模式':'<i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式';full.style.display=visualNovelScriptEditMode?'flex':'none';if(repair)repair.hidden=!visualNovelScriptEditMode;showVnFloatingToast(visualNovelScriptEditMode?'編輯劇本模式：雙擊／雙點頭像或對話框即可校對':'已結束編輯劇本模式');}
 
 function clearVisualNovelBookmark(docId) {
   const doc = documents.find(item => item.id === docId);
@@ -4320,7 +4362,7 @@ function advanceVisualNovel(event) {
       const end = document.createElement("div");
       end.className = "vn-feed-end vn-feed-next-chapter";
       end.textContent = `— ${nextChapter.title} 即將開始 —`;
-      feed.appendChild(end); feed.scrollTop = feed.scrollHeight;
+      insertVisualNovelFeedNode(feed,end); feed.scrollTop = visualNovelTopDown ? 0 : feed.scrollHeight;
       document.getElementById("vnPlayer")?.classList.add("vn-chapter-leaving");
       visualNovelChapterTimer = setTimeout(() => {
         visualNovelChapterTimer = null;
@@ -4330,7 +4372,7 @@ function advanceVisualNovel(event) {
     else {
       const feed = document.getElementById("vnStoryFeed");
       if (!feed.querySelector(".vn-feed-end")) {
-        const end = document.createElement("div"); end.className = "vn-feed-end"; end.textContent = "— 本章故事已結束 —"; feed.appendChild(end); feed.scrollTop = feed.scrollHeight;
+        const end = document.createElement("div"); end.className = "vn-feed-end"; end.textContent = "— 本章故事已結束 —"; insertVisualNovelFeedNode(feed,end); feed.scrollTop = visualNovelTopDown ? 0 : feed.scrollHeight;
       }
     }
     return;
@@ -4469,6 +4511,16 @@ function updateVisualNovelSettingsUI() {
 
   const soundCheck = document.getElementById("vnTypewriterSoundCheck");
   if (soundCheck) soundCheck.checked = !!currentVisualNovelSettings.typewriterSound;
+  const topDownCheck = document.getElementById("vnTopDownCheck");
+  if (topDownCheck) topDownCheck.checked = visualNovelTopDown;
+}
+
+function toggleVisualNovelTopDown(event) {
+  event?.stopPropagation?.();
+  visualNovelTopDown = !!document.getElementById("vnTopDownCheck")?.checked;
+  saveStateToLocalStorage();
+  rebuildVisualNovelPlaybackAfterScriptEdit(currentVisualNovelIndex);
+  showVnFloatingToast(visualNovelTopDown ? "已改為從上往下閱讀" : "已改為從下往上閱讀");
 }
 
 function updateVisualNovelBookmarkBtnUI() {
@@ -5120,7 +5172,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
+  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -5130,7 +5182,7 @@ function exportDataJson() {
 }
 
 function exportWorkshopDataJson() {
-  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
+  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'}));
   a.download = `人設卡工坊-${new Date().toISOString().slice(0,10)}.json`;
@@ -5168,6 +5220,7 @@ function applyWorkshopBackupData(data) {
   if (data.documents) documents = data.documents;
   normalizeVisualNovelDocuments();
   if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
+  if (typeof data.visualNovelTopDown === 'boolean') visualNovelTopDown = data.visualNovelTopDown;
   if (Array.isArray(data.customPresetAvatars)) customPresetAvatars = data.customPresetAvatars;
   if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
   if (data.perspectiveTargets && typeof data.perspectiveTargets === 'object') perspectiveTargets = data.perspectiveTargets;
