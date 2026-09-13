@@ -4990,6 +4990,10 @@ async function importBackupFileAutomatically(file) {
   if(!String(text).trim())text=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(reader.error||new Error('無法讀取檔案。'));reader.readAsText(file,'utf-8');});
   let parsed;try{parsed=JSON.parse(String(text).replace(/^\uFEFF/,'').trim());}catch{throw new Error('JSON 格式無效，或檔案尚未完整下載。');}
   const detected=detectBackupData(parsed);
+  if(detected.kind==='workshop'||detected.kind==='complete'){
+    prepareAdvancedImport(detected.data,file.name);
+    return {kind:detected.kind,label:detected.label,pendingReview:true};
+  }
   if(!confirm(`已辨識為「${detected.label}」備份。\n\n確定讀取並取代對應的本機資料嗎？`))return {cancelled:true,label:detected.label};
   if(detected.kind==='forum')window.OCForum.importState(detected.data);
   else {applyWorkshopBackupData(detected.data);if(detected.kind==='complete'&&detected.data.forum)window.OCForum.importState(detected.data.forum);}
@@ -4998,7 +5002,7 @@ async function importBackupFileAutomatically(file) {
 
 function openImportOptionsModal() {
   const toggle = document.getElementById("advancedImportModeToggle");
-  toggle.checked = false;
+  toggle.checked = true;
   document.getElementById("jsonFileInput").value = "";
   updateImportModeDescription();
   document.getElementById("importOptionsModal").classList.add("active");
@@ -5007,7 +5011,7 @@ function openImportOptionsModal() {
 function updateImportModeDescription() {
   const enabled = document.getElementById("advancedImportModeToggle").checked;
   document.getElementById("importModeDescription").textContent = enabled
-    ? "挑選讀檔會保留現有資料、加入備份中沒有的人物與陣營；同名但內容不同時，再逐一選擇保留版本。"
+    ? "挑選讀檔會保留現有資料並加入缺少項目；書籍、同人章節與其他同名差異都會逐筆選擇保留版本。"
     : "一般讀檔會用備份內容取代目前資料。";
 }
 
@@ -5339,6 +5343,7 @@ function applyAdvancedImport() {
   collapsedBooks = { ...collapsedBooks, ...(data.collapsedBooks || {}) };
 
   saveStateToLocalStorage(); syncGlobalTags(); renderAllViews();
+  if(data.forum)window.OCForum?.importState?.(data.forum);
   const addedCount = [data.characters, data.factions].reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
   cancelAdvancedImport();
   alert(`挑選讀檔完成！已檢查並合併 ${addedCount} 筆人物與陣營資料。`);
