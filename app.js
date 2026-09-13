@@ -63,9 +63,11 @@ let visualNovelChapterTimer = null;
 let visualNovelOpeningTimer = null;
 let visualNovelCgLayerIndex = 0;
 let visualNovelPendingCgSource = "";
+let visualNovelCgRequestToken = 0;
 const visualNovelCgPreloads = new Map();
 const visualNovelAvatarPreloads = new Map();
 const visualNovelAudioPreloads = new Map();
+const visualNovelSeChannels = [];
 let visualNovelHistory = [];
 let currentVisualNovelSettings = {};
 let visualNovelTyping = null;
@@ -3673,8 +3675,17 @@ function preloadVisualNovelCg(source) {
   if (visualNovelCgPreloads.has(url)) return visualNovelCgPreloads.get(url);
   const promise = new Promise(resolve => {
     const image = new Image();
-    image.onload = () => image.decode ? image.decode().catch(() => {}).finally(() => resolve(true)) : resolve(true);
-    image.onerror = () => resolve(false);
+    let settled = false;
+    const finish = success => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (!success) visualNovelCgPreloads.delete(url);
+      resolve(success);
+    };
+    const timeout = setTimeout(() => finish(false), 8000);
+    image.onload = () => image.decode ? image.decode().catch(() => {}).finally(() => finish(true)) : finish(true);
+    image.onerror = () => finish(false);
     image.src = url;
   });
   visualNovelCgPreloads.set(url, promise);
@@ -3760,6 +3771,7 @@ function resetVisualNovelCg() {
   if (!cg) return;
   visualNovelCgLayerIndex = 0;
   visualNovelPendingCgSource = "";
+  visualNovelCgRequestToken++;
   cg.querySelectorAll(".vn-cg-layer").forEach(layer => {
     layer.classList.remove("active");
     layer.style.backgroundImage = "";
@@ -3771,19 +3783,23 @@ async function transitionVisualNovelCg(source) {
   const cg = document.getElementById("vnCg");
   if (!player || !cg) return;
   const url = String(source || "").trim();
+  const requestToken = ++visualNovelCgRequestToken;
   visualNovelPendingCgSource = url;
   if (!url || url.toLowerCase() === "none") {
     cg.querySelectorAll(".vn-cg-layer").forEach(layer => layer.classList.remove("active"));
     player.classList.add("no-cg");
     return;
   }
-  await preloadVisualNovelCg(url);
-  if (visualNovelPendingCgSource !== url) return;
   const layers = cg.querySelectorAll(".vn-cg-layer");
   if (!layers.length) return;
   const nextIndex = layers.length > 1 ? 1 - visualNovelCgLayerIndex : 0;
   const next = layers[nextIndex];
   next.style.backgroundImage = `url("${url.replace(/"/g, '%22')}")`;
+  await Promise.race([
+    preloadVisualNovelCg(url),
+    new Promise(resolve => setTimeout(() => resolve(false), 1200))
+  ]);
+  if (requestToken !== visualNovelCgRequestToken || visualNovelPendingCgSource !== url) return;
   void next.offsetWidth;
   layers.forEach((layer, index) => layer.classList.toggle("active", index === nextIndex));
   visualNovelCgLayerIndex = nextIndex;
@@ -3904,14 +3920,43 @@ function setVisualNovelTypeSoundVolume(value, event) {
 function toggleVisualNovelAudioMute(event) {
   event?.stopPropagation?.();
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
-  const se = document.getElementById("vnSeAudio");
   const nextMuted = !channels[0].muted;
   channels.forEach(audio => audio.muted = nextMuted);
-  if (se) se.muted = nextMuted;
+  getVisualNovelSeChannels().forEach(audio => audio.muted = nextMuted);
   const status = document.getElementById("vnAudioStatus");
   status.classList.toggle("muted", nextMuted);
   const icon = status.querySelector("i");
   if (icon) icon.className = nextMuted ? "fa-solid fa-volume-xmark" : "fa-solid fa-volume-high";
+}
+
+function getVisualNovelSeChannels() {
+  const primary = document.getElementById("vnSeAudio");
+  if (primary && !visualNovelSeChannels.includes(primary)) visualNovelSeChannels.unshift(primary);
+  return visualNovelSeChannels;
+}
+
+function acquireVisualNovelSeChannel() {
+  const channels = getVisualNovelSeChannels();
+  let channel = channels.find(audio => audio.paused || audio.ended || !audio.currentSrc);
+  if (!channel && channels.length < 12) {
+    channel = new Audio();
+    channel.preload = "auto";
+    channel.setAttribute("playsinline", "");
+    channel.className = "vn-se-channel";
+    channels.push(channel);
+  }
+  if (!channel) channel = channels.reduce((oldest, audio) => Number(audio.dataset.startedAt || 0) < Number(oldest.dataset.startedAt || 0) ? audio : oldest, channels[0]);
+  return channel;
+}
+
+function stopVisualNovelSoundEffects() {
+  getVisualNovelSeChannels().forEach(audio => {
+    audio.pause();
+    audio.currentTime = 0;
+    audio.removeAttribute("src");
+    delete audio.dataset.startedAt;
+    audio.load();
+  });
 }
 
 function playVisualNovelAudio(type, src) {
@@ -3920,12 +3965,16 @@ function playVisualNovelAudio(type, src) {
     transitionVisualNovelBgm(source);
     return;
   }
-  const se = document.getElementById("vnSeAudio");
-  if (!se) return;
   if (!source || source.toLowerCase() === "none") {
-    se.pause(); se.currentTime = 0; se.removeAttribute("src"); se.load(); return;
+    stopVisualNovelSoundEffects(); return;
   }
-  se.pause(); se.src = source; se.currentTime = 0; se.load();
+  unlockVisualNovelAudioContext();
+  const se = acquireVisualNovelSeChannel();
+  if (!se) return;
+  const bgm = document.getElementById("vnBgmAudio");
+  se.muted = !!bgm?.muted;
+  se.src = source; se.currentTime = 0; se.load();
+  se.dataset.startedAt = String(performance.now());
   se.play().catch(error => console.warn("SE 播放失敗", error));
 }
 
@@ -4540,9 +4589,9 @@ function toggleVisualNovelMute(event) {
   }
   const bgmChannels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
   const bgm = bgmChannels[visualNovelBgmChannelIndex];
-  const se = document.getElementById("vnSeAudio");
   const muted = !bgm.muted;
-  bgmChannels.forEach(audio => { audio.muted = muted; }); se.muted = muted;
+  bgmChannels.forEach(audio => { audio.muted = muted; });
+  getVisualNovelSeChannels().forEach(audio => { audio.muted = muted; });
   document.querySelectorAll("#vnAudioStatus i").forEach(i => { i.className = `fa-solid ${bgm.muted ? 'fa-volume-xmark' : 'fa-volume-high'}`; });
   document.querySelectorAll("#vnAudioStatus").forEach(btn => btn.classList.toggle("muted", bgm.muted));
 }
@@ -4587,13 +4636,7 @@ function closeVisualNovelPlayer() {
     delete audio.dataset.source;
     audio.load();
   });
-  const se = document.getElementById("vnSeAudio");
-  if (se) {
-    se.pause();
-    se.currentTime = 0;
-    se.removeAttribute("src");
-    se.load();
-  }
+  stopVisualNovelSoundEffects();
   ["vnHistoryPanel", "vnChapterPanel", "vnSettingsPanel"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.remove("active");
