@@ -703,6 +703,7 @@ body.forum-entering #forum-root>.ff-top,body.forum-entering #forum-root>.ff-layo
 @keyframes vnFastForwardPulse { to { transform:scale(1.025); filter:brightness(1.18); } }
 .vn-chapter-transition { position:absolute; z-index:20; inset:0; display:grid; place-items:center; padding:2rem; text-align:center; pointer-events:none; opacity:0; color:#fff; font-size:clamp(1.6rem,5vw,3.8rem); font-weight:900; letter-spacing:.08em; background:linear-gradient(135deg,var(--vn-primary),var(--vn-secondary)); }
 .vn-chapter-transition.show { animation:vnChapterFade 1.6s ease both; }
+.vn-player.vn-opening-transition .vn-stage,.vn-player.vn-opening-transition .vn-player-controls { pointer-events:none; }
 .vn-player.vn-shake { animation:vnShake .36s linear; }
 .vn-side-panel { position:absolute; z-index:18; top:58px; right:0; bottom:58px; width:min(440px,92vw); display:flex; flex-direction:column; transform:translateX(105%); transition:transform .28s ease; color:var(--vn-text); background:color-mix(in srgb,var(--vn-bg) 96%,#000); border-left:1px solid var(--vn-primary); box-shadow:-20px 0 50px rgba(0,0,0,.45); }
 .vn-side-panel.active { transform:translateX(0); }
