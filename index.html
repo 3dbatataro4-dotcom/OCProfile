@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=21.42">
-  <link rel="stylesheet" href="forum.css?v=21.42">
+  <link rel="stylesheet" href="style.css?v=21.44">
+  <link rel="stylesheet" href="forum.css?v=21.44">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.42">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.44">
 </head>
 <body>
 
@@ -1335,6 +1335,10 @@
             <label class="checkbox-label"><input type="checkbox" id="vnTypewriterSoundCheck" onchange="toggleVisualNovelTypeSound(event)"> 打字音效與下一句提示音</label>
           </div>
           <div class="vn-setting-control-group">
+            <label class="checkbox-label"><input type="checkbox" id="vnTopDownCheck" onchange="toggleVisualNovelTopDown(event)"> 從上往下看</label>
+            <p class="vn-setting-hint">新對話會出現在對話區上方，歷史對話依序往下移；此偏好套用所有視覺小說。</p>
+          </div>
+          <div class="vn-setting-control-group">
             <label class="vn-setting-label">
               <span><i class="fa-solid fa-keyboard"></i> 打字音效音量</span>
               <span id="vnSettingsTypeSoundLabel">60%</span>
@@ -1344,10 +1348,12 @@
             </div>
           </div>
           <div class="vn-setting-control-group vn-script-edit-setting">
-            <button class="btn btn-outline btn-block" onclick="diagnoseCurrentVisualNovelScript(event)"><i class="fa-solid fa-stethoscope"></i> 檢查並修復本章劇本</button>
-            <p class="vn-setting-hint">逐行核對原稿、播放事件與已顯示台詞；發現漏句會立即依原稿重建。</p>
             <button class="btn btn-primary btn-block" id="vnScriptEditModeBtn" onclick="toggleVisualNovelScriptEditMode(event)"><i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式</button>
             <p class="vn-setting-hint">開啟後，雙擊人物頭像可更正說話人；點空白舞台不會播放下一句。</p>
+            <div class="vn-script-repair-tools" id="vnScriptRepairTools" hidden>
+              <button class="btn btn-outline btn-block" onclick="diagnoseCurrentVisualNovelScript(event)"><i class="fa-solid fa-stethoscope"></i> 檢查並修復本章劇本</button>
+              <p class="vn-setting-hint">逐行核對原稿、播放事件與已顯示台詞；只在劇本編輯模式中使用。</p>
+            </div>
             <button class="btn btn-outline btn-block" id="vnOpenFullScriptEditorBtn" onclick="openCurrentVisualNovelEditor()" style="display:none"><i class="fa-solid fa-align-left"></i> 前往完整文本編輯器</button>
           </div>
         </div>
@@ -1362,12 +1368,12 @@
   </div>
 
   <div class="modal-backdrop vn-speaker-editor-backdrop" id="vnSpeakerEditorModal">
-    <div class="modal-box modal-sm" onclick="event.stopPropagation()">
+    <div class="modal-box modal-sm vn-speaker-editor-box" onclick="event.stopPropagation()">
       <div class="modal-header"><h3><i class="fa-solid fa-user-pen"></i> 更正說話人</h3><button class="close-btn" onclick="closeVnSpeakerEditor()">&times;</button></div>
-      <div class="modal-body">
-        <label>選擇本篇已有角色<select id="vnSpeakerCharacterSelect" onchange="syncVnSpeakerCustomInput(this.value)"></select></label>
-        <label>或手動輸入說話人<input type="text" id="vnSpeakerCustomInput" placeholder="角色名稱／旁白／路人"></label>
-        <label>這一句的對話內文<textarea id="vnSpeakerTextInput" rows="5" placeholder="輸入這一句要顯示的內容"></textarea></label>
+      <div class="modal-body vn-speaker-editor-form">
+        <label><span><i class="fa-solid fa-users"></i> 選擇本篇已有角色</span><select id="vnSpeakerCharacterSelect" onchange="syncVnSpeakerCustomInput(this.value)"></select></label>
+        <label><span><i class="fa-solid fa-signature"></i> 或手動輸入說話人</span><input type="text" id="vnSpeakerCustomInput" placeholder="角色名稱／旁白／路人"></label>
+        <label><span><i class="fa-solid fa-message"></i> 這一句的對話內文</span><textarea id="vnSpeakerTextInput" rows="5" placeholder="輸入這一句要顯示的內容"></textarea></label>
       </div>
       <div class="modal-footer"><button class="btn btn-danger" onclick="deleteVnCurrentSentence()" style="margin-right:auto"><i class="fa-solid fa-trash"></i> 刪除這句</button><button class="btn btn-outline" onclick="closeVnSpeakerEditor()">取消</button><button class="btn btn-primary" onclick="saveVnSpeakerCorrection()">保存更正</button></div>
     </div>
@@ -1594,12 +1600,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=21.42"></script>
-  <script src="forum-chat-core.js?v=21.42"></script>
-  <script src="forum-core.js?v=21.42"></script>
-  <script src="forum-chat.js?v=21.42"></script>
-  <script src="forum.js?v=21.42"></script>
-  <script src="cloud-sync-core.js?v=21.42"></script>
-  <script src="cloud-sync.js?v=21.42"></script>
+  <script src="app.js?v=21.44"></script>
+  <script src="forum-chat-core.js?v=21.44"></script>
+  <script src="forum-core.js?v=21.44"></script>
+  <script src="forum-chat.js?v=21.44"></script>
+  <script src="forum.js?v=21.44"></script>
+  <script src="cloud-sync-core.js?v=21.44"></script>
+  <script src="cloud-sync.js?v=21.44"></script>
 </body>
 </html>
