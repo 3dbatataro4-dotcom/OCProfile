@@ -63,6 +63,7 @@ let visualNovelChapterTimer = null;
 let visualNovelOpeningTimer = null;
 let visualNovelCgLayerIndex = 0;
 let visualNovelPendingCgSource = "";
+let visualNovelActiveCgSource = "";
 let visualNovelCgRequestToken = 0;
 const visualNovelCgPreloads = new Map();
 const visualNovelAvatarPreloads = new Map();
@@ -3771,6 +3772,7 @@ function resetVisualNovelCg() {
   if (!cg) return;
   visualNovelCgLayerIndex = 0;
   visualNovelPendingCgSource = "";
+  visualNovelActiveCgSource = "";
   visualNovelCgRequestToken++;
   cg.querySelectorAll(".vn-cg-layer").forEach(layer => {
     layer.classList.remove("active");
@@ -3788,6 +3790,8 @@ async function transitionVisualNovelCg(source) {
   if (!url || url.toLowerCase() === "none") {
     cg.querySelectorAll(".vn-cg-layer").forEach(layer => layer.classList.remove("active"));
     player.classList.add("no-cg");
+    visualNovelActiveCgSource = "none";
+    visualNovelPendingCgSource = "";
     return;
   }
   const layers = cg.querySelectorAll(".vn-cg-layer");
@@ -3803,7 +3807,24 @@ async function transitionVisualNovelCg(source) {
   void next.offsetWidth;
   layers.forEach((layer, index) => layer.classList.toggle("active", index === nextIndex));
   visualNovelCgLayerIndex = nextIndex;
+  visualNovelActiveCgSource = url;
+  visualNovelPendingCgSource = "";
   player.classList.remove("no-cg");
+}
+
+function ensureVisualNovelCgMatchesScript(upToIndex = currentVisualNovelIndex) {
+  const limit = Math.min(Number(upToIndex), currentVisualNovelEvents.length - 1);
+  let expected = "none";
+  for (let index = limit; index >= 0; index--) {
+    const event = currentVisualNovelEvents[index];
+    if (event?.type === "cg") {
+      expected = String(event.value || "none").trim() || "none";
+      break;
+    }
+  }
+  const normalizedExpected = expected.toLowerCase() === "none" ? "none" : expected;
+  if (visualNovelActiveCgSource === normalizedExpected || visualNovelPendingCgSource === normalizedExpected) return;
+  transitionVisualNovelCg(normalizedExpected);
 }
 
 function showVisualNovelChapterTransition(title) {
@@ -4135,6 +4156,7 @@ function executeVisualNovelEvent(event) {
     return false;
   }
   if (event.type === "shake") { player.classList.remove("vn-shake"); void player.offsetWidth; player.classList.add("vn-shake"); return false; }
+  ensureVisualNovelCgMatchesScript(currentVisualNovelIndex);
   const rawSpeaker = stripInvisibleFormatting(event.speaker).trim();
   const isSystem = ["系統", "system"].includes(rawSpeaker.toLowerCase());
   const narrator = ["旁白", "系統", "narrator", "system"].includes(rawSpeaker.toLowerCase());
