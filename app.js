@@ -86,6 +86,7 @@ let visualNovelFastForwardActive = false;
 let visualNovelSuppressContinueClick = false;
 let visualNovelSuppressEntryScroll = false;
 let visualNovelEntryScrollToken = 0;
+let visualNovelEntryVisibilityTimer = null;
 let visualNovelPointerDownHandled = false;
 let visualNovelAutoSpeed = 1.5;
 let visualNovelFontSize = 1.05;
@@ -2679,6 +2680,14 @@ function deleteFaction(factionId) {
 }
 
 // ========== 10.5. 同人文檔與書籍資料庫 ==========
+function countDocumentBodyCharacters(doc) {
+  return String(doc?.content || "").replace(/\s/g, "").length;
+}
+
+function formatDocumentCharacterCount(count) {
+  return `${Number(count || 0).toLocaleString("zh-TW")} 字`;
+}
+
 function toggleBookCollapse(bookId) {
   collapsedBooks[bookId] = !collapsedBooks[bookId];
   try { saveStateToLocalStorage(); }
@@ -2738,6 +2747,7 @@ function renderDocumentsModule() {
       (!selectedFactionId || (book.factionIds || []).includes(selectedFactionId)) &&
       (!selectedTag || (book.tags || []).includes(selectedTag));
     const bookDocs = (bookDirectMatch ? documents : filteredDocs).filter(d => d.bookId === book.id);
+    const bookCharacterCount = documents.filter(d => d.bookId === book.id).reduce((total, doc) => total + countDocumentBodyCharacters(doc), 0);
     const isCollapsed = !!collapsedBooks[book.id];
     const memberChars = (book.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
     const memberFactions = (book.factionIds || []).map(id => factions.find(f => f.id === id)).filter(Boolean);
@@ -2756,6 +2766,7 @@ function renderDocumentsModule() {
               <h3 style="font-size:1.1rem; color:var(--text-main); display:inline-flex; align-items:center; gap:0.4rem;">
                 <i class="fa-solid fa-book-bookmark" style="color:${bookIconColor}; font-size:1.15rem;"></i> ${book.title}
                 <span class="badge" style="margin-left:0.3rem;">${bookDocs.length} 章</span>
+                <span class="doc-word-count"><i class="fa-solid fa-font"></i> ${formatDocumentCharacterCount(bookCharacterCount)}</span>
               </h3>
               <p style="font-size:0.83rem; color:var(--text-muted); margin-top:0.15rem;">${book.description || '暫無簡介'}</p>
               <div style="font-size:0.78rem; color:var(--accent-coffee); margin-top:0.2rem;">
@@ -2809,6 +2820,7 @@ function renderSingleDocItemHtml(doc) {
         <i class="fa-solid fa-file-lines" style="color:var(--accent-coffee); font-size:1.05rem; flex-shrink:0;"></i>
         <div>
           <strong style="font-size:0.92rem; color:var(--text-main);">${doc.title}</strong>
+          <span class="doc-word-count"><i class="fa-solid fa-font"></i> ${formatDocumentCharacterCount(countDocumentBodyCharacters(doc))}</span>
           <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.15rem;">
             ${docChars.length ? `角色: ${docChars.map(c => c.name).join(', ')} ` : ''}
             ${docFactions.length ? `｜ 世界觀: ${docFactions.map(f => f.name).join(', ')}` : ''}
@@ -4108,18 +4120,22 @@ function typeVisualNovelText(element, text) {
   finishVisualNovelTyping(false);
   element.textContent = "";
   const visibleText = parseVisualNovelInlineTokens(text).map(token => token.text).join("");
-  const state = { element, text, visibleText, index:0, timer:null };
+  const row = element.closest(".vn-feed-entry");
+  const state = { element, row, text, visibleText, index:0, timer:null };
   visualNovelTyping = state;
   const feed = document.getElementById("vnStoryFeed");
   const typeNextCharacter = () => {
     if (state.index >= state.visibleText.length) {
       clearTimeout(state.timer); visualNovelTyping = null;
       renderVisualNovelInlineText(element, state.text);
+      keepVisualNovelEntryFullyVisible(feed, state.row);
+      requestAnimationFrame(() => feed?.style.removeProperty("scroll-behavior"));
       if (visualNovelAutoPlay) scheduleVisualNovelAutoAdvance(Math.max(300, Math.round(1500 / visualNovelAutoSpeed)));
       return;
     }
     const character = state.visibleText[state.index++];
     renderVisualNovelInlineText(element, state.text, state.index);
+    keepVisualNovelEntryFullyVisible(feed, state.row);
     if (character.trim() && !/[，。！？、；：「」『』（）…—,.!?;:'"()]/.test(character) && state.index % 2 === 0) playVisualNovelTypeBeep();
     const nextDelay = character === "，" ? 100 : (character === "。" ? 200 : 28);
     state.timer = setTimeout(typeNextCharacter, nextDelay);
@@ -4230,13 +4246,32 @@ function focusVisualNovelEntryTop(feed, row) {
   feed.style.scrollBehavior = "auto";
   const align = () => {
     if (!row.isConnected || visualNovelSuppressEntryScroll) return;
-    feed.scrollTop = Math.max(0, row.offsetTop - 10);
+    const feedRect = feed.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    feed.scrollTop += rowRect.top - feedRect.top - 10;
   };
   align();
   requestAnimationFrame(() => {
     align();
     requestAnimationFrame(() => { if (token === visualNovelEntryScrollToken) feed.style.removeProperty("scroll-behavior"); });
   });
+}
+
+function keepVisualNovelEntryFullyVisible(feed, row) {
+  if (!feed || !row || !row.isConnected || visualNovelSuppressEntryScroll) return;
+  const feedRect = feed.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  const topEdge = feedRect.top + 10;
+  const bottomEdge = feedRect.bottom - 10;
+  feed.style.scrollBehavior = "auto";
+  clearTimeout(visualNovelEntryVisibilityTimer);
+  visualNovelEntryVisibilityTimer = setTimeout(() => feed.style.removeProperty("scroll-behavior"), 90);
+  if (rowRect.height <= bottomEdge - topEdge) {
+    if (rowRect.top < topEdge) feed.scrollTop -= topEdge - rowRect.top;
+    else if (rowRect.bottom > bottomEdge) feed.scrollTop += rowRect.bottom - bottomEdge;
+  } else if (rowRect.top !== topEdge) {
+    feed.scrollTop += rowRect.top - topEdge;
+  }
 }
 
 function insertVisualNovelFeedNode(feed, node) {
@@ -4275,10 +4310,10 @@ function repairMissingVisualNovelDialogueRows(upToIndex=currentVisualNovelIndex,
   const feed=document.getElementById('vnStoryFeed'),savedIndex=currentVisualNovelIndex,typewriter=currentVisualNovelSettings.typewriterEnabled,oldHeight=feed.scrollHeight,oldTop=feed.scrollTop,wasNearBottom=oldHeight-feed.clientHeight-oldTop<80;
   finishVisualNovelTyping(true);const index=missing[0];currentVisualNovelSettings.typewriterEnabled=typewriter;
   currentVisualNovelIndex=index;visualNovelSuppressEntryScroll=true;executeVisualNovelEvent(currentVisualNovelEvents[index]);visualNovelSuppressEntryScroll=false;
-  const inserted=feed.querySelector(`.vn-feed-entry[data-event-index="${index}"]`);if(inserted){const next=[...feed.querySelectorAll('.vn-feed-entry[data-event-index]')].find(row=>row!==inserted&&(visualNovelTopDown?Number(row.dataset.eventIndex)<index:Number(row.dataset.eventIndex)>index));if(next)feed.insertBefore(inserted,next);}
+  const inserted=feed.querySelector(`.vn-feed-entry[data-event-index="${index}"]`);if(inserted){inserted.style.animation='none';const next=[...feed.querySelectorAll('.vn-feed-entry[data-event-index]')].find(row=>row!==inserted&&(visualNovelTopDown?Number(row.dataset.eventIndex)<index:Number(row.dataset.eventIndex)>index));if(next)feed.insertBefore(inserted,next);void inserted.offsetWidth;inserted.classList.add('vn-feed-recovered');inserted.style.removeProperty('animation');}
   currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=savedIndex;
   visualNovelHistory.sort((a,b)=>Number(a.key.split(':').at(-1))-Number(b.key.split(':').at(-1)));
-  requestAnimationFrame(()=>{feed.scrollTop=wasNearBottom?feed.scrollHeight:oldTop+(feed.scrollHeight-oldHeight);});
+  requestAnimationFrame(()=>{const restoredTop=wasNearBottom&&!visualNovelTopDown?feed.scrollHeight:oldTop+(feed.scrollHeight-oldHeight);feed.scrollTop=restoredTop;keepVisualNovelEntryFullyVisible(feed,inserted);});
   return true;
 }
 
