@@ -3305,6 +3305,7 @@ function insertVisualNovelCommand(type) {
 }
 
 function inferVisualNovelSpeaker(text, possibleCharacters) {
+  if (/^【[^【】\r\n]+】$/u.test(String(text || "").trim())) return { speaker:"系統", text };
   const quoted = /^「[\s\S]*」$/u.test(String(text || "").trim());
   if (!quoted) return { speaker:"旁白", text };
   const named = possibleCharacters.find(character => new RegExp(`${escapeRegExp(character.name)}.{0,12}(說|問|答|喊|叫|道|表示|開口|回應)`).test(text));
@@ -3342,7 +3343,7 @@ function createLosslessVisualNovelSegments(content) {
     if (!parts.length) parts.push({ text:line, isDialogue:false });
     parts.forEach((part, index) => segments.push({ ...part, joinPrevious:index > 0 }));
   });
-  return segments.map((segment, index) => ({ id:`L${String(index + 1).padStart(6, "0")}`, ...segment }));
+  return segments.map((segment, index) => ({ id:`L${String(index + 1).padStart(6, "0")}`, ...segment, isSystem:/^【[^【】\r\n]+】$/u.test(String(segment.text||'').trim()) }));
 }
 
 function cleanLegacyVisualNovelScript(scriptText) {
@@ -3390,7 +3391,7 @@ function inferVisualNovelSpeakerWithContext(segments, index, possibleCharacters)
 
 function buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters) {
   const rows=[];
-  const resolvedSpeakers=segments.map((segment,index)=>{if(segment.text==='')return '';const fallback=inferVisualNovelSpeakerWithContext(segments,index,possibleCharacters),aiSpeaker=normalizeVisualNovelSpeaker(speakerMap.get(segment.id),possibleCharacters);return !segment.isDialogue?'旁白':(aiSpeaker==='路人'&&fallback!=='路人'?fallback:(speakerMap.has(segment.id)?aiSpeaker:fallback));});
+  const resolvedSpeakers=segments.map((segment,index)=>{if(segment.text==='')return '';if(segment.isSystem)return '系統';const fallback=inferVisualNovelSpeakerWithContext(segments,index,possibleCharacters),aiSpeaker=normalizeVisualNovelSpeaker(speakerMap.get(segment.id),possibleCharacters);return !segment.isDialogue?'旁白':(aiSpeaker==='路人'&&fallback!=='路人'?fallback:(speakerMap.has(segment.id)?aiSpeaker:fallback));});
   segments.forEach((segment, index) => {
     if(segment.text===""){rows.push(null);return;}
     const speaker=resolvedSpeakers[index];
@@ -3473,7 +3474,7 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
       document.getElementById("toastMessage").textContent = `AI 正在辨識說話者（${index + 1} / ${batches.length}）…原文由程式鎖定，不交給 AI 改寫`;
       const batch = batches[index];
       const result = await requestDeepSeek({ model:"deepseek-v4-flash", thinking:{ type:"disabled" }, temperature:0, max_tokens:3000, response_format:{ type:"json_object" }, messages:[
-          { role:"system", content:`你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isDialogue=true 才是角色對話；isDialogue=false 一律標旁白。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物（包含「尤佩特羅斯」等完整名稱），並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。可用角色：\n${characterContext || "（無已關聯角色）"}${customPromptInstruction}` },
+          { role:"system", content:`你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isSystem=true 或整行由【】包住時一律標系統；其餘 isDialogue=false 標旁白，isDialogue=true 才判斷角色。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物（包含「尤佩特羅斯」等完整名稱），並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。可用角色：\n${characterContext || "（無已關聯角色）"}${customPromptInstruction}` },
           { role:"user", content:JSON.stringify(batch) }
         ]});
       try {
@@ -3877,17 +3878,17 @@ function executeVisualNovelEvent(event) {
   if (narrator) {
     const text = document.createElement("p"); dialogueTextElement = text;
     row.appendChild(text);
+    bindVnSentenceEditorTarget(row,row);
   } else {
     const frame = document.createElement("div"); frame.className = "vn-feed-avatar";
     frame.style.setProperty("--speaker-color", speakerColor);
     const image = document.createElement("img"); image.src = profile?.avatar || character?.avatar || DEFAULT_VN_AVATAR; image.alt = displaySpeaker;
-    frame.appendChild(image);frame.title='在「編輯劇本模式」中雙擊／雙點更正說話人';
-    const requestSpeakerEdit=clickEvent=>{clickEvent.stopPropagation();if(visualNovelScriptEditMode)openVnSpeakerEditor(Number(row.dataset.eventIndex),row);};frame.addEventListener('dblclick',requestSpeakerEdit);frame.addEventListener('pointerup',tapEvent=>{if(!visualNovelScriptEditMode||tapEvent.pointerType==='mouse')return;tapEvent.stopPropagation();const index=Number(row.dataset.eventIndex),now=Date.now();if(lastVnAvatarTap.index===index&&now-lastVnAvatarTap.at<480){lastVnAvatarTap={index:-1,at:0};requestSpeakerEdit(tapEvent);}else lastVnAvatarTap={index,at:now};});
+    frame.appendChild(image);frame.title='在「編輯劇本模式」中雙擊／雙點校對這一句';
     const card = document.createElement("div"); card.className = "vn-feed-dialogue";
     card.style.setProperty("--speaker-color", speakerColor);
     const name = document.createElement("strong"); name.textContent = displaySpeaker;
     const text = document.createElement("p"); dialogueTextElement = text;
-    card.append(name, text); row.append(frame, card);
+    card.append(name, text); row.append(frame, card);bindVnSentenceEditorTarget(frame,row);bindVnSentenceEditorTarget(card,row);
   }
   feed.appendChild(row);
   if (currentVisualNovelSettings.typewriterEnabled !== false) typeVisualNovelText(dialogueTextElement, event.text);
@@ -3898,28 +3899,41 @@ function executeVisualNovelEvent(event) {
   feed.scrollTop = feed.scrollHeight;
   requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
   const historyKey = `${currentVisualNovelDocId}:${currentVisualNovelIndex}`;
-  if (!visualNovelHistory.some(item => item.key === historyKey)) visualNovelHistory.push({ key:historyKey, speaker:narrator ? "旁白" : displaySpeaker, text:event.text });
+  if (!visualNovelHistory.some(item => item.key === historyKey)) visualNovelHistory.push({ key:historyKey, speaker:isSystem ? "系統" : narrator ? "旁白" : displaySpeaker, text:event.text });
   return true;
 }
 
+function bindVnSentenceEditorTarget(target,row){
+  const open=event=>{event.stopPropagation();if(visualNovelScriptEditMode)openVnSpeakerEditor(Number(row.dataset.eventIndex),row);};
+  target.classList.add('vn-sentence-edit-target');target.addEventListener('dblclick',open);target.addEventListener('pointerup',event=>{if(!visualNovelScriptEditMode||event.pointerType==='mouse')return;event.stopPropagation();const index=Number(row.dataset.eventIndex),now=Date.now();if(lastVnAvatarTap.index===index&&now-lastVnAvatarTap.at<480){lastVnAvatarTap={index:-1,at:0};open(event);}else lastVnAvatarTap={index,at:now};});
+}
+
+function replaceVisualNovelScriptEvent(eventIndex,replacement){const doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!doc?.visualNovel)return false;const lines=formatVisualNovelScriptBlocks(doc.visualNovel.scriptText).split(/\r?\n/);if(eventIndex<0||eventIndex>=lines.length)return false;if(replacement===null)lines.splice(eventIndex,1);else lines[eventIndex]=replacement;doc.visualNovel.scriptText=formatVisualNovelScriptBlocks(lines.join('\n'));doc.visualNovel.updatedAt=new Date().toISOString();return true;}
+
+function refreshVnEditedSentence(eventIndex,row){const feed=document.getElementById('vnStoryFeed'),event=currentVisualNovelEvents[eventIndex];if(!feed||!row||!event)return;const marker=row.nextSibling,readingIndex=currentVisualNovelIndex,typewriter=currentVisualNovelSettings.typewriterEnabled;finishVisualNovelTyping(true);row.remove();currentVisualNovelIndex=eventIndex;currentVisualNovelSettings.typewriterEnabled=false;executeVisualNovelEvent(event);const replacement=feed.lastElementChild;if(marker&&replacement!==marker)feed.insertBefore(replacement,marker);currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=readingIndex;}
+
 function openVnSpeakerEditor(eventIndex,row){
   const event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!event||event.type!=='dialogue'||!doc?.visualNovel)return;pendingVnSpeakerEdit={eventIndex,row};
-  const select=document.getElementById('vnSpeakerCharacterSelect'),available=getDocumentPossibleCharacters(doc);select.innerHTML=['旁白','路人',...available.map(char=>char.name)].map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')+'<option value="__custom__">手動輸入其他名稱…</option>';
-  select.value=[...select.options].some(option=>option.value===event.speaker)?event.speaker:'__custom__';document.getElementById('vnSpeakerCustomInput').value=event.speaker||'';document.getElementById('vnSpeakerLinePreview').textContent=event.text;document.getElementById('vnSpeakerEditorModal').classList.add('active');
+  finishVisualNovelTyping(true);const select=document.getElementById('vnSpeakerCharacterSelect'),available=getDocumentPossibleCharacters(doc);select.innerHTML=['旁白','系統','路人',...available.map(char=>char.name)].map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')+'<option value="__custom__">手動輸入其他名稱…</option>';
+  select.value=[...select.options].some(option=>option.value===event.speaker)?event.speaker:'__custom__';document.getElementById('vnSpeakerCustomInput').value=event.speaker||'';document.getElementById('vnSpeakerTextInput').value=event.text||'';document.getElementById('vnSpeakerEditorModal').classList.add('active');
 }
 function syncVnSpeakerCustomInput(value){if(value!=='__custom__')document.getElementById('vnSpeakerCustomInput').value=value;}
 function closeVnSpeakerEditor(){document.getElementById('vnSpeakerEditorModal').classList.remove('active');pendingVnSpeakerEdit=null;}
 function saveVnSpeakerCorrection(){
-  if(!pendingVnSpeakerEdit)return;const {eventIndex,row}=pendingVnSpeakerEdit,event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId),next=document.getElementById('vnSpeakerCustomInput').value.trim();if(!event||!doc?.visualNovel||!next)return;
-  const oldLine=`${event.speaker}｜${event.text}`,newLine=`${next.trim()}｜${event.text}`;
-  doc.visualNovel.scriptText=doc.visualNovel.scriptText.replace(oldLine,newLine);event.speaker=next.trim();doc.visualNovel.updatedAt=new Date().toISOString();saveStateToLocalStorage();
-  const character=characters.find(char=>normalizedImportName(char.name)===normalizedImportName(next));
-  const image=row?.querySelector('.vn-feed-avatar img'),name=row?.querySelector('.vn-feed-dialogue strong');if(image)image.src=character?.avatar||DEFAULT_VN_AVATAR;if(name)name.textContent=next.trim();
-  closeVnSpeakerEditor();showVnFloatingToast('說話人已更正並保存');
+  if(!pendingVnSpeakerEdit)return;const {eventIndex,row}=pendingVnSpeakerEdit,event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId),next=document.getElementById('vnSpeakerCustomInput').value.trim(),text=document.getElementById('vnSpeakerTextInput').value.trim();if(!event||!doc?.visualNovel||!next){alert('請填寫說話人。');return;}if(!text){alert('對話內文不可為空；若要移除，請使用「刪除這句」。');return;}
+  if(!replaceVisualNovelScriptEvent(eventIndex,`${next}｜${text}`))return;event.speaker=next;event.text=text;saveStateToLocalStorage();
+  const history=visualNovelHistory.find(item=>item.key===`${currentVisualNovelDocId}:${eventIndex}`);if(history){history.speaker=next;history.text=text;}
+  refreshVnEditedSentence(eventIndex,row);
+  closeVnSpeakerEditor();showVnFloatingToast('說話人與對話內文已更正並保存');
+}
+
+function deleteVnCurrentSentence(){
+  if(!pendingVnSpeakerEdit||!confirm('確定要刪除這一句對話嗎？刪除後無法由此視窗復原。'))return;const {eventIndex,row}=pendingVnSpeakerEdit;if(!replaceVisualNovelScriptEvent(eventIndex,null))return;
+  currentVisualNovelEvents.splice(eventIndex,1);if(currentVisualNovelIndex>=eventIndex)currentVisualNovelIndex=Math.max(-1,currentVisualNovelIndex-1);row?.remove();document.querySelectorAll('#vnStoryFeed [data-event-index]').forEach(node=>{const index=Number(node.dataset.eventIndex);if(index>eventIndex)node.dataset.eventIndex=String(index-1);});visualNovelHistory=visualNovelHistory.filter(item=>item.key!==`${currentVisualNovelDocId}:${eventIndex}`).map(item=>{const prefix=`${currentVisualNovelDocId}:`,index=item.key.startsWith(prefix)?Number(item.key.slice(prefix.length)):NaN;if(Number.isFinite(index)&&index>eventIndex)item.key=prefix+(index-1);return item;});saveStateToLocalStorage();closeVnSpeakerEditor();showVnFloatingToast('這一句已刪除');
 }
 
 function handleVisualNovelStageClick(event){if(visualNovelScriptEditMode)return;advanceVisualNovel(event);}
-function toggleVisualNovelScriptEditMode(event){event?.stopPropagation?.();visualNovelScriptEditMode=!visualNovelScriptEditMode;visualNovelAutoPlay=false;clearTimeout(visualNovelAutoTimer);document.getElementById('vnAutoPlayBtn')?.classList.remove('active');document.getElementById('vnPlayer').classList.toggle('vn-script-editing',visualNovelScriptEditMode);const button=document.getElementById('vnScriptEditModeBtn'),full=document.getElementById('vnOpenFullScriptEditorBtn');button.innerHTML=visualNovelScriptEditMode?'<i class="fa-solid fa-check"></i> 結束編輯劇本模式':'<i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式';full.style.display=visualNovelScriptEditMode?'flex':'none';showVnFloatingToast(visualNovelScriptEditMode?'編輯劇本模式：雙擊頭像即可校對':'已結束編輯劇本模式');}
+function toggleVisualNovelScriptEditMode(event){event?.stopPropagation?.();visualNovelScriptEditMode=!visualNovelScriptEditMode;visualNovelAutoPlay=false;clearTimeout(visualNovelAutoTimer);document.getElementById('vnAutoPlayBtn')?.classList.remove('active');document.getElementById('vnPlayer').classList.toggle('vn-script-editing',visualNovelScriptEditMode);const button=document.getElementById('vnScriptEditModeBtn'),full=document.getElementById('vnOpenFullScriptEditorBtn');button.innerHTML=visualNovelScriptEditMode?'<i class="fa-solid fa-check"></i> 結束編輯劇本模式':'<i class="fa-solid fa-pen-to-square"></i> 開啟編輯劇本模式';full.style.display=visualNovelScriptEditMode?'flex':'none';showVnFloatingToast(visualNovelScriptEditMode?'編輯劇本模式：雙擊／雙點頭像或對話框即可校對':'已結束編輯劇本模式');}
 
 function clearVisualNovelBookmark(docId) {
   const doc = documents.find(item => item.id === docId);
