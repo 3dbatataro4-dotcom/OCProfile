@@ -80,6 +80,7 @@ let visualNovelBgmDuckTimer = null;
 let visualNovelAudioResumePending = false;
 let visualNovelBgmFadeToken = 0;
 let visualNovelBgmChannelIndex = 0;
+let visualNovelPendingBgmSource = "";
 let visualNovelFastForwardDelay = null;
 let visualNovelFastForwardTimer = null;
 let visualNovelFastForwardActive = false;
@@ -3885,7 +3886,7 @@ async function transitionVisualNovelCg(source) {
   const nextIndex = layers.length > 1 ? 1 - visualNovelCgLayerIndex : 0;
   const next = layers[nextIndex];
   next.style.backgroundImage = `url("${url.replace(/"/g, '%22')}")`;
-  await Promise.race([
+  const loaded = await Promise.race([
     preloadVisualNovelCg(url),
     new Promise(resolve => setTimeout(() => resolve(false), 1200))
   ]);
@@ -3893,7 +3894,7 @@ async function transitionVisualNovelCg(source) {
   void next.offsetWidth;
   layers.forEach((layer, index) => layer.classList.toggle("active", index === nextIndex));
   visualNovelCgLayerIndex = nextIndex;
-  visualNovelActiveCgSource = url;
+  visualNovelActiveCgSource = loaded ? url : "";
   visualNovelPendingCgSource = "";
   player.classList.remove("no-cg");
 }
@@ -3941,12 +3942,14 @@ async function transitionVisualNovelBgm(src) {
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
   const current = channels[visualNovelBgmChannelIndex];
   const source = normalizeVisualNovelAudioSource(src);
+  visualNovelPendingBgmSource = source && source.toLowerCase() !== "none" ? source : "none";
   const token = ++visualNovelBgmFadeToken;
   const statusButton = document.getElementById("vnAudioStatus");
   delete statusButton.dataset.retrySource;
   const targetVolume = Number.isFinite(Number(currentVisualNovelSettings.bgmVolume)) ? Number(currentVisualNovelSettings.bgmVolume) : 0.7;
   if (source && source.toLowerCase() !== "none" && current.dataset.source === source && !current.paused) {
     current.volume = targetVolume;
+    visualNovelPendingBgmSource = "";
     return;
   }
   if (!source || source.toLowerCase() === "none") {
@@ -3954,6 +3957,7 @@ async function transitionVisualNovelBgm(src) {
     if (!current.paused && current.currentSrc) await fadeVisualNovelAudio(current, 0, 450, token);
     if (token !== visualNovelBgmFadeToken) return;
     channels.forEach(audio => { audio.pause(); audio.removeAttribute("src"); delete audio.dataset.source; audio.load(); audio.volume = targetVolume; });
+    visualNovelPendingBgmSource = "";
     return;
   }
   const nextIndex = visualNovelBgmChannelIndex === 0 ? 1 : 0;
@@ -3964,23 +3968,39 @@ async function transitionVisualNovelBgm(src) {
   document.querySelector("#vnAudioStatus span").textContent = `背景音樂：${fileName}`;
   try {
     const playPromise = next.play();
-    visualNovelBgmChannelIndex = nextIndex;
     await playPromise;
     if (token !== visualNovelBgmFadeToken) return;
+    visualNovelBgmChannelIndex = nextIndex;
     await Promise.all([
       fadeVisualNovelAudio(next, targetVolume, 850, token),
       (!current.paused && current.currentSrc) ? fadeVisualNovelAudio(current, 0, 650, token) : Promise.resolve(true)
     ]);
     if (token === visualNovelBgmFadeToken) {
       current.pause(); current.removeAttribute("src"); delete current.dataset.source; current.load(); current.volume = targetVolume;
+      visualNovelPendingBgmSource = "";
     }
   } catch (error) {
     if (token !== visualNovelBgmFadeToken) return;
     next.pause(); next.removeAttribute("src"); delete next.dataset.source;
+    visualNovelPendingBgmSource = "";
     statusButton.dataset.retrySource = source;
     document.querySelector("#vnAudioStatus span").textContent = `BGM 播放失敗，點此重試：${fileName}`;
     console.warn("BGM 播放失敗", error);
   }
+}
+
+function ensureVisualNovelBgmMatchesScript(upToIndex = currentVisualNovelIndex) {
+  const limit = Math.min(Number(upToIndex), currentVisualNovelEvents.length - 1);
+  let expected = normalizeVisualNovelAudioSource(currentVisualNovelSettings.globalBgm || "none") || "none";
+  for (let index = limit; index >= 0; index--) {
+    const event = currentVisualNovelEvents[index];
+    if (event?.type === "bgm") { expected = normalizeVisualNovelAudioSource(event.value || "none") || "none"; break; }
+  }
+  const normalizedExpected = expected.toLowerCase() === "none" ? "none" : expected;
+  if (visualNovelPendingBgmSource === normalizedExpected) return;
+  const active = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")][visualNovelBgmChannelIndex];
+  const activeMatches = normalizedExpected === "none" ? !active?.currentSrc : active?.dataset.source === normalizedExpected && !active.paused && active.readyState >= 2;
+  if (!activeMatches) transitionVisualNovelBgm(normalizedExpected);
 }
 
 function normalizeVisualNovelAudioSource(value) {
@@ -4082,7 +4102,15 @@ function playVisualNovelAudio(type, src) {
   se.muted = !!bgm?.muted;
   se.src = source; se.currentTime = 0; se.load();
   se.dataset.startedAt = String(performance.now());
-  se.play().catch(error => console.warn("SE 播放失敗", error));
+  se.play().catch(async error => {
+    console.warn("SE 首次播放失敗，等待載入後重試", error);
+    const intendedSource = source;
+    await preloadVisualNovelAudio(intendedSource);
+    if (normalizeVisualNovelAudioSource(se.getAttribute("src")) !== intendedSource) return;
+    unlockVisualNovelAudioContext();
+    se.currentTime = 0;
+    se.play().catch(retryError => console.warn("SE 重試播放失敗", retryError));
+  });
 }
 
 function ensureVisualNovelAudioContext() {
@@ -4246,6 +4274,7 @@ function executeVisualNovelEvent(event) {
   }
   if (event.type === "shake") { player.classList.remove("vn-shake"); void player.offsetWidth; player.classList.add("vn-shake"); return false; }
   ensureVisualNovelCgMatchesScript(currentVisualNovelIndex);
+  ensureVisualNovelBgmMatchesScript(currentVisualNovelIndex);
   const rawSpeaker = stripInvisibleFormatting(event.speaker).trim();
   const isSystem = ["系統", "system"].includes(rawSpeaker.toLowerCase());
   const narrator = ["旁白", "系統", "narrator", "system"].includes(rawSpeaker.toLowerCase());
@@ -4804,6 +4833,7 @@ function closeVisualNovelPlayer() {
   clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); clearTimeout(visualNovelOpeningTimer); visualNovelChapterTimer=null;visualNovelOpeningTimer=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
+  visualNovelPendingBgmSource="";
   clearTimeout(visualNovelBgmDuckTimer);visualNovelBgmDuckTimer=null;
   visualNovelAudioResumePending=false;
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
