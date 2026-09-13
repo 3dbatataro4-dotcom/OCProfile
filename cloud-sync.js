@@ -23,7 +23,7 @@
     if(payload.scope==='forum')return OCForum.applyCloud(data);
     const old=workshop(),keys=['oc_characters','oc_paros','oc_factions','oc_rankings','oc_cps','oc_books','oc_documents','oc_visual_novel_templates','oc_collapsed_books','oc_perspective_targets'];
     const stored=keys.map(k=>[k,localStorage.getItem(k)]);
-    try{assign(data);saveStateToLocalStorage();}catch(err){assign(old);for(const [k,v]of stored){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}throw err;}
+    try{assign(data);normalizeVisualNovelDocuments();saveStateToLocalStorage();}catch(err){assign(old);for(const [k,v]of stored){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}throw err;}
     syncGlobalTags();renderAllViews();
   }
   function message(text){modal.querySelector('[role=status]').textContent=text;}
