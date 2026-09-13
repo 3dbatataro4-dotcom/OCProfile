@@ -220,20 +220,34 @@ function loadStateFromLocalStorage() {
 }
 
 function saveStateToLocalStorage() {
-  localStorage.setItem("oc_theme", currentTheme);
-  localStorage.setItem("oc_characters", JSON.stringify(characters));
-  localStorage.setItem("oc_paros", JSON.stringify(paros));
-  localStorage.setItem("oc_factions", JSON.stringify(factions));
-  localStorage.setItem("oc_rankings", JSON.stringify(rankings));
-  localStorage.setItem("oc_cps", JSON.stringify(cps));
-  localStorage.setItem("oc_books", JSON.stringify(books));
-  localStorage.setItem("oc_documents", JSON.stringify(documents));
-  localStorage.setItem("oc_collapsed_books", JSON.stringify(collapsedBooks));
-  localStorage.setItem("oc_visual_novel_templates", JSON.stringify(visualNovelTemplates));
-  localStorage.setItem('oc_custom_preset_avatars',JSON.stringify(customPresetAvatars));
-  localStorage.setItem("oc_perspective_targets", JSON.stringify(perspectiveTargets));
-  localStorage.setItem("oc_deepseek_settings", JSON.stringify(deepseekSettings));
+  const safePut=window.ocSafeSetLocalStorage||((key,value)=>localStorage.setItem(key,value));
+  const put=(key,value)=>safePut(key,typeof value==='string'?value:JSON.stringify(value));
+  put("oc_theme", currentTheme);
+  put("oc_characters", characters);
+  put("oc_paros", paros);
+  put("oc_factions", factions);
+  put("oc_rankings", rankings);
+  put("oc_cps", cps);
+  put("oc_books", books);
+  put("oc_documents", documents);
+  put("oc_collapsed_books", collapsedBooks);
+  put("oc_visual_novel_templates", visualNovelTemplates);
+  put('oc_custom_preset_avatars',customPresetAvatars);
+  put("oc_perspective_targets", perspectiveTargets);
+  put("oc_deepseek_settings", deepseekSettings);
 }
+
+function isStorageQuotaError(error){return error?.name==='QuotaExceededError'||error?.name==='NS_ERROR_DOM_QUOTA_REACHED'||error?.code===22||/quota|storage/i.test(String(error?.message||''));}
+function clearDisposableStorageCopies(){
+  const prefixes=['oc_cloud_before_','oc_forum_backup_before_delete_','oc_snapshot_before_reset_','oc_cloud_base_'];
+  const keys=[];for(let index=0;index<localStorage.length;index++)keys.push(localStorage.key(index));
+  for(const key of keys)if(prefixes.some(prefix=>String(key||'').startsWith(prefix)))localStorage.removeItem(key);
+}
+window.ocSafeSetLocalStorage=function(key,value){
+  try{localStorage.setItem(key,value);return true;}catch(error){if(!isStorageQuotaError(error))throw error;}
+  clearDisposableStorageCopies();
+  try{localStorage.setItem(key,value);return true;}catch(error){if(isStorageQuotaError(error))throw new Error('瀏覽器的本機儲存空間仍然不足。已清理同步暫存但未刪除任何正式資料；請先下載完整備份，再清理大型內嵌圖片或舊網站資料。');throw error;}
+};
 
 function resetDefaultCharacters() {
   const msg = "確定要恢復全部預設資料嗎？\n\n此操作將會重置所有【角色人設卡、PARO 平行世界、陣營、CP 關係、同人文檔與獨立論壇】至初始預設狀態！\n\n（註：重置前會自動建立本機快照，且不會清除您的 Supabase 登入、雲端備份或 API 金鑰。）";
@@ -2641,8 +2655,9 @@ function deleteFaction(factionId) {
 // ========== 10.5. 同人文檔與書籍資料庫 ==========
 function toggleBookCollapse(bookId) {
   collapsedBooks[bookId] = !collapsedBooks[bookId];
-  saveStateToLocalStorage();
-  renderDocumentsModule();
+  try { saveStateToLocalStorage(); }
+  catch (error) { console.warn("書籍展開狀態暫時無法保存：", error); }
+  finally { renderDocumentsModule(); }
 }
 
 function renderDocumentsModule() {
