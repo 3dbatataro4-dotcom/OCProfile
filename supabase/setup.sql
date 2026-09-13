@@ -131,7 +131,7 @@ begin
   end if;
 
   allowed_groups := case when p_scope = 'workshop' then
-    array['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','collapsedBooks','perspectiveTargets']
+    array['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','visualNovelPreferences','collapsedBooks','perspectiveTargets']
   else
     array['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']
   end;
