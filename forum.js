@@ -272,7 +272,7 @@
     }
     state.characters = mergedChars;
 
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    try { (window.ocSafeSetLocalStorage||((key,value)=>localStorage.setItem(key,value)))(KEY, JSON.stringify(state)); }
     catch { status = '儲存空間不足或瀏覽器禁止儲存。變更仍在本頁，請立即匯出論壇備份。'; throw new Error(status); }
   }
   function isUserTyping() {
