@@ -59,6 +59,7 @@ let currentVisualNovelIndex = -1;
 let visualNovelAutoPlay = false;
 let visualNovelAutoTimer = null;
 let visualNovelChapterTimer = null;
+let visualNovelOpeningTimer = null;
 let visualNovelCgLayerIndex = 0;
 let visualNovelPendingCgSource = "";
 const visualNovelCgPreloads = new Map();
@@ -3556,18 +3557,30 @@ function parseVisualNovelSpeakerAliases(customPromptText) {
 }
 
 function parseVisualNovelScript(scriptText) {
-  return getVisualNovelScriptLines(scriptText).map(line => {
+  return getVisualNovelScriptLines(scriptText).map((line, sourceLineIndex) => {
     const contentLine = line.replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/, "").replace(/^[\u200B-\u200D\u2060\uFEFF]+/, "");
     const trimmedLine = contentLine.trim();
-    if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank" };
+    if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank", sourceLineIndex };
     const command = trimmedLine.match(/^@(cg|bgm|se)\s+(.+)$/i);
-    if (command) return { type:command[1].toLowerCase(), value:command[2].trim() };
-    if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake" };
+    if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
+    if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
     const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
-    if (!separator) return { type:"dialogue", speaker:"旁白", text:decodeVisualNovelInlineLineBreaks(contentLine) };
+    if (!separator) return { type:"dialogue", speaker:"旁白", text:decodeVisualNovelInlineLineBreaks(contentLine), sourceLineIndex };
     const index = contentLine.indexOf(separator);
-    return { type:"dialogue", speaker:stripInvisibleFormatting(contentLine.slice(0, index)).trim() || "旁白", text:decodeVisualNovelInlineLineBreaks(contentLine.slice(index + separator.length)) };
+    return { type:"dialogue", speaker:stripInvisibleFormatting(contentLine.slice(0, index)).trim() || "旁白", text:decodeVisualNovelInlineLineBreaks(contentLine.slice(index + separator.length)), sourceLineIndex };
   });
+}
+
+function buildVerifiedVisualNovelEvents(scriptText) {
+  const lines=getVisualNovelScriptLines(scriptText),events=parseVisualNovelScript(scriptText);
+  if(events.length!==lines.length)throw new Error(`視覺小說腳本完整性檢查失敗：原稿 ${lines.length} 行，播放器只建立 ${events.length} 行。`);
+  events.forEach((event,index)=>{event.sourceLineIndex=index;event.sourceLine=lines[index];});
+  return events;
+}
+
+function alignVisualNovelBookmarkToScript(doc,events) {
+  if(doc?.visualNovel?.bookmarkText){const wanted=String(doc.visualNovel.bookmarkText).trim(),matches=[];events.forEach((event,index)=>{if(event.type==='dialogue'&&String(event.text).trim()===wanted)matches.push(index);});if(matches.length){const old=Number(doc.visualNovel.bookmarkIndex)||0;doc.visualNovel.bookmarkIndex=matches.reduce((best,index)=>Math.abs(index-old)<Math.abs(best-old)?index:best,matches[0]);}}
+  if(doc?.visualNovel?.bookmarkIndex!=null)doc.visualNovel.bookmarkIndex=Math.min(Math.max(0,Number(doc.visualNovel.bookmarkIndex)||0),Math.max(0,events.length-1));
 }
 
 function applyVisualNovelTheme(settings) {
@@ -3590,10 +3603,13 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   migrateVisualNovelEventIndex(doc);
   clearTimeout(visualNovelAutoTimer);
   clearTimeout(visualNovelChapterTimer);
+  clearTimeout(visualNovelOpeningTimer);
   visualNovelChapterTimer = null;
+  visualNovelOpeningTimer = null;
   currentVisualNovelDocId = doc.id;
   currentVisualNovelSpeakerAliases = parseVisualNovelSpeakerAliases(doc.visualNovel?.aiCustomPrompt);
-  currentVisualNovelEvents = parseVisualNovelScript(doc.visualNovel.scriptText);
+  currentVisualNovelEvents = buildVerifiedVisualNovelEvents(doc.visualNovel.scriptText);
+  alignVisualNovelBookmarkToScript(doc,currentVisualNovelEvents);
   currentVisualNovelIndex = -1;
   visualNovelScriptEditMode = false;
   document.getElementById('vnPlayer')?.classList.remove('vn-script-editing');
@@ -3625,10 +3641,12 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   document.getElementById("vnChapterPanel").classList.remove("active");
 
   const promptEl = document.getElementById("vnBookmarkPrompt");
+  let waitingForBookmarkChoice = false;
   if (promptEl) {
     if (doc.visualNovel.bookmarkIndex != null && doc.visualNovel.bookmarkIndex > 0 && doc.visualNovel.bookmarkIndex < currentVisualNovelEvents.length) {
       document.getElementById("vnBookmarkPromptIndex").textContent = `第 ${doc.visualNovel.bookmarkIndex + 1} 句`;
       promptEl.style.display = "flex";
+      waitingForBookmarkChoice = true;
     } else {
       promptEl.style.display = "none";
     }
@@ -3636,7 +3654,12 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
 
   playVisualNovelAudio("bgm", settings.globalBgm || "none");
   if (withTransition) showVisualNovelChapterTransition(doc.title);
-  advanceVisualNovel();
+  if (!waitingForBookmarkChoice) {
+    if (withTransition) {
+      document.getElementById("vnPlayer").classList.add("vn-opening-transition");
+      visualNovelOpeningTimer=setTimeout(()=>{visualNovelOpeningTimer=null;document.getElementById("vnPlayer")?.classList.remove("vn-opening-transition");advanceVisualNovel();},1450);
+    } else advanceVisualNovel();
+  }
 }
 
 function preloadVisualNovelCg(source) {
@@ -4100,7 +4123,7 @@ function replaceVisualNovelScriptEvent(eventIndex,replacement){const doc=documen
 
 function rebuildVisualNovelPlaybackAfterScriptEdit(readingIndex=currentVisualNovelIndex){
   const doc=documents.find(item=>item.id===currentVisualNovelDocId),feed=document.getElementById('vnStoryFeed');if(!doc?.visualNovel||!feed)return;
-  finishVisualNovelTyping(false);currentVisualNovelEvents=parseVisualNovelScript(doc.visualNovel.scriptText);preloadVisualNovelChapterMedia(doc,currentVisualNovelEvents,currentVisualNovelSettings);
+  finishVisualNovelTyping(false);currentVisualNovelEvents=buildVerifiedVisualNovelEvents(doc.visualNovel.scriptText);alignVisualNovelBookmarkToScript(doc,currentVisualNovelEvents);preloadVisualNovelChapterMedia(doc,currentVisualNovelEvents,currentVisualNovelSettings);
   const target=Math.min(Math.max(-1,Number(readingIndex)),currentVisualNovelEvents.length-1),typewriter=currentVisualNovelSettings.typewriterEnabled;
   feed.replaceChildren();const heading=document.createElement('div');heading.className='vn-feed-chapter';heading.textContent=doc.title;feed.appendChild(heading);visualNovelHistory=[];currentVisualNovelSettings.typewriterEnabled=false;
   for(let index=0;index<=target;index++){const event=currentVisualNovelEvents[index];currentVisualNovelIndex=index;if(event?.type==='dialogue'||event?.type==='blank')executeVisualNovelEvent(event);}
@@ -4146,7 +4169,7 @@ function advanceVisualNovel(event) {
   event?.stopPropagation?.();
   if (event) playVisualNovelAdvanceSound();
   clearTimeout(visualNovelAutoTimer);
-  if (visualNovelChapterTimer) return;
+  if (visualNovelChapterTimer||visualNovelOpeningTimer) return;
   if (finishVisualNovelTyping(true)) return;
   let displayed = false;
   while (++currentVisualNovelIndex < currentVisualNovelEvents.length && !displayed) displayed = executeVisualNovelEvent(currentVisualNovelEvents[currentVisualNovelIndex]);
@@ -4353,6 +4376,7 @@ function resumeVisualNovelBookmark(event) {
   
   finishVisualNovelTyping(false);
   clearTimeout(visualNovelAutoTimer);
+  clearTimeout(visualNovelOpeningTimer);visualNovelOpeningTimer=null;document.getElementById("vnPlayer")?.classList.remove("vn-opening-transition");
   const feed = document.getElementById("vnStoryFeed");
   feed.replaceChildren();
   const chapterHeading = document.createElement("div");
@@ -4376,6 +4400,7 @@ function clearVisualNovelBookmarkPrompt(event) {
   if (promptEl) promptEl.style.display = "none";
   clearVisualNovelBookmark(currentVisualNovelDocId);
   showVnFloatingToast("已取消書籤，從頭開始閱讀");
+  advanceVisualNovel();
 }
 
 function getVisualNovelChapter(direction) {
@@ -4482,7 +4507,7 @@ function toggleVisualNovelTypeSound(event) {
 }
 
 function closeVisualNovelPlayer() {
-  clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); visualNovelChapterTimer=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
+  clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); clearTimeout(visualNovelOpeningTimer); visualNovelChapterTimer=null;visualNovelOpeningTimer=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
