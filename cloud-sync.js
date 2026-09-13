@@ -6,12 +6,15 @@
   localStorage.removeItem('oc_cloud_unlocked_v1');
   const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let modal,selected=new Set(['workshop','forum']),session=null,preview=null,working=false,backupTimesLoading=false,uploadNote='';
+  const recoveryCopies=new Map();
   const cloudHeads={workshop:null,forum:null};
   const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
   if(session&&(!session.user?.id||!session.access_token)){localStorage.removeItem(SESSION);session=null;}
   const labels={chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
   const baselineKey=scope=>`oc_cloud_base_${session.user.id}_${scope}`;
+  const rememberRecovery=(scope,value)=>recoveryCopies.set(scope,C.clone?C.clone(value):JSON.parse(JSON.stringify(value)));
+  const cacheBaseline=(scope,value)=>{try{(window.ocSafeSetLocalStorage||((key,data)=>localStorage.setItem(key,data)))(baselineKey(scope),JSON.stringify(value));}catch{localStorage.removeItem(baselineKey(scope));}};
   function workshop(){return {characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,customPresetAvatars,collapsedBooks,perspectiveTargets};}
   function snapshot(scope){return scope==='forum'?OCForum.cloudSnapshot():C.snapshot(scope,workshop());}
   function assign(d){({characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,customPresetAvatars=customPresetAvatars,collapsedBooks,perspectiveTargets}=d);}
@@ -67,6 +70,15 @@
     }
     return request('/rest/v1/rpc/oc_commit_snapshot_chunks',{p_scope:scope,p_expected_revision:revision,p_upload_id:uploadId,p_chunk_count:chunks.length});
   }
+  async function pushEfficientSnapshot(scope,revision,remote,next,note=''){
+    const annotated={...next,note:C.postgresSafeText(String(note||'').trim()).slice(0,16)},fullSize=new TextEncoder().encode(JSON.stringify(annotated)).length;
+    if(revision>0){const patch=C.delta(remote,next,note),patchSize=new TextEncoder().encode(JSON.stringify(patch)).length;if(patchSize<fullSize){
+      message(`${scopeNames[scope]}只上傳 ${patch.changes.length} 項差異（${Math.max(1,Math.round(patchSize/1024))} KB）…`);
+      try{return await request('/rest/v1/rpc/oc_push_delta',{p_scope:scope,p_expected_revision:revision,p_delta:patch});}
+      catch(error){if(!['PGRST202','42883'].includes(error.code))throw error;message(`${scopeNames[scope]}的雲端尚未安裝增量同步，改用完整安全上傳…`);}
+    }}
+    message(`${scopeNames[scope]}正在上傳完整存檔（${Math.max(1,Math.round(fullSize/1024))} KB）…`);return pushSnapshot(scope,revision,next,note);
+  }
   function keepSession(value){session={access_token:value.access_token,refresh_token:value.refresh_token,expires_at:value.expires_at||Date.now()/1000+value.expires_in,user:{id:value.user.id,email:value.user.email}};localStorage.setItem(SESSION,JSON.stringify(session));}
   async function head(scope){const rows=await request('/rest/v1/oc_sync_heads?scope=eq.'+scope+'&select=revision,payload,updated_at');if(!rows.length)return {revision:0,note:'',payload:C.snapshot(scope,{})};const rawNote=String(rows[0].payload?.note||'').slice(0,16);return {...rows[0],note:rawNote,payload:C.validate(rows[0].payload)};}
   function formatBackupTime(value){
@@ -118,15 +130,15 @@
   }
   async function restore(){
     if(!selected.size)throw new Error('請至少選擇一個復原區域。');
-    if(!confirm('確定以雲端存檔完整復原勾選區域？目前本機內容會先保存為復原前備份，再由雲端版本取代。'))return;
+    if(!confirm('確定以雲端存檔完整復原勾選區域？目前本機內容會先保留在這次同步的安全復原記憶中，再由雲端版本取代。'))return;
     const rows=[];
     message('正在讀取並驗證雲端存檔…');
     for(const scope of selected){const local=snapshot(scope),remote=await head(scope);cloudHeads[scope]=remote;if(remote.revision)rows.push({scope,local,remote:remote.payload});}
     if(!rows.length)throw new Error('勾選區域尚無雲端存檔，未更動本機。');
-    for(const row of rows)localStorage.setItem('oc_cloud_before_'+row.scope,JSON.stringify(row.local));
+    for(const row of rows)rememberRecovery(row.scope,row.local);
     const applied=[];
     try{
-      for(const row of rows){apply(row.remote);localStorage.setItem(baselineKey(row.scope),JSON.stringify(row.remote));applied.push(row);}
+      for(const row of rows){apply(row.remote);cacheBaseline(row.scope,row.remote);applied.push(row);}
     }catch(err){for(const row of applied.reverse())try{apply(row.local);}catch{}throw new Error('復原未完成，本機已盡可能回復原狀：'+err.message);}
     render();message(rows.map(row=>scopeNames[row.scope]).join('、')+'已從雲端完整復原。');
   }
@@ -138,17 +150,17 @@
     const results=[];
     for(const p of pending.items){if(p.skip)continue;try{results.push({...p,merged:C.merge(p.local,p.remote,p.changes,decisions[p.scope])});}catch(err){p.changes.forEach(d=>d.conflict=true);pending.reason=err.message;render();message('相關資料需要一起保留或刪除，請調整選擇。');return;}}
     for(const p of results){const latest=await head(p.scope);if(latest.revision!==p.revision)throw new Error(scopeNames[p.scope]+'的雲端版本已更新，請重新點選上傳或下載。');}
-    for(const p of results){if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+'的本機資料已改變，請重新點選上傳或下載。');localStorage.setItem('oc_cloud_before_'+p.scope,JSON.stringify(p.local));}
+    for(const p of results){if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+'的本機資料已改變，請重新點選上傳或下載。');rememberRecovery(p.scope,p.local);}
     const done=[];
     try{
       for(const p of results){
         if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+'的本機資料已改變，請重新同步。');
         const upload=pending.direction==='upload';let uploaded=false;
         const effectiveNote=uploadNote||p.note;
-        if(upload&&(!C.equal(p.merged,p.remote)||(uploadNote&&uploadNote!==p.note))){await pushSnapshot(p.scope,p.revision,p.merged,effectiveNote);uploaded=true;const saved=await head(p.scope);cloudHeads[p.scope]=saved;if(!C.equal(saved.payload,p.merged))throw new Error(scopeNames[p.scope]+'上傳後的雲端內容與預期不同，未更動本機。若資料表設定較舊，請重新執行最新 supabase/setup.sql，再同步。');}
+        if(upload&&(!C.equal(p.merged,p.remote)||(uploadNote&&uploadNote!==p.note))){await pushEfficientSnapshot(p.scope,p.revision,p.remote,p.merged,effectiveNote);uploaded=true;const saved=await head(p.scope);cloudHeads[p.scope]=saved;if(!C.equal(saved.payload,p.merged))throw new Error(scopeNames[p.scope]+'上傳後的雲端內容與預期不同，未更動本機。若資料表設定較舊，請重新執行最新 supabase/setup.sql，再同步。');}
         if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+(uploaded?'已上傳，但本機有新修改，未覆蓋本機。':'的本機資料已改變。'));
         try{apply(p.merged);}catch(err){throw new Error(scopeNames[p.scope]+(uploaded?'已上傳，但本機套用失敗：':'套用失敗：')+err.message);}
-        try{localStorage.setItem(baselineKey(p.scope),JSON.stringify(upload?p.merged:p.remote));}catch{}
+        cacheBaseline(p.scope,upload?p.merged:p.remote);
         done.push(scopeNames[p.scope]);
       }
     }catch(err){preview=null;render();throw new Error((done.length?'已完成：'+done.join('、')+'。其餘未完成。':'')+err.message);}
