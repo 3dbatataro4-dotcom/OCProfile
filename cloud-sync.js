@@ -7,6 +7,7 @@
   const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let modal,selected=new Set(['workshop','forum']),session=null,preview=null,working=false,backupTimesLoading=false,uploadNote='';
   const recoveryCopies=new Map();
+  const deltaUnsupportedScopes=new Set();
   const cloudHeads={workshop:null,forum:null};
   const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
@@ -72,13 +73,14 @@
   }
   async function pushEfficientSnapshot(scope,revision,remote,next,note=''){
     const annotated={...next,note:C.postgresSafeText(String(note||'').trim()).slice(0,16)},fullSize=new TextEncoder().encode(JSON.stringify(annotated)).length;
-    if(revision>0){const patch=C.delta(remote,next,note),patchSize=new TextEncoder().encode(JSON.stringify(patch)).length;if(patchSize<fullSize){
+    if(revision>0&&!deltaUnsupportedScopes.has(scope)){const patch=C.delta(remote,next,note),patchSize=new TextEncoder().encode(JSON.stringify(patch)).length;if(patchSize<fullSize){
       message(`${scopeNames[scope]}只上傳 ${patch.changes.length} 項差異（${Math.max(1,Math.round(patchSize/1024))} KB）…`);
       try{return await request('/rest/v1/rpc/oc_push_delta',{p_scope:scope,p_expected_revision:revision,p_delta:patch});}
-      catch(error){if(!['PGRST202','42883'].includes(error.code))throw error;message(`${scopeNames[scope]}的雲端尚未安裝增量同步，改用完整安全上傳…`);}
+      catch(error){if(!isUnsupportedDeltaError(error))throw error;deltaUnsupportedScopes.add(scope);message(`${scopeNames[scope]}的增量同步版本較舊，改用完整安全上傳…`);}
     }}
     message(`${scopeNames[scope]}正在上傳完整存檔（${Math.max(1,Math.round(fullSize/1024))} KB）…`);return pushSnapshot(scope,revision,next,note);
   }
+  function isUnsupportedDeltaError(error){const text=String(error?.message||error?.details||error||'').toUpperCase();return ['PGRST202','42883'].includes(error?.code)||text.includes('INVALID_DELTA_ITEM')||text.includes('INVALID_DELTA_ORDER')||text.includes('INVALID_DELTA_GROUP');}
   function keepSession(value){session={access_token:value.access_token,refresh_token:value.refresh_token,expires_at:value.expires_at||Date.now()/1000+value.expires_in,user:{id:value.user.id,email:value.user.email}};localStorage.setItem(SESSION,JSON.stringify(session));}
   async function head(scope){const rows=await request('/rest/v1/oc_sync_heads?scope=eq.'+scope+'&select=revision,payload,updated_at');if(!rows.length)return {revision:0,note:'',payload:C.snapshot(scope,{})};const rawNote=String(rows[0].payload?.note||'').slice(0,16);return {...rows[0],note:rawNote,payload:C.validate(rows[0].payload)};}
   function formatBackupTime(value){
