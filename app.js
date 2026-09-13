@@ -58,6 +58,10 @@ let currentVisualNovelEvents = [];
 let currentVisualNovelIndex = -1;
 let visualNovelAutoPlay = false;
 let visualNovelAutoTimer = null;
+let visualNovelChapterTimer = null;
+let visualNovelCgLayerIndex = 0;
+let visualNovelPendingCgSource = "";
+const visualNovelCgPreloads = new Map();
 let visualNovelHistory = [];
 let currentVisualNovelSettings = {};
 let visualNovelTyping = null;
@@ -3557,9 +3561,12 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   const doc = documents.find(item => item.id === docId);
   if (!doc?.visualNovel?.scriptText) { openVisualNovelEditor(docId); return; }
   clearTimeout(visualNovelAutoTimer);
+  clearTimeout(visualNovelChapterTimer);
+  visualNovelChapterTimer = null;
   currentVisualNovelDocId = doc.id;
   currentVisualNovelSpeakerAliases = parseVisualNovelSpeakerAliases(doc.visualNovel?.aiCustomPrompt);
   currentVisualNovelEvents = parseVisualNovelScript(doc.visualNovel.scriptText);
+  preloadVisualNovelCgs(currentVisualNovelEvents);
   currentVisualNovelIndex = -1;
   visualNovelScriptEditMode = false;
   document.getElementById('vnPlayer')?.classList.remove('vn-script-editing');
@@ -3582,7 +3589,8 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   const chapterHeading = document.createElement("div");
   chapterHeading.className = "vn-feed-chapter"; chapterHeading.textContent = doc.title;
   feed.appendChild(chapterHeading);
-  document.getElementById("vnCg").style.backgroundImage = "";
+  resetVisualNovelCg();
+  document.getElementById("vnPlayer").classList.remove("vn-chapter-leaving");
   document.getElementById("vnPlayer").classList.add("no-cg");
   document.getElementById("visualNovelPlayerModal").classList.add("active");
   document.getElementById("vnHistoryPanel").classList.remove("active");
@@ -3601,6 +3609,60 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   playVisualNovelAudio("bgm", settings.globalBgm || "none");
   if (withTransition) showVisualNovelChapterTransition(doc.title);
   advanceVisualNovel();
+}
+
+function preloadVisualNovelCg(source) {
+  const url = String(source || "").trim();
+  if (!url || url.toLowerCase() === "none") return Promise.resolve(false);
+  if (visualNovelCgPreloads.has(url)) return visualNovelCgPreloads.get(url);
+  const promise = new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => image.decode ? image.decode().catch(() => {}).finally(() => resolve(true)) : resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = url;
+  });
+  visualNovelCgPreloads.set(url, promise);
+  return promise;
+}
+
+function preloadVisualNovelCgs(events) {
+  [...new Set((events || []).filter(event => event.type === "cg").map(event => event.value))]
+    .forEach(preloadVisualNovelCg);
+}
+
+function resetVisualNovelCg() {
+  const cg = document.getElementById("vnCg");
+  if (!cg) return;
+  visualNovelCgLayerIndex = 0;
+  visualNovelPendingCgSource = "";
+  cg.querySelectorAll(".vn-cg-layer").forEach(layer => {
+    layer.classList.remove("active");
+    layer.style.backgroundImage = "";
+  });
+}
+
+async function transitionVisualNovelCg(source) {
+  const player = document.getElementById("vnPlayer");
+  const cg = document.getElementById("vnCg");
+  if (!player || !cg) return;
+  const url = String(source || "").trim();
+  visualNovelPendingCgSource = url;
+  if (!url || url.toLowerCase() === "none") {
+    cg.querySelectorAll(".vn-cg-layer").forEach(layer => layer.classList.remove("active"));
+    player.classList.add("no-cg");
+    return;
+  }
+  await preloadVisualNovelCg(url);
+  if (visualNovelPendingCgSource !== url) return;
+  const layers = cg.querySelectorAll(".vn-cg-layer");
+  if (!layers.length) return;
+  const nextIndex = layers.length > 1 ? 1 - visualNovelCgLayerIndex : 0;
+  const next = layers[nextIndex];
+  next.style.backgroundImage = `url("${url.replace(/"/g, '%22')}")`;
+  void next.offsetWidth;
+  layers.forEach((layer, index) => layer.classList.toggle("active", index === nextIndex));
+  visualNovelCgLayerIndex = nextIndex;
+  player.classList.remove("no-cg");
 }
 
 function showVisualNovelChapterTransition(title) {
@@ -3864,12 +3926,7 @@ function executeVisualNovelEvent(event) {
   }
   if (event.type === "bgm" || event.type === "se") { playVisualNovelAudio(event.type, event.value); return false; }
   if (event.type === "cg") {
-    const cg = document.getElementById("vnCg");
-    if (event.value.toLowerCase() === "none") { cg.style.backgroundImage = ""; player.classList.add("no-cg"); }
-    else {
-      cg.classList.remove("vn-changing"); void cg.offsetWidth;
-      cg.style.backgroundImage = `url("${event.value.replace(/"/g, '%22')}")`; cg.classList.add("vn-changing"); player.classList.remove("no-cg");
-    }
+    transitionVisualNovelCg(event.value);
     return false;
   }
   if (event.type === "shake") { player.classList.remove("vn-shake"); void player.offsetWidth; player.classList.add("vn-shake"); return false; }
@@ -3984,13 +4041,26 @@ function advanceVisualNovel(event) {
   event?.stopPropagation?.();
   if (event) playVisualNovelAdvanceSound();
   clearTimeout(visualNovelAutoTimer);
+  if (visualNovelChapterTimer) return;
   if (finishVisualNovelTyping(true)) return;
   let displayed = false;
   while (++currentVisualNovelIndex < currentVisualNovelEvents.length && !displayed) displayed = executeVisualNovelEvent(currentVisualNovelEvents[currentVisualNovelIndex]);
   updateVisualNovelBookmarkBtnUI();
   if (!displayed) {
     clearVisualNovelBookmark(currentVisualNovelDocId);
-    if (getVisualNovelChapter(1)) navigateVisualNovelChapter(1);
+    const nextChapter = getVisualNovelChapter(1);
+    if (nextChapter) {
+      const feed = document.getElementById("vnStoryFeed");
+      const end = document.createElement("div");
+      end.className = "vn-feed-end vn-feed-next-chapter";
+      end.textContent = `— ${nextChapter.title} 即將開始 —`;
+      feed.appendChild(end); feed.scrollTop = feed.scrollHeight;
+      document.getElementById("vnPlayer")?.classList.add("vn-chapter-leaving");
+      visualNovelChapterTimer = setTimeout(() => {
+        visualNovelChapterTimer = null;
+        startVisualNovel(nextChapter.id, true, true);
+      }, 950);
+    }
     else {
       const feed = document.getElementById("vnStoryFeed");
       if (!feed.querySelector(".vn-feed-end")) {
@@ -4307,7 +4377,7 @@ function toggleVisualNovelTypeSound(event) {
 }
 
 function closeVisualNovelPlayer() {
-  clearTimeout(visualNovelAutoTimer); stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
+  clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); visualNovelChapterTimer=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
   const channels = [document.getElementById("vnBgmAudio"), document.getElementById("vnBgmAudioNext")];
