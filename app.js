@@ -4108,6 +4108,7 @@ function executeVisualNovelEvent(event) {
   const row = document.createElement("div");
   row.className = `vn-feed-entry ${narrator ? (isSystem ? 'vn-feed-system' : 'vn-feed-narrator') : 'vn-feed-character'}`;
   row.dataset.eventIndex = currentVisualNovelIndex;
+  row.dataset.sourceLineIndex = Number.isFinite(event.sourceLineIndex) ? event.sourceLineIndex : currentVisualNovelIndex;
   let dialogueTextElement;
   if (narrator) {
     const text = document.createElement("p"); dialogueTextElement = text;
@@ -4153,6 +4154,29 @@ function rebuildVisualNovelPlaybackAfterScriptEdit(readingIndex=currentVisualNov
   finishVisualNovelTyping(true);currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=target;feed.scrollTop=feed.scrollHeight;updateVisualNovelBookmarkBtnUI();
 }
 
+function getMissingVisualNovelDialogueIndexes(upToIndex=currentVisualNovelIndex) {
+  const feed=document.getElementById('vnStoryFeed');if(!feed)return [];
+  const limit=Math.min(Number(upToIndex),currentVisualNovelEvents.length-1),missing=[];
+  for(let index=0;index<=limit;index++)if(currentVisualNovelEvents[index]?.type==='dialogue'&&!feed.querySelector(`.vn-feed-entry[data-event-index="${index}"]`))missing.push(index);
+  return missing;
+}
+
+function repairMissingVisualNovelDialogueRows(upToIndex=currentVisualNovelIndex,announce=true) {
+  const missing=getMissingVisualNovelDialogueIndexes(upToIndex);if(!missing.length)return false;
+  rebuildVisualNovelPlaybackAfterScriptEdit(upToIndex);
+  if(announce)showVnFloatingToast(`已自動補回 ${missing.length} 句未顯示台詞`);
+  return true;
+}
+
+function diagnoseCurrentVisualNovelScript(event) {
+  event?.stopPropagation?.();const doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!doc?.visualNovel)return;
+  const verified=buildVerifiedVisualNovelEvents(doc.visualNovel.scriptText),before=currentVisualNovelEvents.map(item=>JSON.stringify(item)),after=verified.map(item=>JSON.stringify(item));
+  const runtimeChanged=JSON.stringify(before)!==JSON.stringify(after),missing=getMissingVisualNovelDialogueIndexes(currentVisualNovelIndex);
+  currentVisualNovelEvents=verified;alignVisualNovelBookmarkToScript(doc,verified);rebuildVisualNovelPlaybackAfterScriptEdit(currentVisualNovelIndex);saveStateToLocalStorage();
+  const dialogueCount=verified.filter(item=>item.type==='dialogue').length,commandCount=verified.length-dialogueCount;
+  alert(`劇本檢查完成\n\n原稿有效行：${verified.length}\n可播放台詞：${dialogueCount}\n指令：${commandCount}\n${missing.length?`已補回未顯示台詞：${missing.length} 句`:'畫面沒有漏句'}\n${runtimeChanged?'已重新建立播放順序':'播放順序與原稿一致'}`);
+}
+
 function refreshVnEditedSentence(){rebuildVisualNovelPlaybackAfterScriptEdit(currentVisualNovelIndex);}
 
 function openVnSpeakerEditor(eventIndex,row){
@@ -4194,10 +4218,12 @@ function advanceVisualNovel(event) {
   clearTimeout(visualNovelAutoTimer);
   if (visualNovelChapterTimer||visualNovelOpeningTimer) return;
   if (finishVisualNovelTyping(true)) return;
+  if(repairMissingVisualNovelDialogueRows(currentVisualNovelIndex,true))return;
   let displayed = false;
   while (++currentVisualNovelIndex < currentVisualNovelEvents.length && !displayed) displayed = executeVisualNovelEvent(currentVisualNovelEvents[currentVisualNovelIndex]);
   updateVisualNovelBookmarkBtnUI();
   if (!displayed) {
+    if(repairMissingVisualNovelDialogueRows(currentVisualNovelEvents.length-1,true))return;
     clearVisualNovelBookmark(currentVisualNovelDocId);
     const nextChapter = getVisualNovelChapter(1);
     if (nextChapter) {
