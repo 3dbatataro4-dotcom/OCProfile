@@ -26,10 +26,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=21.27">
-  <link rel="stylesheet" href="forum.css?v=21.27">
+  <link rel="stylesheet" href="style.css?v=21.28">
+  <link rel="stylesheet" href="forum.css?v=21.28">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.27">
+  <link rel="stylesheet" href="cloud-sync.css?v=21.28">
 </head>
 <body>
 
@@ -1365,9 +1365,9 @@
       <div class="modal-body">
         <label>選擇本篇已有角色<select id="vnSpeakerCharacterSelect" onchange="syncVnSpeakerCustomInput(this.value)"></select></label>
         <label>或手動輸入說話人<input type="text" id="vnSpeakerCustomInput" placeholder="角色名稱／旁白／路人"></label>
-        <p class="vn-speaker-preview" id="vnSpeakerLinePreview"></p>
+        <label>這一句的對話內文<textarea id="vnSpeakerTextInput" rows="5" placeholder="輸入這一句要顯示的內容"></textarea></label>
       </div>
-      <div class="modal-footer"><button class="btn btn-outline" onclick="closeVnSpeakerEditor()">取消</button><button class="btn btn-primary" onclick="saveVnSpeakerCorrection()">保存更正</button></div>
+      <div class="modal-footer"><button class="btn btn-danger" onclick="deleteVnCurrentSentence()" style="margin-right:auto"><i class="fa-solid fa-trash"></i> 刪除這句</button><button class="btn btn-outline" onclick="closeVnSpeakerEditor()">取消</button><button class="btn btn-primary" onclick="saveVnSpeakerCorrection()">保存更正</button></div>
     </div>
   </div>
 
@@ -1592,12 +1592,12 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=21.27"></script>
-  <script src="forum-chat-core.js?v=21.27"></script>
-  <script src="forum-core.js?v=21.27"></script>
-  <script src="forum-chat.js?v=21.27"></script>
-  <script src="forum.js?v=21.27"></script>
-  <script src="cloud-sync-core.js?v=21.27"></script>
-  <script src="cloud-sync.js?v=21.27"></script>
+  <script src="app.js?v=21.28"></script>
+  <script src="forum-chat-core.js?v=21.28"></script>
+  <script src="forum-core.js?v=21.28"></script>
+  <script src="forum-chat.js?v=21.28"></script>
+  <script src="forum.js?v=21.28"></script>
+  <script src="cloud-sync-core.js?v=21.28"></script>
+  <script src="cloud-sync.js?v=21.28"></script>
 </body>
 </html>
