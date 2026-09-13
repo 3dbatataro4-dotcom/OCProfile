@@ -196,9 +196,7 @@ function loadStateFromLocalStorage() {
       if (!Array.isArray(documents) || documents.length === 0) documents = [...PRESET_DOCUMENTS];
     } catch (e) { documents = [...PRESET_DOCUMENTS]; }
   } else { documents = [...PRESET_DOCUMENTS]; }
-  documents.forEach(doc => {
-    if (doc.visualNovel?.scriptText) doc.visualNovel.scriptText = formatVisualNovelScriptBlocks(doc.visualNovel.scriptText);
-  });
+  normalizeVisualNovelDocuments();
 
   const savedCollapsed = localStorage.getItem("oc_collapsed_books");
   if (savedCollapsed) { try { collapsedBooks = JSON.parse(savedCollapsed); } catch (e) {} }
@@ -241,6 +239,14 @@ function saveStateToLocalStorage() {
   put('oc_custom_preset_avatars',customPresetAvatars);
   put("oc_perspective_targets", perspectiveTargets);
   put("oc_deepseek_settings", deepseekSettings);
+}
+
+function normalizeVisualNovelDocuments() {
+  if (!Array.isArray(documents)) documents = [];
+  documents.forEach(doc => {
+    if (doc?.visualNovel?.scriptText) doc.visualNovel.scriptText = formatVisualNovelScriptBlocks(doc.visualNovel.scriptText);
+  });
+  return documents;
 }
 
 function isStorageQuotaError(error){return error?.name==='QuotaExceededError'||error?.name==='NS_ERROR_DOM_QUOTA_REACHED'||error?.code===22||/quota|storage/i.test(String(error?.message||''));}
@@ -4092,7 +4098,16 @@ function bindVnSentenceEditorTarget(target,row){
 
 function replaceVisualNovelScriptEvent(eventIndex,replacement){const doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!doc?.visualNovel)return false;const lines=getVisualNovelScriptLines(doc.visualNovel.scriptText);if(eventIndex<0||eventIndex>=lines.length)return false;if(replacement===null)lines.splice(eventIndex,1);else lines[eventIndex]=replacement;doc.visualNovel.scriptText=formatVisualNovelScriptBlocks(lines.join('\n'));doc.visualNovel.eventIndexVersion=2;doc.visualNovel.updatedAt=new Date().toISOString();return true;}
 
-function refreshVnEditedSentence(eventIndex,row){const feed=document.getElementById('vnStoryFeed'),event=currentVisualNovelEvents[eventIndex];if(!feed||!row||!event)return;const marker=row.nextSibling,readingIndex=currentVisualNovelIndex,typewriter=currentVisualNovelSettings.typewriterEnabled;finishVisualNovelTyping(true);row.remove();currentVisualNovelIndex=eventIndex;currentVisualNovelSettings.typewriterEnabled=false;executeVisualNovelEvent(event);const replacement=feed.lastElementChild;if(marker&&replacement!==marker)feed.insertBefore(replacement,marker);currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=readingIndex;}
+function rebuildVisualNovelPlaybackAfterScriptEdit(readingIndex=currentVisualNovelIndex){
+  const doc=documents.find(item=>item.id===currentVisualNovelDocId),feed=document.getElementById('vnStoryFeed');if(!doc?.visualNovel||!feed)return;
+  finishVisualNovelTyping(false);currentVisualNovelEvents=parseVisualNovelScript(doc.visualNovel.scriptText);preloadVisualNovelChapterMedia(doc,currentVisualNovelEvents,currentVisualNovelSettings);
+  const target=Math.min(Math.max(-1,Number(readingIndex)),currentVisualNovelEvents.length-1),typewriter=currentVisualNovelSettings.typewriterEnabled;
+  feed.replaceChildren();const heading=document.createElement('div');heading.className='vn-feed-chapter';heading.textContent=doc.title;feed.appendChild(heading);visualNovelHistory=[];currentVisualNovelSettings.typewriterEnabled=false;
+  for(let index=0;index<=target;index++){const event=currentVisualNovelEvents[index];currentVisualNovelIndex=index;if(event?.type==='dialogue'||event?.type==='blank')executeVisualNovelEvent(event);}
+  finishVisualNovelTyping(true);currentVisualNovelSettings.typewriterEnabled=typewriter;currentVisualNovelIndex=target;feed.scrollTop=feed.scrollHeight;updateVisualNovelBookmarkBtnUI();
+}
+
+function refreshVnEditedSentence(){rebuildVisualNovelPlaybackAfterScriptEdit(currentVisualNovelIndex);}
 
 function openVnSpeakerEditor(eventIndex,row){
   const event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId);if(!event||event.type!=='dialogue'||!doc?.visualNovel)return;pendingVnSpeakerEdit={eventIndex,row};
@@ -4103,15 +4118,14 @@ function syncVnSpeakerCustomInput(value){if(value!=='__custom__')document.getEle
 function closeVnSpeakerEditor(){document.getElementById('vnSpeakerEditorModal').classList.remove('active');pendingVnSpeakerEdit=null;}
 function saveVnSpeakerCorrection(){
   if(!pendingVnSpeakerEdit)return;const {eventIndex,row}=pendingVnSpeakerEdit,event=currentVisualNovelEvents[eventIndex],doc=documents.find(item=>item.id===currentVisualNovelDocId),next=document.getElementById('vnSpeakerCustomInput').value.trim(),text=document.getElementById('vnSpeakerTextInput').value.trim();if(!event||!doc?.visualNovel||!next){alert('請填寫說話人。');return;}if(!text){alert('對話內文不可為空；若要移除，請使用「刪除這句」。');return;}
-  if(!replaceVisualNovelScriptEvent(eventIndex,`${next}｜${encodeVisualNovelInlineLineBreaks(text)}`))return;event.speaker=next;event.text=text;saveStateToLocalStorage();
-  const history=visualNovelHistory.find(item=>item.key===`${currentVisualNovelDocId}:${eventIndex}`);if(history){history.speaker=next;history.text=text;}
-  refreshVnEditedSentence(eventIndex,row);
+  if(!replaceVisualNovelScriptEvent(eventIndex,`${next}｜${encodeVisualNovelInlineLineBreaks(text)}`))return;saveStateToLocalStorage();
+  rebuildVisualNovelPlaybackAfterScriptEdit(currentVisualNovelIndex);
   closeVnSpeakerEditor();showVnFloatingToast('說話人與對話內文已更正並保存');
 }
 
 function deleteVnCurrentSentence(){
-  if(!pendingVnSpeakerEdit||!confirm('確定要刪除這一句對話嗎？刪除後無法由此視窗復原。'))return;const {eventIndex,row}=pendingVnSpeakerEdit;if(!replaceVisualNovelScriptEvent(eventIndex,null))return;
-  currentVisualNovelEvents.splice(eventIndex,1);if(currentVisualNovelIndex>=eventIndex)currentVisualNovelIndex=Math.max(-1,currentVisualNovelIndex-1);row?.remove();document.querySelectorAll('#vnStoryFeed [data-event-index]').forEach(node=>{const index=Number(node.dataset.eventIndex);if(index>eventIndex)node.dataset.eventIndex=String(index-1);});visualNovelHistory=visualNovelHistory.filter(item=>item.key!==`${currentVisualNovelDocId}:${eventIndex}`).map(item=>{const prefix=`${currentVisualNovelDocId}:`,index=item.key.startsWith(prefix)?Number(item.key.slice(prefix.length)):NaN;if(Number.isFinite(index)&&index>eventIndex)item.key=prefix+(index-1);return item;});saveStateToLocalStorage();closeVnSpeakerEditor();showVnFloatingToast('這一句已刪除');
+  if(!pendingVnSpeakerEdit||!confirm('確定要刪除這一句對話嗎？刪除後無法由此視窗復原。'))return;const {eventIndex}=pendingVnSpeakerEdit;if(!replaceVisualNovelScriptEvent(eventIndex,null))return;
+  const readingIndex=currentVisualNovelIndex>=eventIndex?Math.max(-1,currentVisualNovelIndex-1):currentVisualNovelIndex;saveStateToLocalStorage();rebuildVisualNovelPlaybackAfterScriptEdit(readingIndex);closeVnSpeakerEditor();showVnFloatingToast('這一句已刪除');
 }
 
 function handleVisualNovelStageClick(event){if(visualNovelScriptEditMode)return;advanceVisualNovel(event);}
@@ -4993,6 +5007,7 @@ function applyWorkshopBackupData(data) {
   if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
   if (data.books) books = data.books;
   if (data.documents) documents = data.documents;
+  normalizeVisualNovelDocuments();
   if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
   if (Array.isArray(data.customPresetAvatars)) customPresetAvatars = data.customPresetAvatars;
   if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
@@ -5348,6 +5363,7 @@ function applyAdvancedImport() {
     charIds: remapImportIds(record.charIds, charIdMap),
     factionIds: remapImportIds(record.factionIds, factionIdMap)
   }), record => `${record.title}@@${record.bookId || "standalone"}`);
+  normalizeVisualNovelDocuments();
   (Array.isArray(data.documents) ? data.documents : []).forEach((raw, importedIndex) => {
     const mappedBookId = bookIdMap.get(String(raw.bookId)) ?? raw.bookId;
     const identity = normalizedImportName(`${raw.title}@@${mappedBookId || "standalone"}`);
@@ -5359,6 +5375,7 @@ function applyAdvancedImport() {
     if (selected == null) delete target.visualNovel;
     else target.visualNovel = selected;
   });
+  normalizeVisualNovelDocuments();
   visualNovelTemplates = mergeImportedNamedRecords(visualNovelTemplates, data.visualNovelTemplates, "vnTemplate", new Map());
   collapsedBooks = { ...collapsedBooks, ...(data.collapsedBooks || {}) };
 
