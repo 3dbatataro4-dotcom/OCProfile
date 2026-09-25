@@ -60,6 +60,19 @@ test('AI Paro text import previews and merges fields without clearing existing v
   assert.match(app, /if\(!character\.paroValues\[paro\.id\]\)character\.paroValues\[paro\.id\]=\{\}/);
 });
 
+test('library character cards use the themed cover and character-derived controls', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /class="char-theme-cover"/);
+  assert.match(app, /--char-theme-secondary:\$\{theme\.secondary\}/);
+  assert.match(app, /char-edit-btn/);
+  assert.match(styles, /\.char-theme-cover\s*\{/);
+  assert.match(styles, /\.char-avatar-wrapper::before/);
+  assert.match(styles, /\.char-field-label[^}]*var\(--char-theme-primary\)/s);
+  assert.match(styles, /\.tag-pill[^}]*var\(--char-theme-primary\)/s);
+  assert.match(styles, /\.char-edit-btn[^}]*var\(--char-theme-secondary\)/s);
+});
+
 test('legacy forum data migrates to scoped forums without losing records', () => {
   const legacy = ForumCore.initial();
   delete legacy.activeBoardId;
@@ -524,4 +537,332 @@ test('search drawer is not trapped by a transformed page animation', () => {
   assert.match(styles, /#forum-root \.ff-main\{animation:ff-view-shift \.14s ease-out\}/);
   assert.match(styles, /@keyframes ff-view-shift\{from\{opacity:\.72\}to\{opacity:1\}\}/);
   assert.doesNotMatch(styles, /#forum-root \.ff-main\{animation:ff-view-shift[^}]*both/);
+});
+
+test('post deletion dialog handles its own actions on mobile top layer', () => {
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'forum.css'), 'utf8');
+  assert.match(forum, /dialog\.addEventListener\('click'/);
+  assert.match(forum, /delete-keep:\|delete-hard:/);
+  assert.match(forum, /typeof dialog\.showModal==='function'/);
+  assert.match(styles, /\.ff-delete-dialog\.ff-dialog-fallback/);
+});
+
+test('storage quota recovery removes disposable copies but preserves primary data', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const forum = fs.readFileSync(path.join(__dirname, '..', 'forum.js'), 'utf8');
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
+  assert.match(app, /window\.ocSafeSetLocalStorage/);
+  assert.match(app, /oc_cloud_before_/);
+  assert.match(app, /oc_forum_backup_before_delete_/);
+  assert.match(app, /finally \{ renderDocumentsModule\(\); \}/);
+  assert.match(forum, /window\.ocSafeSetLocalStorage/);
+  assert.match(cloud, /const recoveryCopies=new Map\(\)/);
+  assert.match(cloud, /rememberRecovery\(row\.scope,row\.local\)/);
+  assert.doesNotMatch(cloud, /localStorage\.setItem\('oc_cloud_before_'/);
+});
+
+test('cloud delta contains only changed rows and explicit deletions', () => {
+  const local = CloudSyncCore.snapshot('workshop', {characters:[{id:'a',name:'舊'},{id:'gone',name:'刪除'}],paros:[],factions:[],rankings:[],cps:[],books:[],documents:[],visualNovelTemplates:[],collapsedBooks:{},perspectiveTargets:{}});
+  const next = CloudSyncCore.snapshot('workshop', {characters:[{id:'a',name:'新'},{id:'added',name:'新增'}],paros:[],factions:[],rankings:[],cps:[],books:[],documents:[],visualNovelTemplates:[],collapsedBooks:{},perspectiveTargets:{}});
+  const delta = CloudSyncCore.delta(local,next,'測試');
+  assert.equal(delta.format,'oc-cloud-delta');
+  assert.deepEqual(delta.changes.map(change=>[change.id,change.value?.name??null]).sort(),[['a','新'],['added','新增'],['gone',null]]);
+  assert.deepEqual(delta.orders.characters,['a','added']);
+});
+
+test('cloud upload prefers server-side delta with full snapshot fallback', () => {
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'setup.sql'), 'utf8');
+  assert.match(cloud, /async function pushEfficientSnapshot/);
+  assert.match(cloud, /rpc\/oc_push_delta/);
+  assert.match(cloud, /patchSize<fullSize/);
+  assert.match(cloud, /return pushSnapshot\(scope,revision,next,note\)/);
+  assert.match(sql, /create function public\.oc_push_delta/);
+  assert.match(sql, /for update/);
+  assert.match(sql, /raise exception 'SYNC_CONFLICT'/);
+});
+
+test('visual novel system lines and in-player sentence editor are supported', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /isSystem:\/\^【/);
+  assert.match(app, /if\(segment\.isSystem\)return '系統'/);
+  assert.match(app, /bindVnSentenceEditorTarget\(row,row\)/);
+  assert.match(app, /bindVnSentenceEditorTarget\(card,row\)/);
+  assert.match(html, /id="vnSpeakerTextInput"/);
+  assert.match(html, /deleteVnCurrentSentence\(\)/);
+  assert.match(app, /function replaceVisualNovelScriptEvent/);
+  assert.match(app, /function refreshVnEditedSentence/);
+  assert.match(app, /function deleteVnCurrentSentence/);
+  assert.match(styles, /\.vn-feed-system[^}]*background:#fff/);
+  assert.match(styles, /data-theme="light"[^}]*\.vn-feed-system[^}]*background:#17130f/);
+});
+
+test('visual novel safely renders paired asterisks as bold without typing markers', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /function parseVisualNovelInlineTokens/);
+  assert.match(app, /document\.createElement\("strong"\)/);
+  assert.match(app, /strong\.className = "vn-inline-bold"/);
+  assert.match(app, /const visibleText = parseVisualNovelInlineTokens/);
+  assert.match(app, /renderVisualNovelInlineText\(dialogueTextElement, event\.text\)/);
+  assert.doesNotMatch(app, /dialogueTextElement\.innerHTML/);
+  assert.match(styles, /\.vn-inline-bold \{ color:inherit; font-weight:800; \}/);
+});
+
+test('visual novel preloads CGs, crossfades layers and waits at chapter endings', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(html, /id="vnCg"[^>]*><div class="vn-cg-layer active"><\/div><div class="vn-cg-layer"><\/div>/);
+  assert.match(app, /function preloadVisualNovelCgs/);
+  assert.match(app, /preloadVisualNovelCgs\(events\)/);
+  assert.match(app, /async function transitionVisualNovelCg/);
+  assert.match(app, /visualNovelAwaitingNextChapterId=nextChapter\?\.id\|\|'__end__'/);
+  assert.doesNotMatch(app, /visualNovelChapterTimer = setTimeout/);
+  assert.match(styles, /\.vn-cg-layer\.active/);
+  assert.match(styles, /mask-image:linear-gradient\(to bottom/);
+  assert.match(styles, /\.vn-player\.vn-chapter-leaving/);
+});
+
+test('visual novel preloads only the current chapter audio and character avatars', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function preloadVisualNovelChapterMedia/);
+  assert.match(app, /preloadVisualNovelChapterMedia\(doc, currentVisualNovelEvents, settings\)/);
+  assert.match(app, /event\.type === "bgm" \|\| event\.type === "se"/);
+  assert.match(app, /audio\.preload = "auto"/);
+  assert.match(app, /function preloadVisualNovelAvatar/);
+  assert.match(app, /profiles\.find\(item => item\.charId === character\?\.id\)/);
+  assert.match(app, /avatarSources\.forEach\(preloadVisualNovelAvatar\)/);
+});
+
+test('cloud and JSON restore require per-book and per-chapter review', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
+  assert.match(html, /id="advancedImportModeToggle"[^>]*checked/);
+  assert.match(app, /detected\.kind==='workshop'\|\|detected\.kind==='complete'/);
+  assert.match(app, /pendingReview:true/);
+  assert.match(cloud, /change\.group!=='books'&&change\.group!=='documents'/);
+  assert.match(cloud, /change\.choice=change\.remote\?'remote':'local'/);
+  assert.match(cloud, /本機缺少、雲端仍存在（請確認是否真的刪除）/);
+});
+
+test('in-player visual novel edits keep stable script positions and inline line breaks', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function getVisualNovelScriptLines/);
+  assert.match(app, /filter\(line => line\.trim\(\) !== ""\)/);
+  assert.match(app, /function encodeVisualNovelInlineLineBreaks/);
+  assert.match(app, /replace\(\/\\n\/g, "\\u2028"\)/);
+  assert.match(app, /function decodeVisualNovelInlineLineBreaks/);
+  assert.match(app, /const lines=getVisualNovelScriptLines\(doc\.visualNovel\.scriptText\)/);
+  assert.match(app, /eventIndexVersion=2/);
+  assert.match(app, /migrateVisualNovelEventIndex\(doc\)/);
+  assert.match(app, /encodeVisualNovelInlineLineBreaks\(text\)/);
+});
+
+test('visual novel edits rebuild runtime events and cloud restore normalizes scripts', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
+  assert.match(app, /function rebuildVisualNovelPlaybackAfterScriptEdit/);
+  assert.match(app, /currentVisualNovelEvents=buildVerifiedVisualNovelEvents\(doc\.visualNovel\.scriptText\)/);
+  assert.match(app, /rebuildVisualNovelPlaybackAfterScriptEdit\(currentVisualNovelIndex\)/);
+  assert.match(app, /function normalizeVisualNovelDocuments/);
+  assert.match(cloud, /assign\(data\);normalizeVisualNovelDocuments\(\);saveStateToLocalStorage\(\)/);
+});
+
+test('chapter playback waits for transitions and verifies every script line', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /function buildVerifiedVisualNovelEvents/);
+  assert.match(app, /events\.length!==lines\.length/);
+  assert.match(app, /function alignVisualNovelBookmarkToScript/);
+  assert.match(app, /currentVisualNovelEvents = buildVerifiedVisualNovelEvents/);
+  assert.match(app, /if \(!waitingForBookmarkChoice\)/);
+  assert.match(app, /visualNovelOpeningTimer=setTimeout/);
+  assert.match(app, /if \(visualNovelChapterTimer\|\|visualNovelOpeningTimer\) return/);
+  assert.match(styles, /\.vn-player\.vn-opening-transition[^}]*pointer-events:none/);
+});
+
+test('mobile typewriter audio is unlocked, resumed and audible over BGM', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function installVisualNovelMobileAudioUnlock/);
+  assert.match(app, /document\.addEventListener\('pointerdown',unlock/);
+  assert.match(app, /document\.addEventListener\('touchend',unlock/);
+  assert.match(app, /visibilitychange/);
+  assert.match(app, /function synthesizeVisualNovelTypeBeep/);
+  assert.match(app, /context\.resume\(\)\.then/);
+  assert.match(app, /function duckVisualNovelBgmForTypeSound/);
+  assert.match(app, /target\*0\.72/);
+});
+
+test('visual novel runtime audits and repairs missing rendered dialogue rows', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(html, /diagnoseCurrentVisualNovelScript\(event\)/);
+  assert.match(html, /檢查並修復本章劇本/);
+  assert.match(app, /function getMissingVisualNovelDialogueIndexes/);
+  assert.match(app, /function repairMissingVisualNovelDialogueRows/);
+  assert.match(app, /feed\.insertBefore\(inserted,next\)/);
+  assert.match(app, /oldTop\+\(feed\.scrollHeight-oldHeight\)/);
+  assert.match(app, /const index=missing\[0\]/);
+  assert.match(app, /currentVisualNovelSettings\.typewriterEnabled=typewriter/);
+  assert.doesNotMatch(app, /已補回第 \$\{index\+1\} 句/);
+  assert.doesNotMatch(app, /function repairMissingVisualNovelDialogueRows[^}]*rebuildVisualNovelPlaybackAfterScriptEdit/);
+  assert.match(app, /if\(repairMissingVisualNovelDialogueRows\(currentVisualNovelIndex,true\)\)return/);
+  assert.match(app, /if\(repairMissingVisualNovelDialogueRows\(currentVisualNovelEvents\.length-1,true\)\)return/);
+});
+
+test('visual novel autoplay has one cancellable schedule and cannot overlap', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function cancelVisualNovelAutoAdvance/);
+  assert.match(app, /function scheduleVisualNovelAutoAdvance/);
+  assert.match(app, /const token=visualNovelAutoScheduleToken/);
+  assert.match(app, /if\(token!==visualNovelAutoScheduleToken\)return/);
+  assert.doesNotMatch(app, /visualNovelAutoTimer = setTimeout/);
+  assert.doesNotMatch(app, /visualNovelAutoTimer=setTimeout\(\(\) => advanceVisualNovel/);
+});
+test('視覺小說 CG 切換不會被預載卡死，且音效可以重疊播放', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /let visualNovelCgRequestToken = 0/);
+  assert.match(app, /await Promise\.race\(\[/);
+  assert.match(app, /requestToken !== visualNovelCgRequestToken/);
+  assert.match(app, /function acquireVisualNovelSeChannel\(\)/);
+  assert.match(app, /channels\.length < 12/);
+  assert.match(app, /function stopVisualNovelSoundEffects\(\)/);
+  assert.doesNotMatch(app, /se\.pause\(\); se\.src = source/);
+});
+
+test('每句台詞前都會依劇本校正 CG，不重播過去音效', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /let visualNovelActiveCgSource = ""/);
+  assert.match(app, /function ensureVisualNovelCgMatchesScript\(upToIndex = currentVisualNovelIndex\)/);
+  assert.match(app, /visualNovelActiveCgSource === normalizedExpected \|\| visualNovelPendingCgSource === normalizedExpected/);
+  assert.match(app, /ensureVisualNovelCgMatchesScript\(currentVisualNovelIndex\)/);
+  assert.doesNotMatch(app, /ensureVisualNovelCgMatchesScript[\s\S]{0,800}playVisualNovelAudio\("se"/);
+});
+
+test('視覺小說支援全域由上往下閱讀並原地保存單句編輯', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(html, /id="vnTopDownCheck" onchange="toggleVisualNovelTopDown\(event\)"/);
+  assert.match(app, /localStorage\.getItem\("oc_visual_novel_top_down"\)/);
+  assert.match(app, /put\("oc_visual_novel_top_down", String\(visualNovelTopDown\)\)/);
+  assert.match(app, /function insertVisualNovelFeedNode\(feed, node\)/);
+  assert.match(app, /function replaceRenderedVisualNovelDialogue\(eventIndex\)/);
+  assert.match(app, /replaceRenderedVisualNovelDialogue\(eventIndex\)/);
+  assert.match(html, /id="vnScriptRepairTools" hidden/);
+  assert.match(styles, /\.vn-speaker-editor-form textarea/);
+  assert.match(app, /visualNovelTemplates,visualNovelTopDown,customPresetAvatars/);
+});
+
+test('每句視覺小說對話以卡片頂端為閱讀錨點', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function focusVisualNovelEntryTop\(feed, row\)/);
+  assert.match(app, /feed\.scrollTop \+= rowRect\.top - feedRect\.top - 10/);
+  assert.match(app, /insertVisualNovelFeedNode\(feed, row\);\s*focusVisualNovelEntryTop\(feed, row\)/);
+  assert.match(app, /visualNovelSuppressEntryScroll=true;executeVisualNovelEvent/);
+  assert.doesNotMatch(app, /renderVisualNovelInlineText\(element, state\.text\);\s*if \(feed\) feed\.scrollTop/);
+});
+
+test('打字換行會維持完整對話可見，修復台詞在定位後才進場', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /function keepVisualNovelEntryFullyVisible\(feed, row\)/);
+  assert.match(app, /renderVisualNovelInlineText\(element, state\.text, state\.index\);\s*keepVisualNovelEntryFullyVisible\(feed, state\.row\)/);
+  assert.match(app, /inserted\.style\.animation='none'/);
+  assert.match(app, /inserted\.classList\.add\('vn-feed-recovered'\)/);
+  assert.match(styles, /@keyframes vnRecoveredFeedEnter/);
+});
+
+test('文章與書籍顯示不含視覺小說腳本的正文總字數', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /function countDocumentBodyCharacters\(doc\)/);
+  assert.match(app, /String\(doc\?\.content \|\| ""\)\.replace\(\/\\s\/g, ""\)\.length/);
+  assert.match(app, /formatDocumentCharacterCount\(bookCharacterCount\)/);
+  assert.match(app, /formatDocumentCharacterCount\(countDocumentBodyCharacters\(doc\)\)/);
+});
+
+test('CP 展示卡混合最多三位成員主題色並允許手動覆寫', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /gradientColors: Array\.isArray\(cp\.gradientColors\)/);
+  assert.match(app, /function resolveCpGradientColors\(cp, memberChars\)/);
+  assert.match(app, /\.slice\(0, 3\)/);
+  assert.match(app, /--cp-gradient:\$\{gradientCss\}/);
+  assert.match(html, /id="cpUseCustomGradient"/);
+  assert.match(html, /id="cpGradientColor3"/);
+  assert.match(app, /gradientColors: document\.getElementById\("cpUseCustomGradient"\)\.checked/);
+  assert.match(styles, /\.cp-theme-cover/);
+  assert.match(styles, /color-mix\(in srgb,var\(--cp-color-1\) 68%,var\(--text-main\)\)/);
+});
+
+test('CP 編輯器可調整成員展示與自動漸層的先後順序', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /function moveCpMemberEditor\(button, direction\)/);
+  assert.match(app, /function syncCpMemberEditorOrder\(\)/);
+  assert.match(app, /checkedBoxes\.sort\(/);
+  assert.match(app, /#cpMemberDetailsContainer \.cp-member-editor/);
+  assert.match(app, /moveCpMemberEditor\(this,-1\)/);
+  assert.match(app, /moveCpMemberEditor\(this,1\)/);
+  assert.match(styles, /@keyframes cpMemberMoved/);
+});
+
+test('CP 手動漸層可選擇一色、二色或三色', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(html, /id="cpGradientColorCount"/);
+  assert.match(html, /<option value="1">1 色<\/option>/);
+  assert.match(html, /<option value="2">2 色<\/option>/);
+  assert.match(app, /safeColors\.length === 2/);
+  assert.ok(app.includes('`${safeColors[0]} 0%, ${safeColors[0]} 100%`'));
+  assert.match(app, /inputs\.slice\(0,colorCount\)/);
+  assert.match(app, /\.slice\(0,Math\.max\(1,Math\.min\(3,Number\(document\.getElementById\("cpGradientColorCount"\)\.value\)\|\|3\)\)\)/);
+});
+
+test('視覺小說只在 CG 與 BGM 真正成功後提交狀態並可自動補載', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(app, /const loaded = await Promise\.race/);
+  assert.match(app, /visualNovelActiveCgSource = loaded \? url : ""/);
+  assert.match(app, /function ensureVisualNovelBgmMatchesScript\(upToIndex = currentVisualNovelIndex\)/);
+  assert.match(app, /active\?\.dataset\.source === normalizedExpected && !active\.paused && active\.readyState >= 2/);
+  assert.match(app, /await playPromise;\s*if \(token !== visualNovelBgmFadeToken\) return;\s*visualNovelBgmChannelIndex = nextIndex/);
+  assert.match(app, /ensureVisualNovelCgMatchesScript\(currentVisualNovelIndex\);\s*ensureVisualNovelBgmMatchesScript\(currentVisualNovelIndex\)/);
+  assert.match(app, /SE 首次播放失敗，等待載入後重試/);
+});
+
+test('舊雲端工坊備份缺少視覺小說閱讀偏好時仍可讀取', () => {
+  const source = {
+    characters:[], paros:[], factions:[], rankings:[], cps:[], books:[], documents:[], visualNovelTemplates:[], collapsedBooks:[], perspectiveTargets:[]
+  };
+  const payload = {format:'oc-cloud-save',version:1,scope:'workshop',data:source};
+  const validated = CloudSyncCore.validate(payload);
+  assert.deepEqual(validated.data.visualNovelPreferences, []);
+  assert.deepEqual(CloudSyncCore.source(payload).visualNovelPreferences, {});
+});
+
+test('視覺小說章末停留並等待再次點擊才進下一章', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+  assert.match(app, /let visualNovelAwaitingNextChapterId = null/);
+  assert.match(app, /if\(visualNovelAwaitingNextChapterId\)/);
+  assert.match(app, /<strong>本章節已結束<\/strong>/);
+  assert.match(app, /visualNovelAwaitingNextChapterId=nextChapter\?\.id\|\|'__end__'/);
+  assert.doesNotMatch(app, /nextChapter\.title} 即將開始/);
+  assert.match(styles, /\.vn-feed-chapter-complete/);
+});
+
+test('舊 Supabase 增量函式拒絕新群組時自動改用完整上傳', () => {
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
+  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'setup.sql'), 'utf8');
+  assert.match(cloud, /function isUnsupportedDeltaError\(error\)/);
+  assert.match(cloud, /text\.includes\('INVALID_DELTA_ITEM'\)/);
+  assert.match(cloud, /deltaUnsupportedScopes\.add\(scope\)/);
+  assert.match(cloud, /!deltaUnsupportedScopes\.has\(scope\)/);
+  assert.match(sql, /'visualNovelPreferences'/);
 });
