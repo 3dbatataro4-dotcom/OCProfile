@@ -1,0 +1,12 @@
+name = "oc-image-library"
+main = "src/index.js"
+compatibility_date = "2026-09-26"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "oc-image-library"
+
+[vars]
+ALLOWED_ORIGIN = "https://你的網站網域"
+SUPABASE_URL = "https://tblaedenqehnphnielce.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "填入網站 cloud-sync.js 的 publishable key"
