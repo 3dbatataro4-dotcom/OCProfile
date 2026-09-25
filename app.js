@@ -10,6 +10,8 @@ let rankings = [];
 let cps = [];
 let books = [];
 let documents = [];
+let timelines = [];
+let mediaLibrary = [];
 let collapsedBooks = {};
 let globalTags = new Set();
 let articleTags = new Set();
@@ -212,6 +214,8 @@ function loadStateFromLocalStorage() {
     } catch (e) { documents = [...PRESET_DOCUMENTS]; }
   } else { documents = [...PRESET_DOCUMENTS]; }
   normalizeVisualNovelDocuments();
+  try { timelines = JSON.parse(localStorage.getItem('oc_timelines') || '[]'); if (!Array.isArray(timelines)) timelines = []; } catch { timelines = []; }
+  try { mediaLibrary = JSON.parse(localStorage.getItem('oc_media_library') || '[]'); if (!Array.isArray(mediaLibrary)) mediaLibrary = []; } catch { mediaLibrary = []; }
 
   const savedCollapsed = localStorage.getItem("oc_collapsed_books");
   if (savedCollapsed) { try { collapsedBooks = JSON.parse(savedCollapsed); } catch (e) {} }
@@ -250,6 +254,8 @@ function saveStateToLocalStorage() {
   put("oc_cps", cps);
   put("oc_books", books);
   put("oc_documents", documents);
+  put('oc_timelines', timelines);
+  put('oc_media_library', mediaLibrary);
   put("oc_collapsed_books", collapsedBooks);
   put("oc_visual_novel_templates", visualNovelTemplates);
   put("oc_visual_novel_top_down", String(visualNovelTopDown));
@@ -292,6 +298,8 @@ function resetDefaultCharacters() {
         cps: cps,
         books: books,
         documents: documents,
+        timelines: timelines,
+        mediaLibrary: mediaLibrary,
         forum: window.OCForum?.cloudSnapshot ? window.OCForum.cloudSnapshot().data : null
       };
       localStorage.setItem(`oc_snapshot_before_reset_${Date.now()}`, JSON.stringify(backupData));
@@ -307,6 +315,8 @@ function resetDefaultCharacters() {
     cps = [...PRESET_CPS];
     books = [...PRESET_BOOKS];
     documents = [...PRESET_DOCUMENTS];
+    timelines = [];
+    mediaLibrary = [];
     collapsedBooks = {};
     saveStateToLocalStorage();
     syncGlobalTags();
@@ -400,6 +410,7 @@ function renderAllViews() {
   renderRankingModule();
   renderDocumentsModule();
   renderExportCharList();
+  window.OCFeatures?.renderAll?.();
 }
 
 function updateBadges() {
@@ -434,6 +445,8 @@ function switchTab(tabId, fromBack = false) {
     renderDocumentsModule();
   } else if (tabId === 'tab-export') {
     renderExportCharList();
+  } else if (tabId === 'tab-timelines') {
+    window.OCFeatures?.renderTimeline?.();
   }
 }
 
@@ -634,13 +647,21 @@ function cpGradientCss(colors) {
 function renderCpModule() {
   const grid = document.getElementById("cpGrid");
   if (!grid) return;
+  const typeFilter = document.getElementById('cpTypeFilter')?.value || 'all';
+  const visibleCps = cps.filter(cp => typeFilter === 'all' || (typeFilter === 'cp' ? cp.type !== 'other' : cp.type === 'other'));
+  const count = document.getElementById('cpVisibleCount');
+  if (count) count.textContent = String(visibleCps.length);
 
   if (!cps.length) {
     grid.innerHTML = `<div class="empty-state"><p>目前尚無 CP 組合。點擊右上角「新建 CP 組合」建立第一對 CP 關係！</p></div>`;
     return;
   }
+  if (!visibleCps.length) {
+    grid.innerHTML = `<div class="empty-state"><p>目前沒有符合此篩選條件的關係組合。</p></div>`;
+    return;
+  }
 
-  grid.innerHTML = cps.map(rawCp => {
+  grid.innerHTML = visibleCps.map(rawCp => {
     const cp = normalizeCpRecord(rawCp);
     const memberChars = (cp.members || []).map(member => characters.find(c => c.id === member.charId)).filter(Boolean);
     const gradientColors = resolveCpGradientColors(cp, memberChars);
@@ -685,6 +706,7 @@ function renderCpModule() {
           <div class="cp-member-details">${memberDetailsHtml}</div>
           <div class="cp-sections">${sectionsHtml}</div>
         </div>
+        ${window.OCFeatures?.cpGalleryPreviewHtml?.(cp) || ''}
       </div>
     `;
   }).join('');
@@ -1169,16 +1191,21 @@ function updateWizAvatarPreview(url) {
   if (img) img.src = url || PRESET_AVATARS[0].url;
 }
 
-function handleWizAvatarUpload(event) {
+async function saveLocalAvatar(file) {
+  if (!/^image\/(png|jpeg|webp|gif|avif)$/i.test(file.type)) throw new Error('請選擇 PNG、JPEG、WebP、GIF 或 AVIF 圖片。');
+  if (file.size > 20 * 1024 * 1024) throw new Error('圖片不可超過 20 MB。');
+  const id=`avatar_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  await OCFeatures.storeFile(id,file);
+  mediaLibrary.push({id,kind:'avatar',title:file.name,type:file.type,size:file.size,createdAt:Date.now(),localOnly:true});
+  saveStateToLocalStorage();
+  return `asset:${id}`;
+}
+
+async function handleWizAvatarUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const dataUrl = e.target.result;
-    document.getElementById("wizAvatarUrl").value = dataUrl;
-    updateWizAvatarPreview(dataUrl);
-  };
-  reader.readAsDataURL(file);
+  try{const ref=await saveLocalAvatar(file);document.getElementById("wizAvatarUrl").value=ref;updateWizAvatarPreview(ref);}catch(error){alert(error.message);}
+  event.target.value='';
 }
 
 function openWizGalleryModal() {
@@ -1367,17 +1394,11 @@ function updateModalAvatarPreview(url) {
   document.getElementById("modalAvatarPreview").src = url || 'https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png';
 }
 
-function handleCustomAvatarUpload(event) {
+async function handleCustomAvatarUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const dataUrl = e.target.result;
-    document.getElementById("charAvatarUrl").value = dataUrl;
-    updateModalAvatarPreview(dataUrl);
-  };
-  reader.readAsDataURL(file);
+  try{const ref=await saveLocalAvatar(file);document.getElementById("charAvatarUrl").value=ref;updateModalAvatarPreview(ref);}catch(error){alert(error.message);}
+  event.target.value='';
 }
 
 function updateColorPreview() {
@@ -1453,6 +1474,7 @@ function openAvatarGalleryModal() {
   document.getElementById("avatarGalleryModal").classList.add("active");
 }
 function addCustomPresetAvatar(){const input=document.getElementById('customPresetAvatarUrl'),url=input.value.trim();if(!/^https?:\/\//i.test(url)){alert('請輸入有效的 http(s) 圖片網址。');return;}if(!customPresetAvatars.some(item=>item.url===url))customPresetAvatars.push({name:`自訂頭像 ${customPresetAvatars.length+1}`,url});input.value='';saveStateToLocalStorage();openAvatarGalleryModal();}
+async function addCustomPresetAvatarFile(event){const file=event.target.files?.[0];if(!file)return;try{const url=await saveLocalAvatar(file);customPresetAvatars.push({name:file.name.replace(/\.[^.]+$/,''),url});saveStateToLocalStorage();openAvatarGalleryModal();}catch(error){alert(error.message);}event.target.value='';}
 
 function selectAvatarFromGallery(url) {
   document.getElementById("charAvatarUrl").value = url;
@@ -2541,6 +2563,8 @@ function renderFactionList() {
   if (!container) return;
 
   container.innerHTML = factions.map(f => {
+    const worldColorA=/^#[0-9a-f]{6}$/i.test(f.themeColor?.primary||'')?f.themeColor.primary:'#a56e79';
+    const worldColorB=/^#[0-9a-f]{6}$/i.test(f.themeColor?.secondary||'')?f.themeColor.secondary:'#686a9c';
     const memberGroups = getFactionMemberGroups(f);
     const subTagsHtml = (f.subTags || []).map(sub => `
       <div style="background:var(--bg-secondary); padding:0.35rem 0.7rem; border-radius:6px; font-size:0.8rem; border-left:3px solid var(--accent-gold);">
@@ -2556,7 +2580,7 @@ function renderFactionList() {
     `).join('');
 
     return `
-      <div class="faction-card">
+      <div class="faction-card" style="--world-a:${worldColorA};--world-b:${worldColorB}">
         <h3>
           <span><i class="fa-solid fa-sitemap"></i> ${f.name}</span>
           <div>
@@ -2591,6 +2615,8 @@ function openFactionModal(factionId = null) {
     document.getElementById("factionId").value = f.id;
     document.getElementById("factionName").value = f.name;
     document.getElementById("factionDescription").value = f.description || "";
+    document.getElementById("factionColorA").value = /^#[0-9a-f]{6}$/i.test(f.themeColor?.primary||'')?f.themeColor.primary:'#a56e79';
+    document.getElementById("factionColorB").value = /^#[0-9a-f]{6}$/i.test(f.themeColor?.secondary||'')?f.themeColor.secondary:'#686a9c';
 
     (f.subTags || []).forEach(sub => addSubTagRow(sub.name, sub.description));
     (f.customSections || []).forEach(sec => addFactionSectionRow(sec.title, sec.content, sec.id));
@@ -2599,10 +2625,13 @@ function openFactionModal(factionId = null) {
     document.getElementById("factionId").value = "";
     document.getElementById("factionName").value = "";
     document.getElementById("factionDescription").value = "";
+    document.getElementById("factionColorA").value = "#a56e79";
+    document.getElementById("factionColorB").value = "#686a9c";
 
     addSubTagRow("二年A班", "二年級A班");
     addFactionSectionRow("創世大事件", "在此填寫陣營重大歷史事件與法則...");
   }
+  window.OCFeatures?.updateFactionColorPreview?.();
   modal.classList.add("active");
 }
 
@@ -2677,6 +2706,7 @@ function saveFactionForm() {
     id: id || `faction_${Date.now()}`,
     name,
     description: document.getElementById("factionDescription").value.trim(),
+    themeColor: {primary:document.getElementById("factionColorA").value,secondary:document.getElementById("factionColorB").value,mode:'gradient'},
     subTags,
     customSections
   };
@@ -2712,6 +2742,7 @@ function saveFactionForm() {
   renderFactionList();
   renderCharacterCards();
   renderDocumentsModule();
+  window.OCFeatures?.renderTimeline?.();
   closeModal("factionModal");
 }
 
@@ -2771,14 +2802,17 @@ function renderDocumentsModule() {
   if (!workspace) return;
 
   const activeChars = characters.filter(c => !c.isHidden);
+  const typedChar=(document.getElementById('docCharSearch')?.value||'').trim().toLocaleLowerCase();
   
   const charFilterSelect = document.getElementById("docCharFilter");
   const factionFilterSelect = document.getElementById("docFactionFilter");
 
   if (charFilterSelect) {
     const previous = charFilterSelect.value;
-    charFilterSelect.innerHTML = `<option value="">全部角色</option>` + activeChars.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-    charFilterSelect.value = previous;
+    const exact=activeChars.find(c=>c.name.toLocaleLowerCase()===typedChar);
+    const visible=activeChars.filter(c=>!typedChar||c.name.toLocaleLowerCase().includes(typedChar)||c.id===previous);
+    charFilterSelect.innerHTML = `<option value="">全部角色</option>` + visible.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+    charFilterSelect.value = exact?.id || previous;
   }
   if (factionFilterSelect) {
     const previous = factionFilterSelect.value;
@@ -2793,23 +2827,25 @@ function renderDocumentsModule() {
 
   const filterFn = (doc) => {
     const matchSearch = !searchKeyword || doc.title.toLowerCase().includes(searchKeyword) || (doc.content && doc.content.toLowerCase().includes(searchKeyword));
-    const matchChar = !selectedCharId || (doc.charIds || []).includes(selectedCharId);
+    const matchChar = selectedCharId ? (doc.charIds || []).includes(selectedCharId) : !typedChar || (doc.charIds || []).some(id=>String(characters.find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
     const matchFaction = !selectedFactionId || (doc.factionIds || []).includes(selectedFactionId);
     const matchTag = !selectedTag || (doc.tags || []).includes(selectedTag);
     return matchSearch && matchChar && matchFaction && matchTag;
   };
 
-  const filteredDocs = documents.filter(filterFn);
+  const docSort=document.getElementById('docSort')?.value||'manual';
+  const sortByTitle=(a,b)=>docSort==='manual'?0:(docSort==='title' ? 1 : -1)*String(a.title||'').localeCompare(String(b.title||''),'zh-Hant');
+  const filteredDocs = documents.filter(filterFn).sort(sortByTitle);
 
-  const filtersActive = !!(searchKeyword || selectedCharId || selectedFactionId || selectedTag);
+  const filtersActive = !!(searchKeyword || selectedCharId || typedChar || selectedFactionId || selectedTag);
   const visibleBooks = books.filter(book => {
     if (!filtersActive) return true;
     const bookSearch = !searchKeyword || `${book.title || ''} ${book.description || ''}`.toLowerCase().includes(searchKeyword);
-    const bookChar = !selectedCharId || (book.charIds || []).includes(selectedCharId);
+    const bookChar = selectedCharId ? (book.charIds || []).includes(selectedCharId) : !typedChar || (book.charIds || []).some(id=>String(characters.find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
     const bookFaction = !selectedFactionId || (book.factionIds || []).includes(selectedFactionId);
     const bookTag = !selectedTag || (book.tags || []).includes(selectedTag);
     return (bookSearch && bookChar && bookFaction && bookTag) || filteredDocs.some(doc => doc.bookId === book.id);
-  });
+  }).sort(sortByTitle);
 
   const bookHtmlList = visibleBooks.map(book => {
     const bookDirectMatch = filtersActive &&
@@ -2817,7 +2853,7 @@ function renderDocumentsModule() {
       (!selectedCharId || (book.charIds || []).includes(selectedCharId)) &&
       (!selectedFactionId || (book.factionIds || []).includes(selectedFactionId)) &&
       (!selectedTag || (book.tags || []).includes(selectedTag));
-    const bookDocs = (bookDirectMatch ? documents : filteredDocs).filter(d => d.bookId === book.id);
+    const bookDocs = (bookDirectMatch ? documents : filteredDocs).filter(d => d.bookId === book.id).sort(sortByTitle);
     const bookCharacterCount = documents.filter(d => d.bookId === book.id).reduce((total, doc) => total + countDocumentBodyCharacters(doc), 0);
     const isCollapsed = !!collapsedBooks[book.id];
     const memberChars = (book.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
@@ -2913,6 +2949,7 @@ function openBookModal(bookId = null) {
   const activeChars = characters.filter(c => !c.isHidden);
   const charCb = document.getElementById("bookCharCheckboxes");
   const factionCb = document.getElementById("bookFactionCheckboxes");
+  document.getElementById("bookCharSearch").value = "";
 
   if (bookId) {
     const b = books.find(item => item.id === bookId);
@@ -3002,6 +3039,7 @@ function openDocumentModal(docId = null, defaultBookId = "") {
   const charCb = document.getElementById("docCharCheckboxes");
   const factionCb = document.getElementById("docFactionCheckboxes");
   const bookSelect = document.getElementById("docBelongingBookId");
+  document.getElementById("docCharSearchEdit").value = "";
 
   bookSelect.innerHTML = `<option value="">(獨立文檔，不屬於書籍)</option>` + books.map(b => `<option value="${b.id}">${b.title}</option>`).join('');
 
@@ -3759,8 +3797,8 @@ function startVisualNovel(docId, withTransition = true, preserveHistory = false)
   }
 }
 
-function preloadVisualNovelCg(source) {
-  const url = String(source || "").trim();
+async function preloadVisualNovelCg(source) {
+  let url=String(source||'').trim();try{url=await window.OCVnAssets?.resolve?.(url)||url;}catch{return false;}
   if (!url || url.toLowerCase() === "none") return Promise.resolve(false);
   if (visualNovelCgPreloads.has(url)) return visualNovelCgPreloads.get(url);
   const promise = new Promise(resolve => {
@@ -3801,8 +3839,9 @@ function preloadVisualNovelAvatar(source) {
   return promise;
 }
 
-function preloadVisualNovelAudio(source) {
-  const url = normalizeVisualNovelAudioSource(source);
+async function preloadVisualNovelAudio(source) {
+  const original = normalizeVisualNovelAudioSource(source);
+  let url=original;try{url=await window.OCVnAssets?.resolve?.(original)||original;}catch{return false;}
   if (!url || url.toLowerCase() === "none") return Promise.resolve(false);
   if (visualNovelAudioPreloads.has(url)) return visualNovelAudioPreloads.get(url);
   const promise = new Promise(resolve => {
@@ -3873,10 +3912,10 @@ async function transitionVisualNovelCg(source) {
   const player = document.getElementById("vnPlayer");
   const cg = document.getElementById("vnCg");
   if (!player || !cg) return;
-  const url = String(source || "").trim();
+  const ref = String(source || "").trim();
   const requestToken = ++visualNovelCgRequestToken;
-  visualNovelPendingCgSource = url;
-  if (!url || url.toLowerCase() === "none") {
+  visualNovelPendingCgSource = ref;
+  if (!ref || ref.toLowerCase() === "none") {
     cg.querySelectorAll(".vn-cg-layer").forEach(layer => layer.classList.remove("active"));
     player.classList.add("no-cg");
     visualNovelActiveCgSource = "none";
@@ -3885,6 +3924,9 @@ async function transitionVisualNovelCg(source) {
   }
   const layers = cg.querySelectorAll(".vn-cg-layer");
   if (!layers.length) return;
+  let url;
+  try { url = await window.OCVnAssets?.resolve?.(ref) || ref; } catch(error) { console.warn('CG 素材讀取失敗',error); visualNovelPendingCgSource=''; return; }
+  if(requestToken!==visualNovelCgRequestToken)return;
   const nextIndex = layers.length > 1 ? 1 - visualNovelCgLayerIndex : 0;
   const next = layers[nextIndex];
   next.style.backgroundImage = `url("${url.replace(/"/g, '%22')}")`;
@@ -3892,11 +3934,11 @@ async function transitionVisualNovelCg(source) {
     preloadVisualNovelCg(url),
     new Promise(resolve => setTimeout(() => resolve(false), 1200))
   ]);
-  if (requestToken !== visualNovelCgRequestToken || visualNovelPendingCgSource !== url) return;
+  if (requestToken !== visualNovelCgRequestToken || visualNovelPendingCgSource !== ref) return;
   void next.offsetWidth;
   layers.forEach((layer, index) => layer.classList.toggle("active", index === nextIndex));
   visualNovelCgLayerIndex = nextIndex;
-  visualNovelActiveCgSource = loaded ? url : "";
+  visualNovelActiveCgSource = loaded ? ref : "";
   visualNovelPendingCgSource = "";
   player.classList.remove("no-cg");
 }
@@ -3946,6 +3988,9 @@ async function transitionVisualNovelBgm(src) {
   const source = normalizeVisualNovelAudioSource(src);
   visualNovelPendingBgmSource = source && source.toLowerCase() !== "none" ? source : "none";
   const token = ++visualNovelBgmFadeToken;
+  let playableSource=source;
+  if(source&&source.toLowerCase()!=="none")try{playableSource=await window.OCVnAssets?.resolve?.(source)||source;}catch(error){console.warn('BGM 素材讀取失敗',error);visualNovelPendingBgmSource='';return;}
+  if(token!==visualNovelBgmFadeToken)return;
   const statusButton = document.getElementById("vnAudioStatus");
   delete statusButton.dataset.retrySource;
   const targetVolume = Number.isFinite(Number(currentVisualNovelSettings.bgmVolume)) ? Number(currentVisualNovelSettings.bgmVolume) : 0.7;
@@ -3964,7 +4009,7 @@ async function transitionVisualNovelBgm(src) {
   }
   const nextIndex = visualNovelBgmChannelIndex === 0 ? 1 : 0;
   const next = channels[nextIndex];
-  next.pause(); next.src = source; next.dataset.source = source; next.volume = 0; next.muted = current.muted; next.load();
+  next.pause(); next.src = playableSource; next.dataset.source = source; next.volume = 0; next.muted = current.muted; next.load();
   let fileName = source.split('/').pop()?.split('?')[0] || "播放中";
   try { fileName = decodeURIComponent(fileName); } catch (error) {}
   document.querySelector("#vnAudioStatus span").textContent = `背景音樂：${fileName}`;
@@ -4088,7 +4133,7 @@ function stopVisualNovelSoundEffects() {
   });
 }
 
-function playVisualNovelAudio(type, src) {
+async function playVisualNovelAudio(type, src) {
   const source = normalizeVisualNovelAudioSource(src);
   if (type === "bgm") {
     transitionVisualNovelBgm(source);
@@ -4097,16 +4142,17 @@ function playVisualNovelAudio(type, src) {
   if (!source || source.toLowerCase() === "none") {
     stopVisualNovelSoundEffects(); return;
   }
+  let playableSource;try{playableSource=await window.OCVnAssets?.resolve?.(source)||source;}catch(error){console.warn('SE 素材讀取失敗',error);return;}
   unlockVisualNovelAudioContext();
   const se = acquireVisualNovelSeChannel();
   if (!se) return;
   const bgm = document.getElementById("vnBgmAudio");
   se.muted = !!bgm?.muted;
-  se.src = source; se.currentTime = 0; se.load();
+  se.src = playableSource; se.currentTime = 0; se.load();
   se.dataset.startedAt = String(performance.now());
   se.play().catch(async error => {
     console.warn("SE 首次播放失敗，等待載入後重試", error);
-    const intendedSource = source;
+    const intendedSource = playableSource;
     await preloadVisualNovelAudio(intendedSource);
     if (normalizeVisualNovelAudioSource(se.getAttribute("src")) !== intendedSource) return;
     unlockVisualNovelAudioContext();
@@ -4262,6 +4308,15 @@ function finishVisualNovelTyping(showFull = true) {
   return true;
 }
 
+function visualNovelReadableNameColor(color){
+  if(!/^#[0-9a-f]{6}$/i.test(String(color||'')))return '#d7a67d';
+  const rgb=[1,3,5].map(index=>parseInt(color.slice(index,index+2),16));
+  const luminance=values=>values.map(value=>{const channel=value/255;return channel<=.04045?channel/12.92:((channel+.055)/1.055)**2.4;}).reduce((sum,value,index)=>sum+value*[.2126,.7152,.0722][index],0);
+  for(let i=0;i<18&&luminance(rgb)>.45;i++)rgb.forEach((value,index)=>rgb[index]=Math.round(value*.93));
+  for(let i=0;i<18&&luminance(rgb)<.19;i++)rgb.forEach((value,index)=>rgb[index]=Math.round(value*.91+255*.09));
+  return `#${rgb.map(value=>value.toString(16).padStart(2,'0')).join('')}`;
+}
+
 function executeVisualNovelEvent(event) {
   const player = document.getElementById("vnPlayer");
   if (event.type === "blank") {
@@ -4306,6 +4361,7 @@ function executeVisualNovelEvent(event) {
 
   const speakerColor = currentVisualNovelSettings.useCharacterColors !== false && character?.themeColor?.primary
     ? character.themeColor.primary : "var(--vn-primary)";
+  const speakerTextColor=visualNovelReadableNameColor(currentVisualNovelSettings.useCharacterColors!==false&&character?.themeColor?.primary?character.themeColor.primary:currentVisualNovelSettings.primaryColor||'#d97706');
   const currentDoc=documents.find(item=>item.id===currentVisualNovelDocId),profile=currentDoc?.visualNovel?.characterProfiles?.find(item=>item.charId===character?.id);
   if(profile?.displayName)displaySpeaker=profile.displayName;
   const feed = document.getElementById("vnStoryFeed");
@@ -4325,6 +4381,7 @@ function executeVisualNovelEvent(event) {
     frame.appendChild(image);frame.title='在「編輯劇本模式」中雙擊／雙點校對這一句';
     const card = document.createElement("div"); card.className = "vn-feed-dialogue";
     card.style.setProperty("--speaker-color", speakerColor);
+    card.style.setProperty("--speaker-text-color",speakerTextColor);
     const name = document.createElement("strong"); name.textContent = displaySpeaker;
     const text = document.createElement("p"); dialogueTextElement = text;
     card.append(name, text); row.append(frame, card);bindVnSentenceEditorTarget(frame,row);bindVnSentenceEditorTarget(card,row);
@@ -4950,6 +5007,7 @@ function renderExportCharList() {
         <span>${c.name}</span>
       </label>
     `).join('');
+    window.OCFeatures?.filterChoices?.('exportCharSearch','exportCharList');
   }
 
   const rankContainer = document.getElementById("exportRankingList");
@@ -4980,6 +5038,10 @@ function selectAllExportChars(status) {
 async function generateExportText() {
   const mode = document.getElementById("exportModeSelect").value;
   let text = "";
+  if (mode === 'timelines_only') {
+    document.getElementById('exportPreviewArea').value = window.OCFeatures?.timelineText?.() || '';
+    return;
+  }
 
   const selectedCharIds = Array.from(document.querySelectorAll(".export-char-cb:checked")).map(cb => cb.value);
   const targetChars = characters.filter(c => selectedCharIds.includes(c.id));
@@ -5182,6 +5244,7 @@ async function generateExportText() {
     }
   }
 
+  if (mode === 'full' && document.getElementById('expIncTimelines')?.checked) text += '\n' + (window.OCFeatures?.timelineText?.() || '');
   const useAi = document.getElementById("expUseAiPolish").checked;
   if (useAi) {
     if (!deepseekSettings.apiKey) { alert("請填寫 DeepSeek API Key！"); }
@@ -5243,7 +5306,7 @@ function downloadExportPdf() {
 
 // ========== 12. 線上快照同步 ==========
 function openCloudSyncModal() {
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, visualNovelTemplates, customPresetAvatars, collapsedBooks, exportedAt: new Date().toISOString() };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, timelines, mediaLibrary, visualNovelTemplates, customPresetAvatars, collapsedBooks, exportedAt: new Date().toISOString() };
   const jsonStr = JSON.stringify(exportData);
   const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
   document.getElementById("cloudSyncStringArea").value = encoded;
@@ -5270,6 +5333,8 @@ function applyCloudSyncString() {
     if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
     if (data.books) books = data.books;
     if (data.documents) documents = data.documents;
+    if (Array.isArray(data.timelines)) timelines = data.timelines;
+    if (Array.isArray(data.mediaLibrary)) mediaLibrary = data.mediaLibrary;
     if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
     if (Array.isArray(data.customPresetAvatars)) customPresetAvatars = data.customPresetAvatars;
     if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
@@ -5296,7 +5361,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
+  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -5306,7 +5371,7 @@ function exportDataJson() {
 }
 
 function exportWorkshopDataJson() {
-  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
+  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'}));
   a.download = `人設卡工坊-${new Date().toISOString().slice(0,10)}.json`;
@@ -5342,6 +5407,8 @@ function applyWorkshopBackupData(data) {
   if (data.cps || data.couples) cps = normalizeCpCollection(data.cps || data.couples);
   if (data.books) books = data.books;
   if (data.documents) documents = data.documents;
+  if (Array.isArray(data.timelines)) timelines = data.timelines;
+  if (Array.isArray(data.mediaLibrary)) mediaLibrary = data.mediaLibrary;
   normalizeVisualNovelDocuments();
   if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
   if (typeof data.visualNovelTopDown === 'boolean') visualNovelTopDown = data.visualNovelTopDown;
@@ -5699,6 +5766,14 @@ function applyAdvancedImport() {
     charIds: remapImportIds(record.charIds, charIdMap),
     factionIds: remapImportIds(record.factionIds, factionIdMap)
   }), record => `${record.title}@@${record.bookId || "standalone"}`);
+  if(Array.isArray(data.timelines)){
+    const known=new Set(timelines.map(item=>String(item.id)));
+    data.timelines.forEach(raw=>{if(!raw?.id||known.has(String(raw.id)))return;timelines.push({...raw,factionId:factionIdMap.get(String(raw.factionId))??raw.factionId,events:(raw.events||[]).map(event=>({...event,charIds:remapImportIds(event.charIds,charIdMap)}))});known.add(String(raw.id));});
+  }
+  if(Array.isArray(data.mediaLibrary)){
+    const known=new Set(mediaLibrary.map(item=>String(item.id)));
+    data.mediaLibrary.forEach(raw=>{if(!raw?.id||known.has(String(raw.id)))return;mediaLibrary.push({...raw,charIds:remapImportIds(raw.charIds,charIdMap)});known.add(String(raw.id));});
+  }
   normalizeVisualNovelDocuments();
   (Array.isArray(data.documents) ? data.documents : []).forEach((raw, importedIndex) => {
     const mappedBookId = bookIdMap.get(String(raw.bookId)) ?? raw.bookId;
@@ -5735,6 +5810,7 @@ function openApiKeyModal() {
   document.getElementById("deepseekBaseUrl").value = deepseekSettings.baseUrl || "https://api.deepseek.com";
   document.getElementById("deepseekOcrPrompt").value = deepseekSettings.ocrPrompt || "";
   document.getElementById("apiKeyModal").classList.add("active");
+  window.OCFeatures?.populateApiSettings?.();
 }
 function toggleApiKeyVisibility() {
   const input = document.getElementById("deepseekApiKey");
@@ -5748,6 +5824,7 @@ function saveApiKeySettings() {
   deepseekSettings.apiKey = document.getElementById("deepseekApiKey").value.trim();
   deepseekSettings.baseUrl = document.getElementById("deepseekBaseUrl").value.trim();
   deepseekSettings.ocrPrompt = document.getElementById("deepseekOcrPrompt").value.trim();
+  if (window.OCFeatures?.saveApiSettings && !window.OCFeatures.saveApiSettings()) { alert("請輸入有效的 HTTPS Worker 網址。"); return; }
   saveStateToLocalStorage(); closeModal("apiKeyModal");
   alert("DeepSeek API 設定已套用！API Key 已保存在此瀏覽器，並會隨備份匯出，重新整理後不用重填。請妥善保管備份。");
 }
