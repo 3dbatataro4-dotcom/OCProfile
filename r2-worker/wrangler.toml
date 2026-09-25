@@ -1,0 +1,12 @@
+name = "oc-image-library"
+main = "src/index.js"
+compatibility_date = "2026-09-25"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "oc-image-library"
+
+[vars]
+ALLOWED_ORIGIN = "https://3dbatataro4-dotcom.github.io"
+SUPABASE_URL = "https://tblaedenqehnphnielce.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "sb_publishable_sU27YVhiCvgvm1u3pdAYZw_LWh3NKCP"
