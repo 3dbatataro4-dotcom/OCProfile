@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','visualNovelPreferences','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
+  const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','timelines','mediaLibrary','visualNovelTemplates','visualNovelPreferences','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
   const mapFields=new Set(['visualNovelPreferences','collapsedBooks','perspectiveTargets']);
   const banned=new Set(['apikey','apikeys','key','authorization','accesstoken','refreshtoken','password','secret','servicekey','servicerole','profiles','activeprofile','deepseeksettings','generation','session','sessions']);
   const clone=x=>JSON.parse(JSON.stringify(x));
@@ -28,7 +28,7 @@
   }
   function validate(payload){
     if(!payload||payload.format!=='oc-cloud-save'||payload.version!==1||!collections[payload.scope]||!payload.data)throw new Error('雲端存檔格式不正確。');
-    if(payload.scope==='workshop'&&payload.data.visualNovelPreferences===undefined)payload={...payload,data:{...payload.data,visualNovelPreferences:[]}};
+    if(payload.scope==='workshop')payload={...payload,data:{...payload.data,timelines:payload.data.timelines||[],mediaLibrary:payload.data.mediaLibrary||[],visualNovelPreferences:payload.data.visualNovelPreferences||[]}};
     if(payload.scope==='forum'){payload={...payload,data:{...payload.data}};for(const key of ['chatContacts','chats','chatMessages','loreEntries'])if(payload.data[key]===undefined)payload.data[key]=[];}
     if(payload.scope==='forum'&&payload.data.favoriteFolders===undefined)payload={...payload,data:{...payload.data,favoriteFolders:[]}};
     if(payload.scope==='forum'&&payload.data.tagCatalog===undefined)payload={...payload,data:{...payload.data,tagCatalog:[]}};
