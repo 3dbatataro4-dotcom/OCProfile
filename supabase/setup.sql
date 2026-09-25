@@ -153,7 +153,10 @@ begin
       if jsonb_typeof(item->'value') <> 'object' or item->'value'->>'id' <> item_id then raise exception 'INVALID_DELTA_VALUE'; end if;
       rows := rows || jsonb_build_array(item->'value');
     end if;
-    next_payload := jsonb_set(next_payload, array['data', group_name], rows, false);
+    -- Older snapshots may not contain groups introduced by a newer client.
+    -- Create the missing group while applying the first delta instead of
+    -- silently discarding the update.
+    next_payload := jsonb_set(next_payload, array['data', group_name], rows, true);
   end loop;
 
   for order_entry in select key, value from jsonb_each(p_delta->'orders') loop
@@ -165,7 +168,7 @@ begin
       from jsonb_array_elements_text(order_entry.value) with ordinality as wanted(id, ordinality)
       join jsonb_array_elements(rows) as existing(value) on existing.value->>'id' = wanted.id;
     if jsonb_array_length(ordered_rows) <> jsonb_array_length(rows) then raise exception 'INVALID_DELTA_ORDER'; end if;
-    next_payload := jsonb_set(next_payload, array['data', group_name], ordered_rows, false);
+    next_payload := jsonb_set(next_payload, array['data', group_name], ordered_rows, true);
   end loop;
 
   next_payload := jsonb_set(next_payload, '{note}', to_jsonb(left(coalesce(p_delta->>'note',''),16)), true);
