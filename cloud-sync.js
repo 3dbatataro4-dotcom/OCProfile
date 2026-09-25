@@ -12,17 +12,17 @@
   const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
   if(session&&(!session.user?.id||!session.access_token)){localStorage.removeItem(SESSION);session=null;}
-  const labels={chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',visualNovelPreferences:'視覺小說閱讀偏好',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
+  const labels={timelines:'故事時間線',mediaLibrary:'圖片圖庫',chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',visualNovelPreferences:'視覺小說閱讀偏好',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
   const baselineKey=scope=>`oc_cloud_base_${session.user.id}_${scope}`;
   const rememberRecovery=(scope,value)=>recoveryCopies.set(scope,C.clone?C.clone(value):JSON.parse(JSON.stringify(value)));
   const cacheBaseline=(scope,value)=>{try{(window.ocSafeSetLocalStorage||((key,data)=>localStorage.setItem(key,data)))(baselineKey(scope),JSON.stringify(value));}catch{localStorage.removeItem(baselineKey(scope));}};
-  function workshop(){return {characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,visualNovelPreferences:{topDown:visualNovelTopDown},customPresetAvatars,collapsedBooks,perspectiveTargets};}
+  function workshop(){return {characters,paros,factions,rankings,cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,visualNovelPreferences:{topDown:visualNovelTopDown},customPresetAvatars,collapsedBooks,perspectiveTargets};}
   function snapshot(scope){return scope==='forum'?OCForum.cloudSnapshot():C.snapshot(scope,workshop());}
-  function assign(d){({characters,paros,factions,rankings,cps,books,documents,visualNovelTemplates,customPresetAvatars=customPresetAvatars,collapsedBooks,perspectiveTargets}=d);if(typeof d?.visualNovelPreferences?.topDown==='boolean')visualNovelTopDown=d.visualNovelPreferences.topDown;}
+  function assign(d){({characters,paros,factions,rankings,cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,customPresetAvatars=customPresetAvatars,collapsedBooks,perspectiveTargets}=d);if(typeof d?.visualNovelPreferences?.topDown==='boolean')visualNovelTopDown=d.visualNovelPreferences.topDown;window.OCFeatures?.restoreMediaSettingsFromData?.();}
   function apply(payload){
     const data=C.source(payload);
     if(payload.scope==='forum')return OCForum.applyCloud(data);
-    const old=workshop(),keys=['oc_characters','oc_paros','oc_factions','oc_rankings','oc_cps','oc_books','oc_documents','oc_visual_novel_templates','oc_visual_novel_top_down','oc_collapsed_books','oc_perspective_targets'];
+    const old=workshop(),keys=['oc_characters','oc_paros','oc_factions','oc_rankings','oc_cps','oc_books','oc_documents','oc_timelines','oc_media_library','oc_visual_novel_templates','oc_visual_novel_top_down','oc_collapsed_books','oc_perspective_targets'];
     const stored=keys.map(k=>[k,localStorage.getItem(k)]);
     try{assign(data);normalizeVisualNovelDocuments();saveStateToLocalStorage();}catch(err){assign(old);for(const [k,v]of stored){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}throw err;}
     syncGlobalTags();renderAllViews();
@@ -172,6 +172,10 @@
         if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+'的本機資料已改變，請重新同步。');
         const upload=pending.direction==='upload';let uploaded=false;
         const effectiveNote=uploadNote||p.note;
+        if(upload&&p.scope==='workshop'){
+          const uploadedIds=await window.OCFeatures?.uploadPendingMedia?.()||[];
+          if(uploadedIds.length){const ids=new Set(uploadedIds);p.merged.data.mediaLibrary=p.merged.data.mediaLibrary.map(row=>ids.has(String(row.id))?{...row,localOnly:false}:row);}
+        }
         if(upload&&(!C.equal(p.merged,p.remote)||(uploadNote&&uploadNote!==p.note))){await pushEfficientSnapshot(p.scope,p.revision,p.remote,p.merged,effectiveNote);uploaded=true;const saved=await head(p.scope);cloudHeads[p.scope]=saved;if(!C.equal(saved.payload,p.merged))throw new Error(scopeNames[p.scope]+'上傳後的雲端內容與預期不同，未更動本機。若資料表設定較舊，請重新執行最新 supabase/setup.sql，再同步。');}
         if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+(uploaded?'已上傳，但本機有新修改，未覆蓋本機。':'的本機資料已改變。'));
         try{apply(p.merged);}catch(err){throw new Error(scopeNames[p.scope]+(uploaded?'已上傳，但本機套用失敗：':'套用失敗：')+err.message);}
