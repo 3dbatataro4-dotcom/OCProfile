@@ -1,5 +1,5 @@
-const CACHE_NAME = "oc-profile-app-v28.3-linked-timeline-manual-order";
-const APP_SHELL = ["./", "./index.html", "./style.css", "./app-drawer.css", "./app-drawer-enhancements.css", "./app-drawer.js", "./features.css", "./features-timeline.css", "./data.js", "./app.js", "./features.js", "./vn-assets.js", "./forum.css", "./forum-chat.css", "./forum-chat-core.js", "./forum-chat.js", "./forum.js", "./cloud-sync-core.js", "./cloud-sync.js", "./cloud-sync.css", "./manifest.webmanifest", "./app-icon-192.png", "./app-icon-512.png"];
+const CACHE_NAME = "oc-profile-app-v29.1-music-timeline";
+const APP_SHELL = ["./", "./index.html", "./style.css", "./app-drawer.css", "./app-drawer-enhancements.css", "./app-drawer.js", "./lottery.css", "./lottery.js", "./scoreboard.css", "./scoreboard.js", "./music.css", "./music-player-refresh.css", "./music.js", "./features.css", "./features-timeline.css", "./timeline-books.css", "./data.js", "./app.js", "./features.js", "./vn-assets.js", "./forum.css", "./forum-chat.css", "./forum-chat-core.js", "./forum-chat.js", "./forum.js", "./cloud-sync-core.js", "./cloud-sync.js", "./cloud-sync.css", "./manifest.webmanifest", "./app-icon-192.png", "./app-icon-512.png"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
