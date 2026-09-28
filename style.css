@@ -901,6 +901,48 @@ body.forum-entering #forum-root>.ff-top,body.forum-entering #forum-root>.ff-layo
   color: #ef4444;
 }
 
+/* Full-viewport mobile reading surfaces: avoid 100vw overflow and modal gutters. */
+@media (max-width: 760px) {
+  .doc-reader-backdrop.active,
+  .vn-player-backdrop.active {
+    position: fixed !important;
+    inset: 0 !important;
+    width: auto !important;
+    height: 100dvh !important;
+    min-height: 100svh !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+  .doc-reader-shell,
+  .vn-player {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 100svh !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .doc-reader-shell { height: 100dvh !important; min-height: 0 !important; }
+  .doc-reader-content {
+    width: 100% !important;
+    max-width: 820px;
+    box-sizing: border-box;
+    padding-left: max(.9rem, env(safe-area-inset-left));
+    padding-right: max(.9rem, env(safe-area-inset-right));
+  }
+  .vn-player-header { padding-left: max(.4rem, env(safe-area-inset-left)) !important; padding-right: max(.4rem, env(safe-area-inset-right)) !important; }
+  .vn-player-controls { width: 100% !important; max-width: none !important; }
+  .vn-story-feed, .vn-visual-area { min-width: 0; max-width: 100%; box-sizing: border-box; }
+}
+
 .rel-mobile-cards {
   display: none;
   flex-direction: column;
