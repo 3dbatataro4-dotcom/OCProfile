@@ -28,6 +28,7 @@ let deepseekSettings = {
 let currentTheme = 'dark';
 let currentRelViewMode = 'matrix';
 let appTabHistory = [];
+let expandedCharacterCards = new Set();
 const appBackSessionId = Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 function escapeHtml(str) {
@@ -472,16 +473,17 @@ function renderCharacterCards() {
     return matchSearch && matchTag;
   }).sort((a,b)=>{const direction=document.getElementById('characterSort')?.value==='old'?1:-1;return direction*((Number(a.createdAt)||0)-(Number(b.createdAt)||0));});
 
-  activeGrid.innerHTML = filteredActive.length ? filteredActive.map(c => createCharacterCardHtml(c)).join('') : 
+  activeGrid.innerHTML = filteredActive.length ? filteredActive.map(c => createCharacterCardHtml(c, false, expandedCharacterCards.has(c.id))).join('') : 
     `<div class="empty-state"><p>沒有角色。點擊「新建角色」建立新卡片！</p></div>`;
 
-  hiddenGrid.innerHTML = hiddenChars.length ? hiddenChars.map(c => createCharacterCardHtml(c, true)).join('') : 
+  hiddenGrid.innerHTML = hiddenChars.length ? hiddenChars.map(c => createCharacterCardHtml(c, true, expandedCharacterCards.has(c.id))).join('') : 
     `<div class="empty-state"><p>目前沒有草稿或隱藏的角色。</p></div>`;
 
+  updateCharacterDetailsToggle();
   updateBadges();
 }
 
-function createCharacterCardHtml(char) {
+function createCharacterCardHtml(char, isHidden = false, expanded = false) {
   const theme = char.themeColor || { primary: "#d97706", secondary: "#78350f", mode: "gradient" };
   const themeBg = theme.mode === 'gradient' ? 
     `linear-gradient(90deg, ${theme.primary}, ${theme.secondary})` : theme.primary;
@@ -489,7 +491,7 @@ function createCharacterCardHtml(char) {
   const tagsHtml = (char.tags || []).map(t => `<span class="tag-pill">${t}</span>`).join('');
 
   return `
-    <div class="char-card" style="--char-theme-primary:${theme.primary}; --char-theme-secondary:${theme.secondary}; --char-theme-bg:${themeBg};">
+    <div class="char-card${expanded ? ' details-expanded' : ''}" data-character-card="${char.id}" style="--char-theme-primary:${theme.primary}; --char-theme-secondary:${theme.secondary}; --char-theme-bg:${themeBg};">
       <div class="char-theme-cover" aria-hidden="true"></div>
       <div class="char-card-header">
         <div class="char-avatar-wrapper">
@@ -506,6 +508,7 @@ function createCharacterCardHtml(char) {
           ${char.occupation ? `<div class="char-meta-row" style="margin-top:0.2rem;"><span class="char-meta-item"><i class="fa-solid fa-briefcase"></i> ${char.occupation}</span></div>` : ''}
           ${char.fixedCp ? `<div class="char-meta-row char-cp-row"><span class="char-meta-item"><i class="fa-solid fa-heart"></i> CP: ${char.fixedCp}</span></div>` : ''}
         </div>
+        <button type="button" class="char-card-details-toggle" onclick="toggleCharacterCardDetails('${char.id}')" aria-expanded="${expanded}" aria-label="${expanded ? '收起' : '展開'}${char.name}的完整人物設定" title="${expanded ? '收起完整人物' : '展開完整人物'}"><i class="fa-solid fa-chevron-down"></i></button>
       </div>
 
       <div class="char-card-body">
@@ -562,6 +565,46 @@ function createCharacterCardHtml(char) {
       </div>
     </div>
   `;
+}
+
+function toggleCharacterCardDetails(charId) {
+  if (expandedCharacterCards.has(charId)) expandedCharacterCards.delete(charId);
+  else expandedCharacterCards.add(charId);
+  const card = document.querySelector(`[data-character-card="${CSS.escape(charId)}"]`);
+  if (!card) return;
+  const expanded = expandedCharacterCards.has(charId);
+  card.classList.toggle('details-expanded', expanded);
+  const button = card.querySelector('.char-card-details-toggle');
+  if (button) {
+    button.setAttribute('aria-expanded', String(expanded));
+    button.setAttribute('aria-label', `${expanded ? '收起' : '展開'}${card.querySelector('.char-name')?.textContent?.trim() || '人物'}的完整人物設定`);
+    button.title = expanded ? '收起完整人物' : '展開完整人物';
+  }
+  updateCharacterDetailsToggle();
+}
+
+function toggleAllCharacterCardDetails() {
+  const ids = characters.map(char => char.id);
+  const shouldExpand = ids.some(id => !expandedCharacterCards.has(id));
+  expandedCharacterCards = shouldExpand ? new Set(ids) : new Set();
+  document.querySelectorAll('[data-character-card]').forEach(card => {
+    const expanded = expandedCharacterCards.has(card.dataset.characterCard);
+    card.classList.toggle('details-expanded', expanded);
+    const button = card.querySelector('.char-card-details-toggle');
+    if (button) {
+      button.setAttribute('aria-expanded', String(expanded));
+      button.title = expanded ? '收起完整人物' : '展開完整人物';
+    }
+  });
+  updateCharacterDetailsToggle();
+}
+
+function updateCharacterDetailsToggle() {
+  const button = document.getElementById('toggleAllCharacterDetails');
+  if (!button) return;
+  const allExpanded = characters.length > 0 && characters.every(char => expandedCharacterCards.has(char.id));
+  button.innerHTML = allExpanded ? '<i class="fa-solid fa-angles-up"></i> 全部收起詳情' : '<i class="fa-solid fa-angles-down"></i> 全部展開詳情';
+  button.setAttribute('aria-pressed', String(allExpanded));
 }
 
 function toggleHideCharacter(charId) {
@@ -5928,17 +5971,17 @@ function setupEventListeners() {
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)ensureBackGuard();});
     window.addEventListener('popstate',()=>{
       const active=[...document.querySelectorAll('.modal-backdrop.active')].filter(node=>getComputedStyle(node).display!=='none').at(-1);
-      let handled=false;
-      if(active){
+      let handled=window.OCApps?.handleBack?.()||false;
+      if(!handled&&active){
         handled=true;
         if(active.id==='visualNovelPlayerModal')closeVisualNovelPlayer();
         else if(active.id==='documentReaderModal')closeModal('documentReaderModal',true);
         else if(active.id==='vnSpeakerEditorModal')closeVnSpeakerEditor();
         else if(active.id==='vnCharacterProfilesModal'||active.id==='vnProfileAvatarPickerModal')active.remove();
         else closeModal(active.id);
-      }else if(document.body.classList.contains('forum-open')&&window.OCForum?.handleBack){
+      }else if(!handled&&document.body.classList.contains('forum-open')&&window.OCForum?.handleBack){
         handled=window.OCForum.handleBack();
-      }else if(document.querySelector('.tab-content.active')?.id!=='tab-cards'){
+      }else if(!handled&&document.querySelector('.tab-content.active')?.id!=='tab-cards'){
         handled=true;
         let target='tab-cards';
         while(appTabHistory.length){const candidate=appTabHistory.pop();if(candidate&&candidate!=='tab-forum'){target=candidate;break;}}
