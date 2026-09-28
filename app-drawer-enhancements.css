@@ -32,3 +32,5 @@
 .embedded-application iframe{grid-row:1/-1}
 @media(max-width:760px){.app-editor-form{grid-template-columns:minmax(0,1fr)}.app-editor-form label:nth-of-type(2),.app-editor-form .app-back-preference,.app-editor-actions{grid-column:1}.app-back-preference{width:100%}.application-app-edit-actions{gap:.32rem;margin:-.2rem 0 .1rem}.application-app-edit-actions button{width:32px;height:32px}}
 @media(prefers-reduced-motion:reduce){.application-app-edit-actions button,.app-back-preference>span::before,.app-back-preference>span::after,.embedded-app-header{transition:none!important}}
+.app-music-icon{color:#fff;font-size:1.8rem;background:linear-gradient(145deg,#b97877,#7b7399 58%,#415f78)}
+.app-music-icon b{position:absolute;right:8px;top:5px;color:#ffe3c7;font-size:.9rem}
