@@ -4,7 +4,10 @@
   const KEY='oc_application_drawer_v1';
   const $=id=>document.getElementById(id);
   const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  const forumApp={id:'oc-forum',name:'同人論壇',kind:'internal',icon:'fa-comments',subtitle:'角色與故事交流',order:0,persistentBack:false};
+  const forumApp={id:'oc-forum',name:'同人論壇',kind:'internal',icon:'fa-comments',subtitle:'虛擬論壇',order:0,persistentBack:false};
+  const lotteryApp={id:'oc-lottery',name:'星願召喚',kind:'internal',icon:'fa-dice',subtitle:'人物抽獎',order:1,persistentBack:false};
+  const scoreApp={id:'oc-scoreboard',name:'人物記分板',kind:'internal',icon:'fa-list-ol',subtitle:'人物計分',order:2,persistentBack:false};
+  const musicApp={id:'oc-music',name:'音樂媒體',kind:'internal',icon:'fa-headphones',subtitle:'音樂與 MV',order:3,persistentBack:false};
   let apps=[];
   let drawerOpen=false;
   let embeddedOpen=false;
@@ -14,13 +17,13 @@
   let previewToken=0;
   function safeApps(input){
     const rows=Array.isArray(input)?input:[];
-    const internal=rows.find(item=>item?.id===forumApp.id);
-    const normalized=[{...forumApp,order:Number.isFinite(Number(internal?.order))?Number(internal.order):0,persistentBack:!!internal?.persistentBack},...rows.filter(item=>item&&item.id!==forumApp.id&&typeof item.name==='string'&&typeof item.url==='string').map((item,index)=>({id:String(item.id),name:item.name.trim().slice(0,40),url:item.url,category:typeof item.category==='string'?item.category.trim().slice(0,30):'',iconUrl:typeof item.iconUrl==='string'?item.iconUrl:'',faviconUrl:typeof item.faviconUrl==='string'?item.faviconUrl:'',persistentBack:!!item.persistentBack,order:Number.isFinite(Number(item.order))?Number(item.order):index+1})).filter(item=>item.name&&validUrl(item.url))];
+    const internalApps=[forumApp,lotteryApp,scoreApp,musicApp],internalIds=new Set(internalApps.map(item=>item.id));
+    const normalized=[...internalApps.map((base,index)=>{const saved=rows.find(item=>item?.id===base.id);return {...base,order:saved&&Number.isFinite(Number(saved.order))?Number(saved.order):index,persistentBack:!!saved?.persistentBack};}),...rows.filter(item=>item&&!internalIds.has(item.id)&&typeof item.name==='string'&&typeof item.url==='string').map((item,index)=>({id:String(item.id),name:item.name.trim().slice(0,40),url:item.url,category:typeof item.category==='string'?item.category.trim().slice(0,30):'',iconUrl:typeof item.iconUrl==='string'?item.iconUrl:'',faviconUrl:typeof item.faviconUrl==='string'?item.faviconUrl:'',persistentBack:!!item.persistentBack,order:Number.isFinite(Number(item.order))?Number(item.order):index+3})).filter(item=>item.name&&validUrl(item.url))];
     return normalized.sort((a,b)=>a.order-b.order).map((item,index)=>({...item,order:index}));
   }
   function validUrl(value){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol);}catch{return false;}}
   function settingsRow(){return Array.isArray(mediaLibrary)?mediaLibrary.find(item=>item?.kind==='settings'&&item.id==='__oc_media_settings__'):null;}
-  function load(){try{const saved=settingsRow()?.applicationApps??localStorage.getItem(KEY)??'[]';apps=safeApps(Array.isArray(saved)?saved:JSON.parse(saved));}catch{apps=[forumApp];}}
+  function load(){try{const saved=settingsRow()?.applicationApps??localStorage.getItem(KEY)??'[]';apps=safeApps(Array.isArray(saved)?saved:JSON.parse(saved));}catch{apps=safeApps([]);}}
   function persist(){apps=safeApps(apps);const row=settingsRow()||{id:'__oc_media_settings__',kind:'settings'};if(!settingsRow())mediaLibrary.push(row);row.applicationApps=apps;try{saveStateToLocalStorage();}catch(error){alert('應用已暫存於本頁，但瀏覽器儲存空間不足；請先匯出人設卡備份。');}try{localStorage.setItem(KEY,JSON.stringify(apps));}catch{}}
   function fallbackIcon(url){try{return `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(new URL(url).origin)}&sz=128`;}catch{return '';}}
   async function discoverLinkedIcon(url){
@@ -39,13 +42,16 @@
   }
   async function resolveIcon(url,custom=''){if(custom&&validUrl(custom))return custom;return await discoverLinkedIcon(url)||(()=>{try{return new URL('/favicon.ico',url).href;}catch{return fallbackIcon(url);}})();}
   function iconMarkup(app){
-    if(app.kind==='internal')return '<span class="app-tile-icon app-forum-icon"><i class="fa-solid fa-comments"></i><b>✦</b></span>';
+    if(app.id===forumApp.id)return '<span class="app-tile-icon app-forum-icon"><i class="fa-solid fa-comments"></i><b>✦</b></span>';
+    if(app.id===lotteryApp.id)return '<span class="app-tile-icon app-lottery-icon"><i class="fa-solid fa-dice-d20"></i><b>✧</b></span>';
+    if(app.id===scoreApp.id)return '<span class="app-tile-icon app-score-icon"><i class="fa-solid fa-ranking-star"></i><b>＋</b></span>';
+    if(app.id===musicApp.id)return '<span class="app-tile-icon app-music-icon"><i class="fa-solid fa-headphones"></i><b>♫</b></span>';
     const source=app.iconUrl||app.faviconUrl||(()=>{try{return new URL('/favicon.ico',app.url).href;}catch{return '';}})();
     const fallback=fallbackIcon(app.url);
     return `<span class="app-tile-icon app-site-icon"><img src="${esc(source||fallback)}" alt="" loading="lazy" onerror="OCApps.faviconError(this,'${esc(fallback)}')"><i class="fa-solid fa-globe"></i></span>`;
   }
   function render(){
-    $('applicationAppGrid').innerHTML=apps.map((app,index)=>`<article class="application-app-tile" data-app-id="${esc(app.id)}" style="--app-stagger:${Math.min(index,12)*35}ms"><button type="button" class="application-app-launch" onclick="OCApps.launch('${esc(app.id)}')" aria-label="開啟${esc(app.name)}">${iconMarkup(app)}<strong>${esc(app.name)}</strong><small>${esc(app.kind==='internal'?'論壇入口':(app.category||'網址應用'))}</small></button>${managerOpen?`<div class="application-app-edit-actions"><button type="button" class="app-order-handle" aria-label="拖曳排序${esc(app.name)}" title="按住拖曳排序（鍵盤可用上下方向鍵）"><i class="fa-solid fa-grip-vertical"></i></button>${app.kind!=='internal'?`<button type="button" onclick="OCApps.editApp('${esc(app.id)}')" aria-label="編輯${esc(app.name)}" title="編輯"><i class="fa-solid fa-pen"></i></button><button type="button" onclick="OCApps.deleteApp('${esc(app.id)}')" aria-label="刪除${esc(app.name)}" title="刪除"><i class="fa-solid fa-trash"></i></button>`:''}</div>`:''}</article>`).join('')+(managerOpen?'<button type="button" class="application-add-tile" onclick="OCApps.resetEditor()"><span><i class="fa-solid fa-plus"></i></span><strong>新增網址應用</strong><small>加入另一個創作工具</small></button>':'');
+    $('applicationAppGrid').innerHTML=apps.map((app,index)=>`<article class="application-app-tile" data-app-id="${esc(app.id)}" style="--app-stagger:${Math.min(index,12)*35}ms"><button type="button" class="application-app-launch" onclick="OCApps.launch('${esc(app.id)}')" aria-label="開啟${esc(app.name)}">${iconMarkup(app)}<strong>${esc(app.name)}</strong><small>${esc(app.kind==='internal'?app.subtitle:(app.category||'網址應用'))}</small></button>${managerOpen?`<div class="application-app-edit-actions"><button type="button" class="app-order-handle" aria-label="拖曳排序${esc(app.name)}" title="按住拖曳排序（鍵盤可用上下方向鍵）"><i class="fa-solid fa-grip-vertical"></i></button>${app.kind!=='internal'?`<button type="button" onclick="OCApps.editApp('${esc(app.id)}')" aria-label="編輯${esc(app.name)}" title="編輯"><i class="fa-solid fa-pen"></i></button><button type="button" onclick="OCApps.deleteApp('${esc(app.id)}')" aria-label="刪除${esc(app.name)}" title="刪除"><i class="fa-solid fa-trash"></i></button>`:''}</div>`:''}</article>`).join('')+(managerOpen?'<button type="button" class="application-add-tile" onclick="OCApps.resetEditor()"><span><i class="fa-solid fa-plus"></i></span><strong>新增網址應用</strong><small>加入另一個創作工具</small></button>':'');
     $('applicationManager').hidden=!managerOpen;
     $('applicationDrawer').classList.toggle('is-managing',managerOpen);
     $('applicationDrawer').setAttribute('aria-hidden',String(!drawerOpen));
@@ -78,7 +84,7 @@
   async function saveApp(){const name=$('appEditorName').value.trim(),url=$('appEditorUrl').value.trim(),category=$('appEditorCategory').value.trim().slice(0,30),iconUrl=$('appEditorIcon').value.trim(),persistentBack=$('appEditorPersistentBack').checked,id=$('appEditorId').value;if(!name)return alert('請輸入應用名稱。');if(!validUrl(url))return alert('請輸入有效的 HTTP 或 HTTPS 網址。');if(iconUrl&&!validUrl(iconUrl))return alert('圖示網址需使用 HTTP 或 HTTPS。');const old=apps.find(app=>app.id===id);const app={id:old?.id||`app_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`,name,url,category,iconUrl,faviconUrl:iconUrl?'':await resolveIcon(url),persistentBack,order:old?.order??apps.length};apps=old?apps.map(row=>row.id===id?app:row):[...apps,app];persist();render();resetEditor();$('applicationManager').scrollIntoView({behavior:'smooth',block:'start'});}
   function deleteApp(id){const app=apps.find(row=>row.id===id&&row.kind!=='internal');if(!app||!confirm(`刪除「${app.name}」這個應用捷徑？`))return;apps=apps.filter(row=>row.id!==id);persist();if($('appEditorId').value===id)resetEditor();render();}
   function launchUrl(id,name,url){if(!validUrl(url))return alert('這個應用網址無效，請在「管理應用」中修改。');activeAppId=id;embeddedOpen=true;$('embeddedAppName').textContent=name||'應用';$('embeddedAppExternal').href=url;try{history.pushState({ocEmbeddedApp:true},'',''+location.pathname+location.search+'#oc-app-embed');}catch{}render();const frame=$('embeddedAppFrame');frame.src='about:blank';requestAnimationFrame(()=>{if(embeddedOpen&&activeAppId===id)frame.src=url;});}
-  function launch(id){const app=apps.find(row=>row.id===id);if(!app)return;if(app.kind==='internal'){closeDrawer();window.OCForum?.open?.();return;}launchUrl(app.id,app.name,app.url);}
+  function launch(id){const app=apps.find(row=>row.id===id);if(!app)return;if(app.id===forumApp.id){closeDrawer();window.OCForum?.open?.();return;}if(app.id===lotteryApp.id){closeDrawer();window.OCLottery?.open?.();return;}if(app.id===scoreApp.id){closeDrawer();window.OCScoreboard?.open?.();return;}if(app.id===musicApp.id){closeDrawer();window.OCMusic?.open?.();return;}launchUrl(app.id,app.name,app.url);}
   function launchEditorApp(){const id=$('appEditorId').value;if(!id)return;launchUrl(id,$('appEditorName').value.trim(),$('appEditorUrl').value.trim());}
   function revealBackBar(){const overlay=$('embeddedApplication');if(!embeddedOpen||overlay.classList.contains('has-persistent-back'))return;overlay.classList.add('is-back-revealed');clearTimeout(revealTimer);revealTimer=setTimeout(()=>overlay.classList.remove('is-back-revealed'),3600);}
   function closeEmbedded(fromBack=false){if(!embeddedOpen)return;embeddedOpen=false;activeAppId='';clearTimeout(revealTimer);$('embeddedAppFrame').src='about:blank';if(!fromBack)replaceWithGuard();render();}
