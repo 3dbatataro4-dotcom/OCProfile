@@ -2869,6 +2869,7 @@ function renderDocumentsModule() {
   const selectedTag = document.getElementById("docTagFilter") ? document.getElementById("docTagFilter").value : "";
 
   const filterFn = (doc) => {
+    if (doc.hideFromDocuments) return false;
     const matchSearch = !searchKeyword || doc.title.toLowerCase().includes(searchKeyword) || (doc.content && doc.content.toLowerCase().includes(searchKeyword));
     const matchChar = selectedCharId ? (doc.charIds || []).includes(selectedCharId) : !typedChar || (doc.charIds || []).some(id=>String(characters.find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
     const matchFaction = !selectedFactionId || (doc.factionIds || []).includes(selectedFactionId);
@@ -2882,6 +2883,7 @@ function renderDocumentsModule() {
 
   const filtersActive = !!(searchKeyword || selectedCharId || typedChar || selectedFactionId || selectedTag);
   const visibleBooks = books.filter(book => {
+    if (book.hideFromDocuments) return false;
     if (!filtersActive) return true;
     const bookSearch = !searchKeyword || `${book.title || ''} ${book.description || ''}`.toLowerCase().includes(searchKeyword);
     const bookChar = selectedCharId ? (book.charIds || []).includes(selectedCharId) : !typedChar || (book.charIds || []).some(id=>String(characters.find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
@@ -2896,7 +2898,7 @@ function renderDocumentsModule() {
       (!selectedCharId || (book.charIds || []).includes(selectedCharId)) &&
       (!selectedFactionId || (book.factionIds || []).includes(selectedFactionId)) &&
       (!selectedTag || (book.tags || []).includes(selectedTag));
-    const bookDocs = (bookDirectMatch ? documents : filteredDocs).filter(d => d.bookId === book.id).sort(sortByTitle);
+    const bookDocs = (bookDirectMatch ? documents.filter(d => !d.hideFromDocuments) : filteredDocs).filter(d => d.bookId === book.id).sort(sortByTitle);
     const bookCharacterCount = documents.filter(d => d.bookId === book.id).reduce((total, doc) => total + countDocumentBodyCharacters(doc), 0);
     const isCollapsed = !!collapsedBooks[book.id];
     const memberChars = (book.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
@@ -3051,7 +3053,8 @@ function saveBookForm() {
     description: document.getElementById("bookDescription").value.trim(),
     charIds: checkedCharIds,
     factionIds: checkedFactionIds,
-    tags: document.getElementById("bookTags").value.split(',').map(t => t.trim()).filter(Boolean)
+    tags: document.getElementById("bookTags").value.split(',').map(t => t.trim()).filter(Boolean),
+    hideFromDocuments: id ? !!books.find(b => b.id === id)?.hideFromDocuments : false
   };
 
   if (id) {
@@ -3071,6 +3074,7 @@ function deleteBook(bookId) {
   if (confirm("確定要刪除此書籍資料夾嗎？（所屬文檔將轉為獨立文檔）")) {
     books = books.filter(b => b.id !== bookId);
     documents.forEach(d => { if (d.bookId === bookId) d.bookId = null; });
+    timelines.forEach(timeline => { if (Array.isArray(timeline.linkedBookIds)) timeline.linkedBookIds = timeline.linkedBookIds.filter(id => id !== bookId); });
     saveStateToLocalStorage();
     renderDocumentsModule();
   }
@@ -3176,7 +3180,13 @@ function changeReaderFontSize(delta) {
 
 function openCurrentReaderDocumentEditor() {
   if (!currentReadingDocId) return;
+  const timelineReading = document.getElementById("documentReaderModal")?.classList.contains("timeline-themed-reader");
   closeModal("documentReaderModal");
+  if (timelineReading) {
+    const editor = document.getElementById("documentModal");
+    document.getElementById("timelineBooksModal")?.after(editor);
+    editor.style.zIndex = "1040";
+  }
   openDocumentModal(currentReadingDocId);
 }
 
@@ -3196,6 +3206,7 @@ function saveDocumentForm() {
     factionIds: checkedFactionIds,
     tags: document.getElementById("docTags").value.split(',').map(t => t.trim()).filter(Boolean),
     content: document.getElementById("docContent").value.trim(),
+    hideFromDocuments: id ? !!documents.find(d => d.id === id)?.hideFromDocuments : false,
     visualNovel: id ? documents.find(d => d.id === id)?.visualNovel : undefined
   };
 
@@ -5972,6 +5983,9 @@ function setupEventListeners() {
     window.addEventListener('popstate',()=>{
       const active=[...document.querySelectorAll('.modal-backdrop.active')].filter(node=>getComputedStyle(node).display!=='none').at(-1);
       let handled=window.OCApps?.handleBack?.()||false;
+      if(!handled)handled=window.OCLottery?.handleBack?.()||false;
+      if(!handled)handled=window.OCMusic?.handleBack?.()||false;
+      if(!handled)handled=window.OCScoreboard?.handleBack?.()||false;
       if(!handled&&active){
         handled=true;
         if(active.id==='visualNovelPlayerModal')closeVisualNovelPlayer();
