@@ -3,6 +3,7 @@
 .lottery-app{position:fixed;inset:0;z-index:3300;padding:clamp(0px,1.8vw,18px);background:rgba(22,17,21,.58);backdrop-filter:blur(14px);color:var(--text-main)}
 body.lottery-open{overflow:hidden}
 .lottery-shell{display:flex;flex-direction:column;width:min(1160px,100%);height:100%;margin:auto;overflow:hidden;border:1px solid color-mix(in srgb,var(--accent-gold) 26%,var(--border-color));border-radius:28px;background:var(--bg-secondary);box-shadow:0 26px 90px #140d163d;animation:lottery-enter .48s cubic-bezier(.2,.8,.2,1) both}
+.lottery-app:not([hidden]) .lottery-shell{position:relative;inset:auto;transform:none;min-height:0}.lottery-scroll{min-height:0}.lottery-pool-layout>.lottery-card{min-width:0;align-self:start}.lottery-pool-grid{overscroll-behavior:contain;scrollbar-gutter:stable}
 @keyframes lottery-enter{from{opacity:0;transform:translateY(20px) scale(.985)}to{opacity:1;transform:none}}
 .lottery-header{display:flex;align-items:center;gap:1rem;min-height:84px;padding:1rem clamp(1rem,3vw,2rem);border-bottom:1px solid var(--border-color);background:color-mix(in srgb,var(--bg-card) 90%,#fff)}
 .lottery-back,.lottery-music,.lottery-theme,.lottery-nav button,.lottery-card button,.lottery-history-head button,.lottery-collection-toolbar button,.lottery-load-more{font:inherit;cursor:pointer}
