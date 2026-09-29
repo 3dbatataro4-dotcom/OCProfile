@@ -1,6 +1,18 @@
 /* Cover-led mobile player, with a dedicated quiet lyric surface. */
 .music-edit-lyrics{display:inline-flex;align-items:center;gap:.35rem;margin-top:.7rem;padding:.42rem .6rem;border:1px solid currentColor;border-radius:99px;background:#ffffff16;color:inherit;font:600 .67rem Inter,"Noto Sans TC",sans-serif;cursor:pointer;opacity:.8}
 .music-edit-lyrics:hover{opacity:1;background:#ffffff2a}
+.music-form .music-multi-option{display:flex;grid-template-columns:none;align-items:center;gap:.65rem;min-height:42px;padding:.42rem .65rem;line-height:1.35}
+.music-form .music-multi-option input{flex:none;margin:0}
+.music-form .music-multi-option span{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.music-playlist-dialog{width:min(620px,100%);min-height:min(620px,82dvh)}
+.music-playlist-dialog .music-dialog-body{display:flex;flex-direction:column;justify-content:center;padding:clamp(1.3rem,6vw,2.5rem)}
+.music-playlist-dialog .music-form{gap:1.25rem}
+.music-playlist-dialog .music-multi-options{max-height:min(42dvh,350px)}
+.music-video-projects{display:flex;gap:.45rem;margin:.75rem 0 1rem;overflow:auto;padding:.15rem .1rem .45rem;scrollbar-width:none}
+.music-video-projects button{flex:none;padding:.4rem .72rem;border:1px solid var(--m-line);border-radius:99px;color:var(--m-muted);background:var(--m-panel);font:600 .68rem Inter,"Noto Sans TC",sans-serif;cursor:pointer}
+.music-video-projects button.is-active{border-color:var(--m-accent);color:var(--m-text);background:color-mix(in srgb,var(--m-accent) 16%,var(--m-panel))}
+.music-player-mv-button{display:inline-flex;align-items:center;gap:.45rem;margin-top:.7rem;padding:.45rem .75rem;border:1px solid #ffffff55;border-radius:99px;color:#fff;background:#ffffff18;font:600 .72rem Inter,"Noto Sans TC",sans-serif;cursor:pointer;backdrop-filter:blur(10px)}
+.music-player-mv-button:hover{background:#ffffff32}
 .music-lyrics-line{padding:.2rem .5rem;will-change:color,transform}
 .music-lyrics-line.is-current{font-weight:800}
 .music-lyrics-scene .music-full-lyrics{display:block;min-height:0;overflow:auto;scrollbar-width:none}
@@ -22,16 +34,19 @@
   .music-immersive .music-full-player{position:relative;display:block;width:100%;height:100%;min-height:0!important;max-width:none;margin:0!important;padding:0!important;border:0;border-radius:0;background:#1a1019;overflow:hidden}
   .music-immersive .music-full-player:before{display:none}
   .music-immersive .music-full-player>.music-back-link{position:absolute;z-index:9;top:calc(69px + env(safe-area-inset-top));left:1.1rem;padding:.3rem .55rem;color:#fff;font-size:.72rem;text-shadow:0 1px 8px #0009}
-  .music-immersive .music-full-player-art{position:absolute!important;z-index:0;inset:0;display:block;width:100%!important;height:100%!important;max-height:none!important;aspect-ratio:auto;overflow:hidden;border:0;border-radius:0!important;box-shadow:none!important;background:var(--music-gradient)}
-  .music-immersive .music-full-player-art img{width:100%;height:100%;object-fit:cover;object-position:center center}
-  .music-immersive .music-full-player-art:after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,#120a1530 0%,transparent 35%,#1a0d1a4d 54%,#160b18e8 82%,#160b18 100%);pointer-events:none}
-  .music-immersive .music-full-player-art>span{z-index:2;bottom:36%;padding:.3rem;color:#fffe;background:none;text-align:center;font-size:.7rem;text-shadow:0 1px 8px #000a;opacity:.8}
+  .music-immersive .music-full-player-art{position:absolute!important;z-index:1;top:47%;left:50%;right:auto;bottom:auto;display:grid;width:min(86vw,max(180px,calc(100dvh - 440px)))!important;height:auto!important;max-height:min(48dvh,max(180px,calc(100dvh - 420px)))!important;aspect-ratio:1;overflow:hidden;border:0;border-radius:20px!important;box-shadow:0 18px 42px #0008!important;background:var(--music-gradient);transform:translate(-50%,-50%)}
+  .music-immersive .music-full-player-art{left:50%;margin-inline:auto;object-position:center}
+  .music-immersive .music-full-player-art img{width:100%;height:100%;object-fit:cover;object-position:50% 50%}
+  .music-immersive .music-full-player>.music-back-link{z-index:9;justify-self:start;min-height:34px;padding:.35rem .7rem;border:1px solid #ffffff2c;border-radius:99px;background:#170e1b88;color:#fff;font-size:.72rem;backdrop-filter:blur(12px)}
+  .music-immersive .music-full-player-art:after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,#120a1510 0%,transparent 52%,#160b186d 100%);pointer-events:none}
+  .music-immersive .music-full-player-art>span{z-index:2;bottom:0;padding:.55rem;color:#fffe;background:linear-gradient(transparent,#0008);text-align:center;font-size:.7rem;text-shadow:0 1px 8px #000a;opacity:.85}
   .music-immersive .music-full-player-info{position:absolute!important;z-index:3;left:0;right:0;bottom:0;display:block;width:100%;padding:1.6rem clamp(1.25rem,6vw,2rem) 1.15rem;color:#fff;text-align:left}
   .music-immersive .music-full-player-info>small{display:none}
   .music-immersive .music-full-player-info h1{margin:0 0 .25rem;color:#fff;font:700 clamp(1.35rem,6vw,1.9rem) Inter,"Noto Sans TC",sans-serif;letter-spacing:-.02em;text-shadow:0 2px 12px #0009}
   .music-immersive .music-full-player-info p{margin:0;color:#f5e7eece;font-size:.82rem;text-shadow:0 1px 8px #0009}
   .music-immersive .music-edit-lyrics{margin-top:.5rem;padding:.2rem 0;border:0;background:none;color:#fff;font-size:.65rem;opacity:.68}
   .music-immersive .music-edit-lyrics:hover{background:none;opacity:1}
+  .music-immersive .music-player-mv-button{padding:.35rem .65rem;font-size:.66rem}
   .music-immersive .music-player{position:relative;z-index:4;grid-row:2;display:grid;grid-template-columns:1fr;grid-template-rows:auto auto;gap:.45rem;min-height:182px;padding:.65rem clamp(1.2rem,6vw,2rem) max(.9rem,env(safe-area-inset-bottom));border:0;background:linear-gradient(180deg,#160b18,#1a0e1d 55%,#160b18);box-shadow:0 -14px 35px #160b186b;color:#fff;backdrop-filter:none}
   .music-immersive .music-player-center{grid-column:1;grid-row:1;display:flex;flex-direction:column-reverse;align-items:stretch;gap:.7rem;width:100%}
   .music-immersive .music-progress{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.55rem;width:100%;max-width:none;color:#f5e7eead;font-size:.62rem}
@@ -59,6 +74,9 @@
   .music-immersive .music-lyrics-scene .music-lyrics-scroll p.is-current{color:#fff;font-size:clamp(1.14rem,4.8vw,1.45rem)}
   .music-immersive .music-lyrics-scene .music-lyrics-scroll p small{display:block;margin-top:.2rem;color:#fbe3eead;font-size:.72em}
   .music-immersive .music-full-player>.music-secondary{display:none}
+  .music-playlist-dialog{width:min(100%,620px);min-height:min(610px,86dvh)}
+  .music-playlist-dialog .music-dialog-body{padding:1.15rem 1rem}
+  .music-playlist-dialog .music-multi-options{max-height:42dvh}
 }
 @media(max-width:700px) and (max-height:680px){.music-immersive .music-player{min-height:155px;padding-top:.4rem;gap:.2rem}.music-immersive .music-player-center{gap:.35rem}.music-immersive .music-player-controls .music-play-toggle{width:48px;height:48px}.music-immersive .music-full-player-info{padding-bottom:.5rem}}
 @media(prefers-reduced-motion:reduce){.music-lyrics-line{transition:none!important}}
