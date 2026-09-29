@@ -135,6 +135,8 @@
 
 /* Compact relationship filter */
 .cp-filter-bar{display:inline-flex;flex-wrap:nowrap;align-items:center;width:max-content;max-width:100%;gap:.45rem;margin:.5rem 0 .7rem;padding:.25rem .35rem .25rem .7rem;border:1px solid var(--border-color);border-radius:11px;background:var(--bg-secondary)}
+.cp-details-toggle-all{flex:none}
+@media(max-width:600px){.cp-filter-bar{display:flex;flex-wrap:wrap;width:100%}.cp-details-toggle-all{margin-left:0}}
 .cp-filter-bar>label{font-size:.72rem;white-space:nowrap}.cp-filter-bar .themed-select{min-width:105px;width:auto;min-height:31px;height:31px;padding:.25rem 1.7rem .25rem .55rem!important;font-size:.78rem;border-radius:8px}
 .cp-count-chip{gap:.18rem;border:0;background:transparent;padding:0 .3rem;font-size:.72rem;white-space:nowrap}.cp-count-chip strong{font-size:.8rem;color:var(--text-main)}
 
