@@ -26,19 +26,22 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=26.2">
+  <link rel="stylesheet" href="style.css?v=26.4">
   <link rel="stylesheet" href="app-drawer.css?v=2.0">
-  <link rel="stylesheet" href="app-drawer-enhancements.css?v=1.2">
-  <link rel="stylesheet" href="lottery.css?v=1.3">
+  <link rel="stylesheet" href="app-drawer-enhancements.css?v=1.3">
+  <link rel="stylesheet" href="lottery.css?v=1.4">
   <link rel="stylesheet" href="scoreboard.css?v=1.1">
   <link rel="stylesheet" href="music.css?v=1.5">
-  <link rel="stylesheet" href="music-player-refresh.css?v=1.0">
+  <link rel="stylesheet" href="music-player-refresh.css?v=1.3">
+  <link rel="stylesheet" href="vn-page.css?v=1.0">
+  <link rel="stylesheet" href="vn-page-responsive.css?v=1.0">
+  <link rel="stylesheet" href="vn-library.css?v=1.0">
   <link rel="stylesheet" href="forum.css?v=21.52">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
   <link rel="stylesheet" href="cloud-sync.css?v=21.52">
   <link rel="stylesheet" href="features.css?v=27.0">
-  <link rel="stylesheet" href="features-timeline.css?v=1.2">
-  <link rel="stylesheet" href="timeline-books.css?v=1.1">
+  <link rel="stylesheet" href="features-timeline.css?v=1.4">
+  <link rel="stylesheet" href="timeline-books.css?v=1.2">
 </head>
 <body>
 
@@ -161,7 +164,7 @@
         </button>
       </div>
 
-      <div class="cp-filter-bar"><label for="cpTypeFilter">顯示關係</label><select class="themed-select" id="cpTypeFilter" onchange="renderCpModule(); OCFeatures.rememberFilters()"><option value="all">全部關係</option><option value="cp">CP 關係</option><option value="other">其他關係</option></select><span class="cp-count-chip" aria-live="polite"><strong id="cpVisibleCount">0</strong> 組</span></div>
+      <div class="cp-filter-bar"><label for="cpTypeFilter">顯示關係</label><select class="themed-select" id="cpTypeFilter" onchange="renderCpModule(); OCFeatures.rememberFilters()"><option value="all">全部關係</option><option value="cp">CP 關係</option><option value="other">其他關係</option></select><span class="cp-count-chip" aria-live="polite"><strong id="cpVisibleCount">0</strong> 組</span><button type="button" class="btn btn-outline cp-details-toggle-all" id="toggleAllCpDetails" onclick="toggleAllCpCardDetails()"><i class="fa-solid fa-angles-down"></i> 全部展開詳情</button></div>
       <div class="cp-grid" id="cpGrid">
         <!-- Rendered by app.js -->
       </div>
@@ -337,6 +340,7 @@
           <p>支援書籍摺疊收納、自訂書籍 Icon 顏色，勾選書籍資料夾或特定文檔進行 AI 故事大綱總結！</p>
         </div>
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="OCVnLibrary.open()"><i class="fa-solid fa-photo-film"></i> 視覺小說素材庫</button>
           <button class="btn btn-outline" onclick="openBookModal()">
             <i class="fa-solid fa-folder-plus"></i> 新建書籍資料夾
           </button>
@@ -490,7 +494,7 @@
     <div class="application-drawer-backdrop" onclick="OCApps.closeDrawer()"></div>
     <div class="application-drawer-panel">
       <header class="application-drawer-header"><div class="application-drawer-brand"><span class="application-drawer-mark"><i class="fa-solid fa-grid-2"></i></span><div><small>YOUR LITTLE TOOLBOX</small><h2>應用抽屜</h2><p>把常用的創作空間收在一起。</p></div></div><div class="application-drawer-head-actions"><button type="button" class="app-drawer-manage-toggle" onclick="OCApps.toggleManager()"><i class="fa-solid fa-sliders"></i><span>管理應用</span></button><button type="button" class="app-drawer-close" onclick="OCApps.closeDrawer()" aria-label="關閉應用抽屜">×</button></div></header>
-      <div class="application-drawer-content"><div class="application-app-grid" id="applicationAppGrid"></div><section class="application-manager" id="applicationManager" hidden><div class="application-manager-heading"><div><small>PERSONAL APPS</small><h3 id="appEditorHeading">新增網址應用</h3></div><p>按住卡片上的抓握點拖動排序；鍵盤可用 ↑↓。部分網站會限制內嵌。</p></div><form id="appEditorForm" class="app-editor-form" onsubmit="event.preventDefault();OCApps.saveApp()"><input type="hidden" id="appEditorId"><label>應用名稱<input id="appEditorName" maxlength="40" required placeholder="例如：靈感收集站"></label><label>網站網址<input id="appEditorUrl" type="url" inputmode="url" required placeholder="https://example.com" oninput="OCApps.previewFavicon()"></label><label>應用分類（選填）<input id="appEditorCategory" maxlength="30" placeholder="例如：閱讀、繪圖、雲端工具"></label><label>圖示網址（選填）<input id="appEditorIcon" type="url" inputmode="url" placeholder="留空時自動讀取網站 icon 標籤" oninput="OCApps.previewFavicon()"></label><div class="app-icon-preview-wrap"><span>圖示預覽</span><div id="appEditorIconPreview" class="app-icon-preview"><i class="fa-solid fa-globe"></i></div></div><label class="app-back-preference"><input type="checkbox" id="appEditorPersistentBack"><span><strong>常駐顯示返回按鈕列</strong><small>關閉時，從內嵌頁最上緣向下滑才會短暫顯示。</small></span></label><div class="app-editor-actions"><button type="button" class="btn btn-outline" onclick="OCApps.resetEditor()">清除</button><button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> 儲存應用</button></div></form><div class="app-manage-list" id="appManageList"></div></section><footer class="application-drawer-footer"><span><i class="fa-solid fa-shield-heart"></i> 網址應用會在本站的全螢幕視窗中開啟</span><button type="button" onclick="OCApps.closeDrawer()">返回人物卡工坊</button></footer></div>
+      <div class="application-drawer-content"><div class="application-app-grid" id="applicationAppGrid"></div><section class="application-manager" id="applicationManager" hidden><div class="application-manager-heading"><div><small>PERSONAL APPS</small><h3 id="appEditorHeading">新增網址應用</h3></div><p>按住卡片上的抓握點拖動排序；鍵盤可用 ↑↓。部分網站會限制內嵌。</p></div><form id="appEditorForm" class="app-editor-form" onsubmit="event.preventDefault();OCApps.saveApp()"><input type="hidden" id="appEditorId"><label>應用名稱<input id="appEditorName" maxlength="40" required placeholder="例如：靈感收集站"></label><label>網站網址<input id="appEditorUrl" type="url" inputmode="url" required placeholder="https://example.com" oninput="OCApps.previewFavicon()"></label><label>應用分類（選填）<input id="appEditorCategory" maxlength="30" placeholder="例如：閱讀、繪圖、雲端工具"></label><label>圖示網址（選填）<input id="appEditorIcon" type="url" inputmode="url" placeholder="留空時自動讀取網站 icon 標籤" oninput="OCApps.previewFavicon()"></label><div class="app-icon-preview-wrap"><span>圖示預覽</span><div id="appEditorIconPreview" class="app-icon-preview"><i class="fa-solid fa-globe"></i></div></div><label class="app-back-preference"><input type="checkbox" id="appEditorPersistentBack"><span><strong>常駐顯示返回按鈕列</strong><small>關閉時，從內嵌頁最上緣向下滑才會短暫顯示。</small></span></label><div class="app-editor-actions"><button type="button" class="btn btn-outline" onclick="OCApps.resetEditor()">清除</button><button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> 儲存應用</button></div></form><section class="system-app-restore"><h4>全域雲端復原</h4><p>取消勾選的系統應用會保留這台裝置的資料；論壇預設不覆蓋。</p><div id="systemAppRestoreOptions"></div></section><div class="app-manage-list" id="appManageList"></div></section><section class="app-local-backup"><div><strong>系統應用獨立存檔</strong><small>包含召喚次數、記分板、應用捷徑與音樂資料（本機音訊檔亦會納入）。</small></div><button type="button" onclick="OCApps.exportLocalBackup()">匯出</button><button type="button" onclick="document.getElementById('appLocalBackupFile').click()">讀取</button><input id="appLocalBackupFile" type="file" accept="application/json,.json" hidden onchange="OCApps.importLocalBackup(this)"></section><footer class="application-drawer-footer"><span><i class="fa-solid fa-shield-heart"></i> 網址應用會在本站的全螢幕視窗中開啟</span><button type="button" onclick="OCApps.closeDrawer()">返回人物卡工坊</button></footer></div>
     </div>
   </section>
   <section id="embeddedApplication" class="embedded-application" aria-hidden="true" hidden><div id="embeddedBackReveal" class="embedded-back-reveal" aria-label="從這裡向下滑以顯示返回按鈕"><span></span></div><header class="embedded-app-header"><button type="button" onclick="OCApps.closeEmbedded()"><i class="fa-solid fa-arrow-left"></i><span>返回應用抽屜</span></button><strong id="embeddedAppName">應用</strong><a id="embeddedAppExternal" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> 外部開啟</a></header><iframe id="embeddedAppFrame" title="外部網址應用" allow="fullscreen; autoplay; clipboard-read; clipboard-write" allowfullscreen referrerpolicy="no-referrer"></iframe></section>
@@ -1157,6 +1161,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal('bookModal')">取消</button>
+        <button class="btn btn-outline" onclick="OCVnPage.openFromBook()"><i class="fa-solid fa-film"></i> 視覺小說頁面設置</button>
         <button class="btn btn-primary" onclick="saveBookForm()">儲存書籍</button>
       </div>
     </div>
@@ -1182,28 +1187,42 @@
             <option value="">(獨立文檔，不屬於書籍)</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>關聯角色選擇 (多選)：</label>
-          <input type="search" id="docCharSearchEdit" class="choice-search" placeholder="輸入人物名稱篩選" oninput="OCFeatures.filterChoices('docCharSearchEdit','docCharCheckboxes')">
-          <div class="checkbox-pill-group" id="docCharCheckboxes"></div>
-        </div>
-        <div class="form-group">
-          <label>關聯世界觀/陣營選擇 (多選)：</label>
-          <div class="checkbox-pill-group" id="docFactionCheckboxes"></div>
-        </div>
+        <details class="doc-editor-collapsible">
+          <summary><i class="fa-solid fa-users"></i> 關聯角色 <small>選擇相關人物</small></summary>
+          <div class="form-group">
+            <label>搜尋並選擇角色 (多選)：</label>
+            <input type="search" id="docCharSearchEdit" class="choice-search" placeholder="輸入人物名稱篩選" oninput="OCFeatures.filterChoices('docCharSearchEdit','docCharCheckboxes')">
+            <div class="checkbox-pill-group" id="docCharCheckboxes"></div>
+          </div>
+        </details>
+        <details class="doc-editor-collapsible">
+          <summary><i class="fa-solid fa-earth-asia"></i> 關聯世界觀 <small>選擇世界觀或陣營</small></summary>
+          <div class="form-group">
+            <label>世界觀／陣營 (多選)：</label>
+            <div class="checkbox-pill-group" id="docFactionCheckboxes"></div>
+          </div>
+        </details>
         <div class="form-group">
           <label>標籤 (用逗號隔開)：</label>
           <input type="text" id="docTags" list="articleTagSuggestions" placeholder="可直接輸入新文章標籤，如: 初遇, 甜文">
           <datalist id="articleTagSuggestions"></datalist>
         </div>
-        <div class="form-group">
+        <div class="form-group doc-content-editor-group">
           <label>同人文檔正文內容 (不參與預設導出，可供 AI 總結大綱)：</label>
-          <textarea id="docContent" rows="8" placeholder="在此撰寫或貼上同人文檔內容..."></textarea>
+          <div class="doc-format-toolbar" role="toolbar" aria-label="正文文字格式">
+            <button type="button" onclick="formatDocumentSelection('bold')" title="粗體"><strong>B</strong></button>
+            <button type="button" onclick="formatDocumentSelection('italic')" title="斜體"><em>I</em></button>
+            <button type="button" onclick="formatDocumentSelection('strike')" title="刪除線"><s>S</s></button>
+            <button type="button" onclick="formatDocumentSelection('heading')" title="小標題">H</button>
+            <span>選取文字後套用格式</span>
+          </div>
+          <textarea id="docContent" rows="14" placeholder="在此撰寫或貼上同人文檔內容... 支援 Markdown：**粗體**、*斜體*、~~刪除線~~、# 小標題"></textarea>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-danger" id="deleteDocumentInEditorBtn" onclick="deleteDocumentFromEditor()" style="display:none; margin-right:auto;"><i class="fa-solid fa-trash"></i> 刪除章節</button>
         <button class="btn btn-magic" id="editDocumentVisualNovelBtn" onclick="openVisualNovelEditorFromDocumentModal()" style="display:none;"><i class="fa-solid fa-gamepad"></i> 視覺小說</button>
+        <button class="btn btn-outline" onclick="OCVnPage.openFromDocument()"><i class="fa-solid fa-film"></i> 視覺小說頁面設置</button>
         <button class="btn btn-outline" onclick="closeModal('documentModal')">取消</button>
         <button class="btn btn-primary" onclick="saveDocumentForm()">儲存文檔</button>
       </div>
@@ -1227,7 +1246,9 @@
           <button class="btn btn-xs btn-danger" onclick="deleteVisualNovelTemplate()" title="刪除目前選擇的模板"><i class="fa-solid fa-trash"></i></button>
         </div>
 
-        <div class="vn-setting-grid">
+        <details class="vn-editor-appearance">
+          <summary><i class="fa-solid fa-palette"></i> UI 顏色與文字外觀 <small>展開調整</small></summary>
+          <div class="vn-setting-grid">
           <label>UI 主色<input type="color" id="vnPrimaryColor" value="#d97706"></label>
           <label>漸層副色<input type="color" id="vnSecondaryColor" value="#7c3aed"></label>
 <label>畫面模式<select id="vnThemeMode" onchange="updateVisualNovelThemeModeDefaults()"><option value="dark">深色</option><option value="light">淺色</option></select></label>
@@ -1238,7 +1259,8 @@
           <label>BGM 音量 <span id="vnBgmVolumeLabel">70%</span><input type="range" id="vnBgmVolume" min="0" max="1" step="0.05" value="0.7" oninput="updateVisualNovelVolumeLabel(this.value)"></label>
           <label>打字音效音量 <span id="vnTypewriterSoundVolumeLabel">60%</span><input type="range" id="vnTypewriterSoundVolume" min="0" max="1" step="0.05" value="0.6" oninput="updateVisualNovelTypeSoundVolumeLabel(this.value)"></label>
           <label>文字大小<select id="vnFontSizeSelect"><option value="0.9">小 (0.9rem)</option><option value="1.0">標準 (1.0rem)</option><option value="1.15">大 (1.15rem)</option><option value="1.3">特大 (1.3rem)</option></select></label>
-        </div>
+          </div>
+        </details>
         <div class="form-group">
           <label><i class="fa-solid fa-music"></i> 全局 BGM 網址</label>
           <div class="vn-global-bgm-row"><input type="text" id="vnGlobalBgm" placeholder="https://.../music.mp3 或從素材庫選擇"><button class="btn btn-xs btn-outline" onclick="OCVnAssets.open('bgm','global')"><i class="fa-solid fa-folder-open"></i> 素材庫</button></div>
@@ -1253,8 +1275,12 @@
           <button type="button" class="btn btn-outline" onclick="openVisualNovelCharacterProfiles()"><i class="fa-solid fa-address-card"></i> 人物頭像／名稱與說話者對應</button>
         </div>
         <div class="vn-ai-actions">
-          <button class="btn btn-magic" onclick="generateVisualNovelWithAi(false)"><i class="fa-solid fa-brain"></i> AI 製作完整腳本</button>
-          <button class="btn btn-outline" onclick="generateVisualNovelWithAi(true)"><i class="fa-solid fa-rotate"></i> AI 重新判斷全文</button>
+          <button class="btn btn-outline" onclick="OCVnPage.openFromEditor()"><i class="fa-solid fa-film"></i> 視覺小說頁面設置</button>
+          <button class="btn btn-outline" onclick="OCVnPage.analyze('scene')">AI 判斷場景</button>
+          <button class="btn btn-outline" onclick="OCVnPage.analyze('emotion')">AI 判斷人物情緒與站位</button>
+          <button class="btn btn-outline" onclick="OCVnPage.analyze('music')">AI 判斷段落音樂</button>
+          <button class="btn btn-magic" onclick="generateVisualNovelWithAi(false)"><i class="fa-solid fa-brain"></i> AI 判斷說話人並建立腳本</button>
+          <button class="btn btn-outline" onclick="generateVisualNovelWithAi(true)"><i class="fa-solid fa-rotate"></i> AI 重新判斷說話人</button>
           <button class="btn btn-outline" onclick="generateVisualNovelLocally()"><i class="fa-solid fa-bolt"></i> 本機快速分段</button>
           <button class="btn btn-outline" onclick="downloadVisualNovelScript()"><i class="fa-solid fa-file-arrow-down"></i> 下載文字腳本</button>
           <button class="btn btn-outline" onclick="document.getElementById('vnScriptFileInput').click()"><i class="fa-solid fa-file-arrow-up"></i> 讀入文字腳本</button>
@@ -1263,6 +1289,8 @@
         <div class="vn-insert-actions">
           <span>插入到游標：</span>
           <button class="btn btn-xs btn-outline" onclick="OCVnAssets.open('cg')"><i class="fa-solid fa-image"></i> CG</button>
+          <button class="btn btn-xs btn-outline" onclick="OCVnAssets.open('bg')"><i class="fa-solid fa-panorama"></i> 背景</button>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('bg-none')"><i class="fa-solid fa-eye-slash"></i> 收起背景</button>
           <button class="btn btn-xs btn-outline" onclick="OCVnAssets.open('bgm')"><i class="fa-solid fa-music"></i> BGM</button>
           <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('bgm-none')"><i class="fa-solid fa-volume-xmark"></i> 停止 BGM</button>
           <button class="btn btn-xs btn-outline" onclick="OCVnAssets.open('se')"><i class="fa-solid fa-volume-high"></i> SE</button>
@@ -1272,8 +1300,9 @@
         <div class="form-group">
           <label>可手動編輯的視覺小說腳本</label>
           <textarea id="vnScriptText" class="vn-script-editor" rows="18" spellcheck="false" placeholder="旁白｜黃昏落在窗邊。&#10;角色名｜「我們走吧。」&#10;@cg https://.../scene.jpg&#10;@bgm https://.../music.mp3&#10;@se https://.../door.mp3&#10;@shake"></textarea>
+          <div id="vnpAnnotations" class="vnp-annotations" aria-live="polite"></div>
           <div class="vn-script-help">
-            <code>旁白｜內容</code> 敘述　<code>角色名｜台詞</code> 對話　<code>@cg 網址</code> CG　<code>@cg none</code> 收起 CG　
+            <code>旁白｜內容</code> 敘述　<code>角色名｜台詞</code> 對話　<code>@bg 網址</code> 背景　<code>@bg none</code> 收起背景　<code>@cg 網址</code> CG　<code>@cg none</code> 收起 CG　
             <code>@bgm 網址</code> 換音樂　<code>@bgm none</code> 停止音樂　<code>@se 網址</code> 音效　<code>@shake</code> 畫面震動
           </div>
         </div>
@@ -1650,7 +1679,7 @@
   <div class="modal-backdrop" id="timelineSettingsModal"><div class="modal-box modal-sm"><div class="modal-header"><h3 id="timelineSettingsTitle">新建時間線</h3><button class="close-btn" onclick="closeModal('timelineSettingsModal',true)">×</button></div><div class="modal-body"><input type="hidden" id="timelineSettingsId"><div class="form-group"><label>主線名稱 *</label><input id="timelineSettingsName" maxlength="100" placeholder="例如：群星交會 · 主線"></div><div class="form-group"><label>涵蓋的世界觀</label><input id="timelineSettingsWorld" list="timelineWorldOptions" placeholder="可用「、」分隔多個世界觀" oninput="OCFeatures.updateWorldColors()"><datalist id="timelineWorldOptions"></datalist><small class="form-help">可選已有世界觀，也能輸入新名稱；自訂世界觀只加入時間線，不會建立陣營。</small></div><div class="form-group"><label>主線主題漸層</label><div class="world-color-controls"><label>起色 <input id="timelineWorldColorA" type="color" value="#a56e79" oninput="OCFeatures.updateWorldColorPreview()"></label><label>終色 <input id="timelineWorldColorB" type="color" value="#686a9c" oninput="OCFeatures.updateWorldColorPreview()"></label><span class="world-color-preview" id="timelineWorldColorPreview" aria-hidden="true"></span></div></div><div class="form-group"><label>簡介</label><textarea id="timelineSettingsDescription" rows="3" placeholder="這條主線如何串起不同世界觀？"></textarea></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('timelineSettingsModal',true)">取消</button><button class="btn btn-primary" onclick="OCFeatures.saveTimelineSettings()">儲存主線</button></div></div></div>
   <div class="modal-backdrop" id="timelineEventModal"><div class="modal-box modal-lg"><div class="modal-header"><h3>編輯主線事件</h3><button class="close-btn" onclick="OCFeatures.closeEvent()">&times;</button></div><div class="modal-body"><input id="timelineEventId" type="hidden"><div class="timeline-event-context-grid"><div class="form-group"><label>事件名稱 *</label><input id="timelineEventTitle" maxlength="120"></div><div class="form-group"><label>所屬世界觀</label><input id="timelineEventWorld" list="timelineEventWorldOptions" placeholder="選已有世界觀或輸入新名稱"><datalist id="timelineEventWorldOptions"></datalist><small class="form-help">新名稱只標註在主線，不會建立陣營。</small></div><div class="form-group"><label>時間標記</label><input id="timelineEventWhen" list="timelineConcurrentOptions" placeholder="日期、紀年或章節；相同標記會並列"><datalist id="timelineConcurrentOptions"></datalist></div><div class="form-group"><label>同時事件群組（選填）</label><input id="timelineEventConcurrent" list="timelineConcurrentOptions" placeholder="相同群組會並列顯示"><small class="form-help">可用來標記不同時間文字、但同時發生的事件。</small></div></div><div class="form-group"><label>時間線卡片上的預覽摘要</label><textarea id="timelineEventSummary" rows="2"></textarea></div><div class="form-group"><label>事件始末</label><textarea id="timelineEventStory" rows="7" placeholder="寫下事件的起因、經過與結果；閱讀視窗會完整顯示。"></textarea></div><div class="form-group"><label>關聯人物</label><input type="search" id="timelineEventCharSearch" class="choice-search" placeholder="輸入人物名稱篩選" oninput="OCFeatures.filterChoices('timelineEventCharSearch','timelineEventChars')"><div id="timelineEventChars" class="checkbox-pill-group"></div></div><div class="timeline-colors"><label>漸層起色 <input id="timelineColorA" type="color" value="#bf806d"></label><label>漸層終色 <input id="timelineColorB" type="color" value="#6f629b"></label></div><div class="form-group"><div class="timeline-section-head"><label>補充段落</label><button class="btn btn-xs btn-outline" onclick="OCFeatures.addEventSection()">＋ 新增小標題與段落</button></div><div id="timelineEventSections"></div></div></div><div class="modal-footer"><button class="btn btn-danger" id="timelineDeleteEvent" onclick="OCFeatures.deleteEvent()">刪除事件</button><button class="btn btn-outline" onclick="OCFeatures.closeEvent()">取消</button><button class="btn btn-primary" onclick="OCFeatures.saveEvent()">儲存事件</button></div></div></div>
   <div class="modal-backdrop" id="timelineReadModal"><div class="modal-box modal-lg timeline-read-modal"><div class="timeline-read-hero" id="timelineReadHero"><button class="timeline-read-close" onclick="OCFeatures.closeEventDetail()" aria-label="關閉事件詳情">&times;</button><small id="timelineReadWorld"></small><p id="timelineReadWhen"></p><h2 id="timelineReadTitle"></h2><div id="timelineReadPeople" class="timeline-read-people"></div></div><div class="modal-body timeline-read-body"><p id="timelineReadSummary" class="timeline-read-summary"></p><section id="timelineReadStorySection"><h3>事件始末</h3><div id="timelineReadStory" class="timeline-read-text"></div></section><div id="timelineReadSections"></div></div><div class="modal-footer"><button class="btn btn-outline" onclick="OCFeatures.closeEventDetail()">返回時間線</button><button class="btn btn-primary" id="timelineReadEditBtn">編輯事件</button></div></div></div>
-  <div class="modal-backdrop" id="timelineExportModal"><div class="modal-box modal-lg"><div class="modal-header"><h3>時間線文字預覽</h3><button class="close-btn" onclick="closeModal('timelineExportModal',true)">×</button></div><div class="modal-body"><p class="form-help">可直接選取文字或按「複製內容」，確認後再下載 TXT。</p><textarea id="timelineExportPreview" class="timeline-export-preview" readonly></textarea></div><div class="modal-footer"><button class="btn btn-outline" onclick="OCFeatures.copyTimelineText()"><i class="fa-solid fa-copy"></i> 複製內容</button><button class="btn btn-primary" onclick="OCFeatures.exportTimelineText()"><i class="fa-solid fa-file-arrow-down"></i> 下載 TXT</button></div></div></div>
+  <div class="modal-backdrop" id="timelineExportModal"><div class="modal-box modal-lg"><div class="modal-header"><h3>時間線文字預覽</h3><button class="close-btn" onclick="closeModal('timelineExportModal',true)">×</button></div><div class="modal-body"><label class="timeline-export-books-option"><input type="checkbox" id="timelineExportBooks" onchange="OCFeatures.refreshTimelineExportPreview()"> 一併匯出關聯書籍內容</label><p class="form-help">可直接選取文字或按「複製內容」，確認後再下載 TXT。</p><textarea id="timelineExportPreview" class="timeline-export-preview" readonly></textarea></div><div class="modal-footer"><button class="btn btn-outline" onclick="OCFeatures.copyTimelineText()"><i class="fa-solid fa-copy"></i> 複製內容</button><button class="btn btn-primary" onclick="OCFeatures.exportTimelineText()"><i class="fa-solid fa-file-arrow-down"></i> 下載 TXT</button></div></div></div>
   <div class="modal-backdrop" id="mediaGalleryModal"><div class="modal-box modal-lg"><div class="modal-header"><div><small>CHARACTER GALLERY</small><h3 id="mediaGalleryTitle">人物圖廊</h3></div><button class="close-btn" onclick="OCFeatures.closeGallery()">&times;</button></div><div class="modal-body"><div class="media-upload-panel"><div class="media-upload-intro"><i class="fa-solid fa-images"></i><div><strong>為人物加入圖片</strong><small>圖片按原始比例排列，可關聯多位人物。</small></div></div><div class="media-upload-bar"><label class="media-file-picker" for="mediaUploadInput"><i class="fa-solid fa-folder-open"></i> 選擇圖片</label><input type="file" id="mediaUploadInput" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" multiple onchange="OCFeatures.updateMediaFileSelection()"><button class="btn btn-primary" onclick="OCFeatures.uploadImages()">加入本機圖庫</button></div><div class="media-upload-bottom"><span id="mediaFileSelection">尚未選擇圖片</span><button class="btn btn-xs btn-outline" onclick="OCFeatures.openMediaSettings()">API／R2 設定</button></div></div><p id="mediaUploadStatus" role="status"></p><div id="mediaMasonry" class="media-masonry"></div></div></div></div>
   <div class="modal-backdrop" id="mediaEditModal"><div class="modal-box modal-sm"><div class="modal-header"><h3>圖片資訊</h3><button class="close-btn" onclick="closeModal('mediaEditModal',true)">×</button></div><div class="modal-body"><input type="hidden" id="mediaEditId"><div class="form-group"><label>圖片說明</label><input id="mediaCaption"></div><div class="form-group"><label>關聯人物（可多選）</label><div id="mediaEditChars" class="checkbox-pill-group"></div></div></div><div class="modal-footer"><button class="btn btn-danger" onclick="OCFeatures.deleteImage()">刪除圖片</button><button class="btn btn-primary" onclick="OCFeatures.saveImage()">儲存</button></div></div></div>
   <div class="modal-backdrop" id="mediaBrowseModal"><div class="modal-box modal-lg media-browse-shell"><div class="media-browse-head"><div><small>CHARACTER GALLERY</small><h2 id="mediaBrowseTitle">人物圖廊</h2><p>點擊圖片放大欣賞</p></div><button class="close-btn" onclick="OCFeatures.closeBrowseGallery()" aria-label="關閉圖廊">×</button></div><div class="media-browse-body"><span class="media-browse-count" id="mediaBrowseCount"></span><div id="mediaBrowseMasonry" class="media-masonry media-browse-masonry"></div></div></div></div>
@@ -1660,19 +1689,21 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=29.1"></script>
-  <script src="app-drawer.js?v=2.5"></script>
-  <script src="lottery.js?v=1.3"></script>
+  <script src="app.js?v=29.4"></script>
+  <script src="app-drawer.js?v=2.7"></script>
+  <script src="lottery.js?v=1.4"></script>
   <script src="scoreboard.js?v=1.1"></script>
-  <script src="music.js?v=1.6"></script>
-  <script src="features.js?v=29.1"></script>
-  <script src="vn-assets.js?v=26.0"></script>
+  <script src="music.js?v=1.9"></script>
+  <script src="features.js?v=29.3"></script>
+  <script src="vn-assets.js?v=26.1"></script>
+  <script src="vn-page.js?v=1.0"></script>
+  <script src="vn-library.js?v=1.0"></script>
   <script src="forum-chat-core.js?v=21.52"></script>
   <script src="forum-core.js?v=21.52"></script>
   <script src="forum-chat.js?v=21.52"></script>
   <script src="forum.js?v=21.52"></script>
   <script src="cloud-sync-core.js?v=22.0"></script>
-  <script src="cloud-sync.js?v=24.0"></script>
+  <script src="cloud-sync.js?v=24.2"></script>
   <div class="modal-backdrop" id="timelineLinksModal"><div class="modal-box modal-sm timeline-links-modal"><div class="modal-header"><div><small>MAIN TIMELINE</small><h3>關聯其他時間線</h3></div><button class="close-btn" onclick="closeModal('timelineLinksModal',true)" aria-label="關閉">×</button></div><div class="modal-body"><p class="form-help">可以整條納入，或只挑選想顯示的事件。內容會即時引用來源資料，不會複製；編輯關聯事件會回到來源時間線。</p><label class="form-group"><span>來源時間線</span><select id="timelineLinkSourceSelect" class="themed-select" onchange="OCFeatures.renderTimelineLinkChoices(true)"></select></label><div id="timelineLinkChoices" class="timeline-link-choices"></div><div class="timeline-link-actions"><button type="button" class="btn btn-outline" onclick="OCFeatures.addTimelineLink('events')"><i class="fa-solid fa-list-check"></i> 關聯勾選事件</button><button type="button" class="btn btn-primary" onclick="OCFeatures.addTimelineLink('all')"><i class="fa-solid fa-layer-group"></i> 關聯整條時間線</button></div><section class="timeline-links-current"><h4>目前的關聯</h4><div id="timelineLinksList"></div></section></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('timelineLinksModal',true)">完成</button></div></div></div>
 </body>
 </html>
