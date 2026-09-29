@@ -29,6 +29,7 @@ let currentTheme = 'dark';
 let currentRelViewMode = 'matrix';
 let appTabHistory = [];
 let expandedCharacterCards = new Set();
+let expandedCpCards = new Set();
 const appBackSessionId = Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 function escapeHtml(str) {
@@ -38,6 +39,30 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function formatDocumentSelection(format) {
+  const field=document.getElementById('docContent');if(!field)return;
+  const start=field.selectionStart,end=field.selectionEnd,selected=field.value.slice(start,end),before=field.value.slice(0,start),after=field.value.slice(end);
+  if(format==='heading'){
+    const lineStart=before.lastIndexOf('\n')+1,lineEnd=field.value.indexOf('\n',start)<0?field.value.length:field.value.indexOf('\n',start),line=field.value.slice(lineStart,lineEnd).replace(/^#{1,3}\s*/,''),replacement=`## ${line}`;
+    field.value=field.value.slice(0,lineStart)+replacement+field.value.slice(lineEnd);field.setSelectionRange(lineStart+replacement.length,lineStart+replacement.length);
+  }else{
+    const marks={bold:['**','**'],italic:['*','*'],strike:['~~','~~']},[left,right]=marks[format]||['',''];
+    field.value=before+left+selected+right+after;const cursor=start+left.length+selected.length+right.length;field.setSelectionRange(selected?cursor:cursor-right.length,cursor-right.length);
+  }
+  field.focus();field.dispatchEvent(new Event('input',{bubbles:true}));
+}
+
+function renderDocumentMarkup(content) {
+  const lines=escapeHtml(content||'（此文檔尚無正文內容。）').split(/\r?\n/);
+  return lines.map(line=>{
+    const heading=line.match(/^(#{1,3})\s+(.+)$/),level=heading?.[1].length;
+    line=heading?heading[2]:line;
+    line=line.replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/~~([^~\n]+)~~/g,'<del>$1</del>').replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g,'$1<em>$2</em>');
+    if(heading)line=`<h${level+2}>${line}</h${level+2}>`;
+    return line||'<br>';
+  }).join('\n');
 }
 let selectedGraphCharIds = [];
 let currentGraphPerspectiveId = "";
@@ -687,6 +712,35 @@ function cpGradientCss(colors) {
   return `linear-gradient(110deg, ${stops})`;
 }
 
+function updateCpDetailsToggle() {
+  const button = document.getElementById('toggleAllCpDetails');
+  if (!button) return;
+  const cards = [...document.querySelectorAll('#cpGrid [data-cp-card]')];
+  const allExpanded = cards.length > 0 && cards.every(card => expandedCpCards.has(card.dataset.cpCard));
+  button.innerHTML = allExpanded ? '<i class="fa-solid fa-angles-up"></i> 全部收起詳情' : '<i class="fa-solid fa-angles-down"></i> 全部展開詳情';
+  button.setAttribute('aria-pressed', String(allExpanded));
+}
+
+function toggleAllCpCardDetails() {
+  const cards = [...document.querySelectorAll('#cpGrid [data-cp-card]')];
+  const shouldExpand = cards.some(card => !expandedCpCards.has(card.dataset.cpCard));
+  cards.forEach(card => {
+    const id = card.dataset.cpCard;
+    if (shouldExpand) expandedCpCards.add(id); else expandedCpCards.delete(id);
+    const expanded = expandedCpCards.has(id);
+    card.classList.toggle('details-expanded', expanded);
+    const button = card.querySelector('.cp-card-details-toggle');
+    if (button) {
+      button.setAttribute('aria-expanded', String(expanded));
+      button.setAttribute('aria-label', expanded ? '收起 CP 詳情' : '展開 CP 詳情');
+      button.title = expanded ? '收起完整關係' : '展開完整關係';
+    }
+  });
+  updateCpDetailsToggle();
+}
+
+function toggleCpCard(button) { const card=button.closest('.cp-card'); if(!card)return; const cpId=card.dataset.cpCard;if(expandedCpCards.has(cpId))expandedCpCards.delete(cpId);else expandedCpCards.add(cpId);const expanded=expandedCpCards.has(cpId);card.classList.toggle('details-expanded',expanded);button.setAttribute('aria-expanded',String(expanded));button.setAttribute('aria-label',expanded?'收起 CP 詳情':'展開 CP 詳情');button.title=expanded?'收起完整關係':'展開完整關係';updateCpDetailsToggle(); }
+
 function renderCpModule() {
   const grid = document.getElementById("cpGrid");
   if (!grid) return;
@@ -697,6 +751,7 @@ function renderCpModule() {
 
   if (!cps.length) {
     grid.innerHTML = `<div class="empty-state"><p>目前尚無 CP 組合。點擊右上角「新建 CP 組合」建立第一對 CP 關係！</p></div>`;
+    updateCpDetailsToggle();
     return;
   }
   if (!visibleCps.length) {
@@ -732,14 +787,11 @@ function renderCpModule() {
     `).join('');
 
     return `
-      <div class="cp-card" style="--cp-color-1:${gradientColors[0]};--cp-color-2:${gradientColors[1]};--cp-color-3:${gradientColors[2] || gradientColors[1]};--cp-gradient:${gradientCss};">
+      <div class="cp-card${expandedCpCards.has(cp.id)?' details-expanded':''}" data-cp-card="${cp.id}" style="--cp-color-1:${gradientColors[0]};--cp-color-2:${gradientColors[1]};--cp-color-3:${gradientColors[2] || gradientColors[1]};--cp-gradient:${gradientCss};">
         <div class="cp-theme-cover" aria-hidden="true"></div>
         <div class="cp-card-hero">
           <div class="cp-avatars-row">${avatarsHtml}</div>
-          <div class="cp-card-actions">
-            <button class="btn btn-xs btn-outline" onclick="openCpModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯</button>
-            <button class="btn btn-xs btn-danger" onclick="deleteCp('${cp.id}')">&times;</button>
-          </div>
+          <button type="button" class="cp-card-details-toggle" onclick="toggleCpCard(this)" aria-expanded="${expandedCpCards.has(cp.id)}" aria-label="${expandedCpCards.has(cp.id)?'收起':'展開'} CP 詳情" title="${expandedCpCards.has(cp.id)?'收起':'展開'}完整關係"><i class="fa-solid fa-chevron-down"></i></button>
         </div>
         <div class="cp-card-content">
           <div class="cp-card-title-row">
@@ -750,9 +802,11 @@ function renderCpModule() {
           <div class="cp-sections">${sectionsHtml}</div>
         </div>
         ${window.OCFeatures?.cpGalleryPreviewHtml?.(cp) || ''}
+        <div class="cp-card-footer"><button class="btn btn-xs btn-outline" onclick="openCpModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯關係</button></div>
       </div>
     `;
   }).join('');
+  updateCpDetailsToggle();
 }
 
 function openCpModal(cpId = null) {
@@ -3047,6 +3101,7 @@ function saveBookForm() {
   const checkedFactionIds = Array.from(document.querySelectorAll("#bookFactionCheckboxes input:checked")).map(cb => cb.value);
 
   const bookData = {
+    ...(id ? books.find(b => b.id === id) : {}),
     id: id || `book_${Date.now()}`,
     title,
     iconColor: document.getElementById("bookIconColor").value,
@@ -3154,7 +3209,7 @@ function openDocumentReader(docId) {
   document.getElementById("docReaderTitle").textContent = doc.title;
   document.getElementById("docReaderMeta").textContent = [book?.title, docChars.length ? `角色：${docChars.join('、')}` : "", docFactions.length ? `世界觀：${docFactions.join('、')}` : "", (doc.tags || []).length ? `標籤：${doc.tags.join('、')}` : ""].filter(Boolean).join(" ｜ ");
   const content = document.getElementById("docReaderContent");
-  content.textContent = doc.content || "（此文檔尚無正文內容。）";
+  content.innerHTML = renderDocumentMarkup(doc.content);
   content.style.fontSize = `${documentReaderFontSize}rem`;
   document.querySelector("#documentReaderModal .doc-reader-scroll").scrollTop = 0;
   const sequence = getReaderSequence(doc);
@@ -3199,6 +3254,7 @@ function saveDocumentForm() {
   const checkedFactionIds = Array.from(document.querySelectorAll("#docFactionCheckboxes input:checked")).map(cb => cb.value);
 
   const docData = {
+    ...(id ? documents.find(d => d.id === id) : {}),
     id: id || `doc_${Date.now()}`,
     title,
     bookId: document.getElementById("docBelongingBookId").value || null,
@@ -3383,6 +3439,7 @@ function openVisualNovelEditor(docId) {
   document.getElementById("vnDocumentId").value = doc.id;
   document.getElementById("vnEditorChapterTitle").textContent = doc.title;
   document.getElementById("vnScriptText").value = formatVisualNovelScriptBlocks(doc.visualNovel?.scriptText || "");
+  window.OCVnPage?.renderAnnotations?.();
   document.getElementById("vnTemplateName").value = "";
   const customPromptEl = document.getElementById("vnAiCustomPrompt");
   if (customPromptEl) customPromptEl.value = doc.visualNovel?.aiCustomPrompt || "";
@@ -3489,6 +3546,7 @@ function insertVisualNovelCommand(type) {
   const editor = document.getElementById("vnScriptText");
   let command = "@shake";
   if (type === "cg-none") command = "@cg none";
+  else if (type === "bg-none") command = "@bg none";
   else if (type === "bgm-none") command = "@bgm none";
   else if (type !== "shake") {
     const label = type === "cg" ? "CG 圖片" : type.toUpperCase();
@@ -3749,7 +3807,7 @@ function parseVisualNovelScript(scriptText) {
     const contentLine = line.replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/, "").replace(/^[\u200B-\u200D\u2060\uFEFF]+/, "");
     const trimmedLine = contentLine.trim();
     if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank", sourceLineIndex };
-    const command = trimmedLine.match(/^@(cg|bgm|se)\s+(.+)$/i);
+    const command = trimmedLine.match(/^@(cg|bg|bgm|se)\s+(.+)$/i);
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
     const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
@@ -4432,6 +4490,7 @@ function executeVisualNovelEvent(event) {
     const frame = document.createElement("div"); frame.className = "vn-feed-avatar";
     frame.style.setProperty("--speaker-color", speakerColor);
     const image = document.createElement("img"); image.src = profile?.avatar || character?.avatar || DEFAULT_VN_AVATAR; image.alt = displaySpeaker;
+    if(character&&currentDoc){const chapter=currentDoc,lineIndex=Number.isFinite(event.sourceLineIndex)?event.sourceLineIndex:currentVisualNovelIndex;window.OCVnPage?.expressionAvatar?.(chapter,character,lineIndex).then(url=>{if(url&&image.isConnected){image.src=url;window.OCVnPage?.applyAvatarCrop?.(image,chapter,character);}});}
     frame.appendChild(image);frame.title='在「編輯劇本模式」中雙擊／雙點校對這一句';
     const card = document.createElement("div"); card.className = "vn-feed-dialogue";
     card.style.setProperty("--speaker-color", speakerColor);
