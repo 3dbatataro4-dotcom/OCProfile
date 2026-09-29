@@ -273,6 +273,16 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .cp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:1.2rem; align-items:start; }
 .cp-card { position:relative; overflow:hidden; border:1px solid color-mix(in srgb,var(--cp-color-1) 24%,var(--border-color)); border-radius:20px; background:var(--bg-card); box-shadow:0 12px 32px rgba(35,25,18,.1); transition:transform .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s ease,border-color .22s ease; }
 .cp-card:hover { transform:translateY(-3px); border-color:color-mix(in srgb,var(--cp-color-1) 46%,var(--border-color)); box-shadow:0 18px 42px color-mix(in srgb,var(--cp-color-1) 14%,rgba(25,18,14,.16)); }
+.cp-card-details-toggle{position:absolute;z-index:2;right:.75rem;top:.05rem;display:grid;place-items:center;width:38px;height:38px;border:1px solid color-mix(in srgb,var(--cp-color-1) 36%,var(--border-color));border-radius:13px;background:color-mix(in srgb,var(--cp-color-1) 11%,var(--bg-card));color:color-mix(in srgb,var(--cp-color-1) 82%,var(--text-main));box-shadow:0 5px 16px #140f0a1a;cursor:pointer;transition:transform .3s,background .2s}
+.cp-details-toggle-all{margin-left:.35rem;min-height:35px;padding:.35rem .7rem;font-size:.78rem;white-space:nowrap}
+.cp-card-details-toggle:hover{transform:translateY(2px);background:color-mix(in srgb,var(--cp-color-1) 19%,var(--bg-card))}
+.cp-card-details-toggle i{transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+.cp-card.details-expanded .cp-card-details-toggle i{transform:rotate(180deg)}
+.cp-card .cp-position-list,.cp-card .cp-member-details,.cp-card .cp-sections,.cp-card .cp-gallery-preview,.cp-card .cp-card-footer{max-height:0;opacity:0;visibility:hidden;overflow:hidden;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;pointer-events:none;transition:max-height .55s cubic-bezier(.2,.75,.25,1),opacity .3s ease,margin .35s ease,padding .35s ease,visibility .3s}
+.cp-card.details-expanded .cp-position-list,.cp-card.details-expanded .cp-member-details,.cp-card.details-expanded .cp-sections,.cp-card.details-expanded .cp-gallery-preview,.cp-card.details-expanded .cp-card-footer{max-height:2400px;opacity:1;visibility:visible;pointer-events:auto}
+.cp-card.details-expanded .cp-position-list{margin:.7rem 0 .85rem}
+.cp-card.details-expanded .cp-member-details{display:grid;gap:.55rem}
+.cp-card.details-expanded .cp-card-footer{padding:.65rem 1.1rem 1rem;border-top:1px solid color-mix(in srgb,var(--cp-color-1) 18%,var(--border-color))}
 .cp-theme-cover { height:98px; background:var(--cp-gradient); }
 .cp-theme-cover::after { content:""; position:absolute; inset:0 0 auto; height:98px; background:linear-gradient(120deg,rgba(255,255,255,.2),transparent 42%,rgba(255,255,255,.12)); pointer-events:none; }
 .cp-card-hero { position:relative; min-height:50px; padding:0 1.1rem; display:flex; justify-content:space-between; align-items:flex-start; }
@@ -283,6 +293,9 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .cp-card-actions { display:flex; gap:.35rem; margin-top:.55rem; }
 .cp-card-actions .btn-outline { color:color-mix(in srgb,var(--cp-color-1) 76%,var(--text-main)); border-color:color-mix(in srgb,var(--cp-color-1) 35%,var(--border-color)); background:color-mix(in srgb,var(--cp-color-1) 7%,var(--bg-card)); }
 .cp-card-content { padding:.15rem 1.15rem 1.1rem; }
+.cp-card.is-collapsed .cp-position-list,.cp-card.is-collapsed .cp-member-details,.cp-card.is-collapsed .cp-sections,.cp-card.is-collapsed .cp-gallery-preview { display:none!important; }
+.cp-card.is-collapsed .cp-card-actions .btn:not(:first-child) { display:none; }
+.cp-card.is-collapsed .cp-card-content { padding-bottom:.65rem; }
 .cp-card-title-row { display:flex; justify-content:space-between; gap:.75rem; align-items:flex-start; }
 .cp-card-kicker { display:block; margin-bottom:.15rem; color:color-mix(in srgb,var(--cp-color-1) 70%,var(--text-muted)); font-size:.61rem; font-weight:800; letter-spacing:.14em; }
 .cp-card-title-row h3 { margin:0; color:color-mix(in srgb,var(--cp-color-1) 68%,var(--text-main)); font-size:1.18rem; line-height:1.35; }
