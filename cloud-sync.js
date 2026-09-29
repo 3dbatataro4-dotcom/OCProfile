@@ -5,11 +5,11 @@
   const SESSION='oc_cloud_auth_v1';
   localStorage.removeItem('oc_cloud_unlocked_v1');
   const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  let modal,selected=new Set(['workshop','forum']),session=null,preview=null,working=false,backupTimesLoading=false,uploadNote='';
+  let modal,selected=new Set(['workshop']),session=null,preview=null,working=false,backupTimesLoading=false,uploadNote='';
   const recoveryCopies=new Map();
   const deltaUnsupportedScopes=new Set();
   const cloudHeads={workshop:null,forum:null};
-  const scopeNames={workshop:'人設卡工坊',forum:'同人論壇'};
+  const scopeNames={workshop:'人設卡工坊',forum:'系統應用'};
   try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
   if(session&&(!session.user?.id||!session.access_token)){localStorage.removeItem(SESSION);session=null;}
   const labels={timelines:'故事時間線',mediaLibrary:'圖片圖庫',chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',visualNovelPreferences:'視覺小說閱讀偏好',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
@@ -21,7 +21,8 @@
   function assign(d){({characters,paros,factions,rankings,cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,customPresetAvatars=customPresetAvatars,collapsedBooks,perspectiveTargets}=d);if(typeof d?.visualNovelPreferences?.topDown==='boolean')visualNovelTopDown=d.visualNovelPreferences.topDown;window.OCFeatures?.restoreMediaSettingsFromData?.();}
   function apply(payload){
     const data=C.source(payload);
-    if(payload.scope==='forum')return OCForum.applyCloud(data);
+    if(payload.scope==='forum'){if(window.OCApps&&!OCApps.shouldCloudRestore('oc-forum'))return;return OCForum.applyCloud(data);}
+    if(window.OCApps){const localRow=mediaLibrary.find(row=>row?.id==='__oc_media_settings__'&&row.kind==='settings');let remoteRow=data.mediaLibrary.find(row=>row?.id==='__oc_media_settings__'&&row.kind==='settings');const preserveSettings=localRow&&[['oc-lottery','lotteryData'],['oc-scoreboard','scoreboardData']].some(([appId,key])=>!OCApps.shouldCloudRestore(appId)&&localRow[key]!==undefined);if(preserveSettings&&!remoteRow){remoteRow={id:'__oc_media_settings__',kind:'settings'};data.mediaLibrary.push(remoteRow);}if(localRow&&remoteRow)for(const [appId,key]of [['oc-lottery','lotteryData'],['oc-scoreboard','scoreboardData']])if(!OCApps.shouldCloudRestore(appId)&&localRow[key]!==undefined)remoteRow[key]=localRow[key];if(!OCApps.shouldCloudRestore('oc-music')){const kinds=new Set(['music-track','music-album','music-playlist']);data.mediaLibrary=data.mediaLibrary.filter(row=>!kinds.has(row?.kind)).concat(mediaLibrary.filter(row=>kinds.has(row?.kind)));}}
     const old=workshop(),keys=['oc_characters','oc_paros','oc_factions','oc_rankings','oc_cps','oc_books','oc_documents','oc_timelines','oc_media_library','oc_visual_novel_templates','oc_visual_novel_top_down','oc_collapsed_books','oc_perspective_targets'];
     const stored=keys.map(k=>[k,localStorage.getItem(k)]);
     try{assign(data);normalizeVisualNovelDocuments();saveStateToLocalStorage();}catch(err){assign(old);for(const [k,v]of stored){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}throw err;}
@@ -189,7 +190,7 @@
   async function run(fn){if(working)return;working=true;modal.setAttribute('aria-busy','true');try{await fn();}catch(err){message(err.name==='AbortError'?'連線逾時，請重新刷新比對再試。':err.message);}finally{working=false;modal.removeAttribute('aria-busy');}}
   function close(){if(working)return;modal.hidden=true;preview=null;document.body.style.overflow=modal.dataset.previousOverflow||'';window.OCCloud.returnFocus?.focus();}
   window.OCCloud={isOpen:()=>!!modal&&!modal.hidden,open(){
-    if(working)return;selected=new Set(['workshop','forum']);preview=null;
+    if(working)return;selected=new Set(['workshop']);preview=null;
     if(!modal){modal=document.createElement('div');modal.className='oc-cloud-overlay';modal.hidden=true;document.body.append(modal);
       modal.addEventListener('submit',event=>{event.preventDefault();run(async()=>{const form=event.target,fields=new FormData(form);const result=await request('/auth/v1/token?grant_type=password',{email:fields.get('email'),password:fields.get('password')},false);form.reset();keepSession(result);render();await refreshBackupTimes();message('登入成功，已讀取雲端備份時間。');});});
       modal.addEventListener('click',event=>{const action=event.target.closest('[data-cloud]')?.dataset.cloud;if(!action||working)return;if(action==='close')return close();if(action==='export-complete'){exportDataJson();message('完整備份已下載到裝置。');return;}if(action==='export-workshop'){exportWorkshopDataJson();message('人設卡工坊備份已下載到裝置。');return;}if(action==='export-forum'){try{exportForumDataJson();message('論壇備份已下載到裝置。');}catch(err){message(err.message);}return;}if(action==='import-auto'){modal.querySelector('[data-cloud-file]')?.click();return;}run(async()=>{if(action==='upload'||action==='download')return start(action);if(action==='restore')return restore();if(action==='confirm')return commit();if(action==='cancel'){preview=null;render();return;}if(action==='logout'){try{await request('/auth/v1/logout',{});}finally{localStorage.removeItem(SESSION);session=null;preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;render();}}});});
