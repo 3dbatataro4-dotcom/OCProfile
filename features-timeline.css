@@ -37,6 +37,25 @@
 @media(max-width:680px){.timeline-cover{padding:1.35rem 1rem}.timeline-world-filters{gap:.32rem}.timeline-world-filters button{padding:.31rem .58rem;font-size:.68rem}.timeline-rail{padding:1.1rem .8rem 1.5rem 3.15rem}.timeline-rail:before{left:1.03rem;top:1.5rem;bottom:1.7rem}.timeline-moment-dot{left:-2.54rem;width:15px;height:15px}.timeline-moment-grid{grid-template-columns:minmax(0,1fr)}.timeline-node-card{padding:.78rem .82rem}.timeline-node h3{font-size:1rem}.timeline-event-context-grid{grid-template-columns:minmax(0,1fr);gap:0}.timeline-gap{margin-left:-.62rem}}
 @media(prefers-reduced-motion:reduce){.timeline-moment{animation:none}.timeline-world-filters button{transition:none}}
 
+/* Document editor: keep long metadata lists tucked away and give prose room. */
+.doc-editor-collapsible,.vn-editor-appearance{margin:.65rem 0;border:1px solid var(--border-color);border-radius:14px;background:var(--bg-secondary);overflow:hidden}
+.doc-editor-collapsible>summary,.vn-editor-appearance>summary{display:flex;align-items:center;gap:.55rem;padding:.8rem .95rem;color:var(--text-main);font-weight:750;cursor:pointer;list-style:none}
+.doc-editor-collapsible>summary::-webkit-details-marker,.vn-editor-appearance>summary::-webkit-details-marker{display:none}
+.doc-editor-collapsible>summary:after,.vn-editor-appearance>summary:after{content:"＋";margin-left:auto;color:var(--accent-gold);font-size:1.1rem}
+.doc-editor-collapsible[open]>summary:after,.vn-editor-appearance[open]>summary:after{content:"−"}
+.doc-editor-collapsible>summary>i,.vn-editor-appearance>summary>i{color:var(--accent-gold)}
+.doc-editor-collapsible>summary small,.vn-editor-appearance>summary small{color:var(--text-muted);font-size:.7rem;font-weight:500}
+.doc-editor-collapsible>.form-group{padding:0 .9rem .85rem;margin:0}
+.doc-content-editor-group textarea{min-height:360px;line-height:1.8}
+.doc-format-toolbar{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;margin:.25rem 0 .45rem}
+.doc-format-toolbar button{display:grid;place-items:center;min-width:34px;height:32px;padding:0 .45rem;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-secondary);color:var(--text-main);cursor:pointer}
+.doc-format-toolbar button:hover{border-color:var(--accent-gold);color:var(--accent-gold)}
+.doc-format-toolbar>span{margin-left:.35rem;color:var(--text-muted);font-size:.7rem}
+.doc-reader-content h3,.doc-reader-content h4,.doc-reader-content h5{margin:1.35em 0 .5em;color:var(--text-main);line-height:1.45}
+.doc-reader-content strong{font-weight:800}.doc-reader-content em{font-style:italic}.doc-reader-content del{opacity:.68}.doc-reader-content code{padding:.08em .35em;border-radius:5px;background:color-mix(in srgb,var(--accent-gold),transparent 86%);font-size:.9em}
+.vn-editor-appearance{margin-bottom:1rem}.vn-editor-appearance[open]{padding-bottom:.9rem}.vn-editor-appearance .vn-setting-grid{padding:0 1rem}
+@media(max-width:600px){.doc-content-editor-group textarea{min-height:45vh}.doc-format-toolbar>span{width:100%;margin:.1rem 0 0}.doc-editor-collapsible>summary,.vn-editor-appearance>summary{padding:.72rem .8rem}}
+
 .timeline-main-badge,.timeline-source-badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .58rem;border:1px solid color-mix(in srgb,var(--world-a) 32%,var(--border-color));border-radius:99px;color:color-mix(in srgb,var(--world-a) 82%,var(--text-main));background:color-mix(in srgb,var(--world-a) 10%,var(--bg-card));font-size:.66rem;font-weight:800;vertical-align:middle}
 .timeline-source-badge{border-color:color-mix(in srgb,var(--event-a) 30%,var(--border-color));color:color-mix(in srgb,var(--event-a) 78%,var(--text-main));background:color-mix(in srgb,var(--event-a) 8%,var(--bg-card));white-space:nowrap}
 .timeline-node.is-linked-event{cursor:pointer}
@@ -92,3 +111,4 @@
 .timeline-link-block .timeline-edit-button{flex:none}
 @media(max-width:600px){.timeline-link-actions{display:grid}.timeline-link-actions .btn{width:100%;justify-content:center}.timeline-linked-summary{gap:.4rem}.timeline-source-badge{font-size:.6rem;padding:.17rem .42rem}}
 @media(max-width:480px){.timeline-return-banner{align-items:flex-start;flex-direction:column}.timeline-return-banner button{width:100%;justify-content:center}}
+.timeline-export-books-option{display:flex;align-items:center;gap:.55rem;margin:0 0 .7rem;padding:.7rem .85rem;border:1px solid var(--border-color);border-radius:12px;background:var(--bg-secondary);font-weight:700}.timeline-export-books-option input{width:1.05rem;height:1.05rem;accent-color:var(--accent-gold)}
