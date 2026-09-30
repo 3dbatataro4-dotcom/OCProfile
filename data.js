@@ -145,10 +145,10 @@ const INITIAL_CHARACTERS = [
 const PRESET_PAROS = [
   {
     id: "paro_hogwarts",
-    name: "霍格華茲魔法學校 Paro",
-    description: "角色們化身為霍格華茲學院的教授與學生，展開魔法世界的日常與冒險。",
+    name: "霍格華茲魔法學校 (Hogwarts Paro)",
+    description: "魔法世界觀。每個人物隸屬於四大學院。",
     fields: [
-      { id: "house", name: "霍格華茲學院", type: "select", options: ["Gryffindor", "Slytherin", "Ravenclaw", "Hufflepuff", "阿茲卡班"], description: "選擇分配學院" },
+      { id: "house", name: "學院分院", type: "select", options: ["Gryffindor", "Slytherin", "Ravenclaw", "Hufflepuff"], description: "選擇四大學院" },
       { id: "class_room", name: "幾年幾班/社團", type: "text", options: null, description: "例如: 五年級A班 / 魁地奇球隊" },
       { id: "roommate", name: "宿舍室友", type: "text", options: null, description: "例如: 林恩" },
       { id: "cadre", name: "幹部職稱", type: "text", options: null, description: "例如: 級長 / 男生學生會主席" }
