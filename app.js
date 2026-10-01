@@ -225,7 +225,7 @@ function loadStateFromLocalStorage() {
   if (savedCps) {
     try {
       cps = JSON.parse(savedCps);
-      if (!Array.isArray(cps) || cps.length === 0) cps = [...PRESET_CPS];
+      if (!Array.isArray(cps)) cps = [...PRESET_CPS];
     } catch (e) { cps = [...PRESET_CPS]; }
   } else { cps = [...PRESET_CPS]; }
   cps = normalizeCpCollection(cps);
@@ -822,6 +822,7 @@ function renderCpModule() {
 
 function openCpModal(cpId = null) {
   const modal = document.getElementById("cpModal");
+  document.getElementById("deleteCpInEditorBtn").style.display = cpId ? "inline-flex" : "none";
   const activeChars = characters.filter(c => !c.isHidden);
   const cbContainer = document.getElementById("cpCharCheckboxes");
   const secContainer = document.getElementById("cpCustomSectionsContainer");
@@ -1022,11 +1023,18 @@ function saveCpForm() {
 }
 
 function deleteCp(cpId) {
-  if (confirm("確定要刪除此 CP 組合紀錄嗎？")) {
-    cps = cps.filter(c => c.id !== cpId);
-    saveStateToLocalStorage();
-    renderCpModule();
-  }
+  const cp = cps.find(c => c.id === cpId);
+  if (!cp || !confirm(`確定要刪除「${cp.name}」這張 CP 關係卡嗎？此操作無法從編輯頁復原。`)) return false;
+  cps = cps.filter(c => c.id !== cpId);
+  expandedCpCards.delete(cpId);
+  saveStateToLocalStorage();
+  renderCpModule();
+  return true;
+}
+
+function deleteCpFromEditor() {
+  const cpId = document.getElementById("cpId").value;
+  if (cpId && deleteCp(cpId)) closeModal("cpModal");
 }
 
 // ========== 5. 角色編輯 Modal ==========
