@@ -77,6 +77,7 @@ let lastGraphCanvasSize = { width: 0, height: 0 };
 
 let currentRankingSubjectId = null;
 let currentParoId = null;
+let paroOrderEditing = false;
 let hogwartsTextFieldsOpen = false;
 let currentReadingDocId = null;
 let documentReaderFontSize = 1.05;
@@ -584,9 +585,11 @@ function createCharacterCardHtml(char, isHidden = false, expanded = false) {
       </div>
 
       <div class="char-card-footer">
-        <button class="btn btn-xs btn-outline" onclick="toggleHideCharacter('${char.id}')">
-          <i class="fa-solid ${char.isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i> ${char.isHidden ? '取消隱藏' : '隱藏'}
-        </button>
+        <div class="char-card-actions">
+          <button class="btn btn-xs btn-outline" onclick="toggleHideCharacter('${char.id}')">
+            <i class="fa-solid ${char.isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i> ${char.isHidden ? '取消隱藏' : '隱藏'}
+          </button>
+        </div>
         <div class="char-card-actions">
           <button class="btn btn-xs btn-primary char-edit-btn" onclick="openCharacterModal('${char.id}')">
             <i class="fa-solid fa-pen"></i> 編輯
@@ -2375,11 +2378,11 @@ function renderParoList() {
   if (!currentParoId) currentParoId = paros[0].id;
   const currentParo = paros.find(p => p.id === currentParoId) || paros[0];
 
-  bar.innerHTML = paros.map(p => `
-    <button class="btn btn-pill ${p.id === currentParo.id ? 'active' : ''}" onclick="switchParoSubject('${p.id}')">
-      <i class="fa-solid fa-wand-magic-sparkles"></i> ${p.name}
-    </button>
-  `).join('');
+  bar.innerHTML = `<div class="paro-subject-toolbar"><button type="button" class="btn btn-xs btn-outline" onclick="toggleParoOrderEditing()" aria-pressed="${paroOrderEditing}"><i class="fa-solid fa-arrow-down-up-across-line"></i> ${paroOrderEditing?'完成排序':'編輯排列順序'}</button></div><div class="paro-subject-list ${paroOrderEditing?'is-editing':''}">`+paros.map((p,index) => `
+    <div class="paro-subject-item"><button class="btn btn-pill ${p.id === currentParo.id ? 'active' : ''}" onclick="switchParoSubject('${p.id}')">
+      <i class="fa-solid fa-wand-magic-sparkles"></i> ${escapeHtml(p.name)}
+    </button><span class="paro-order-controls"><button type="button" onclick="moveParoSubject('${p.id}',-1)" aria-label="將 ${escapeHtml(p.name)} 前移" ${index===0?'disabled':''}>↑</button><button type="button" onclick="moveParoSubject('${p.id}',1)" aria-label="將 ${escapeHtml(p.name)} 後移" ${index===paros.length-1?'disabled':''}>↓</button></span></div>
+  `).join('')+'</div>';
 
   const activeChars = characters.filter(c => !c.isHidden);
   const memberChars = activeChars.filter(c => (currentParo.members || []).includes(c.id));
@@ -2388,14 +2391,15 @@ function renderParoList() {
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
       <div>
         <h3><i class="fa-solid fa-wand-magic-sparkles"></i> 【${currentParo.name}】世界觀成員與自訂欄位</h3>
-        ${currentParo.id === 'paro_hogwarts' ? '' : `<p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.2rem;">${currentParo.description || '暫無簡介'}</p>`}
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.2rem;">${escapeHtml(currentParo.description || '暫無簡介')}</p>
       </div>
       <div>
         <button class="btn btn-xs btn-outline" onclick="openParoModal('${currentParo.id}')"><i class="fa-solid fa-gear"></i> 編輯此 Paro 欄位與成員</button>
       </div>
     </div>
 
-    ${currentParo.id === 'paro_hogwarts' ? '<div id="hogwartsDormMount"></div><details class="hgd-legacy-fields" '+(hogwartsTextFieldsOpen?'open':'')+' ontoggle="hogwartsTextFieldsOpen=this.open"><summary><i class="fa-solid fa-list-check"></i><span>文字欄位與分院資料</span><small>需要細調人物設定時展開</small></summary>' : ''}
+    <div id="paroLayoutsMount"></div>
+    ${currentParo.id === 'paro_hogwarts' ? '<details class="hgd-legacy-fields" '+(hogwartsTextFieldsOpen?'open':'')+' ontoggle="hogwartsTextFieldsOpen=this.open"><summary><i class="fa-solid fa-list-check"></i><span>文字欄位與分院資料</span><small>需要細調人物設定時展開</small></summary>' : ''}
     ${(currentParo.fields || []).length ? `
       <div style="font-size:0.82rem; color:var(--accent-gold); margin-bottom:1rem;">
         ✦ 本 Paro 專屬自訂欄位：${(currentParo.fields || []).map(f => f.name + (f.options ? ` (${f.options.join('/')})` : '')).join(' ｜ ')}
@@ -2448,10 +2452,14 @@ function renderParoList() {
     </div>
     ${currentParo.id === 'paro_hogwarts' ? '</details>' : ''}
   `;
-  if (currentParo.id === 'paro_hogwarts') window.OCHogwartsDorm?.mount(currentParo);
+  window.OCParoLayouts?.mount(currentParo);
 }
 
 function switchParoSubject(id) { currentParoId = id; renderParoList(); }
+function toggleParoOrderEditing(){paroOrderEditing=!paroOrderEditing;renderParoList();}
+function moveParoSubject(id,direction) { const index=paros.findIndex(p=>p.id===id),next=index+direction;if(index<0||next<0||next>=paros.length)return;[paros[index],paros[next]]=[paros[next],paros[index]];saveStateToLocalStorage();renderParoList(); }
+function filterParoMembers(query) { const term=String(query||'').trim().toLocaleLowerCase();document.querySelectorAll('#paroCharCheckboxes label').forEach(label=>{label.hidden=!label.textContent.toLocaleLowerCase().includes(term);}); }
+function selectAllParoMembers(checked) { document.querySelectorAll('#paroCharCheckboxes input[type=checkbox]').forEach(input=>{input.checked=checked;}); }
 
 function updateCharParoValue(charId, paroId, fieldId, value) {
   const char = characters.find(c => c.id === charId);
@@ -2459,7 +2467,7 @@ function updateCharParoValue(charId, paroId, fieldId, value) {
     if (!char.paroValues) char.paroValues = {};
     if (!char.paroValues[paroId]) char.paroValues[paroId] = {};
     char.paroValues[paroId][fieldId] = value;
-    if (paroId === 'paro_hogwarts' && fieldId === 'house') window.OCHogwartsDorm?.reconcileHouse(charId, value);
+    if (paroId === 'paro_hogwarts' && fieldId === 'house') window.OCParoLayouts?.reconcileHouse(charId, value);
     saveStateToLocalStorage();
   }
 }
@@ -2470,6 +2478,7 @@ function openParoModal(paroId = null) {
   const checkboxContainer = document.getElementById("paroCharCheckboxes");
   const fieldsContainer = document.getElementById("paroFieldsContainer");
   fieldsContainer.innerHTML = '';
+  document.getElementById('paroMemberSearch').value='';
 
   if (paroId) {
     const paro = paros.find(p => p.id === paroId);
@@ -2505,6 +2514,8 @@ function openParoModal(paroId = null) {
     `).join('');
     document.getElementById("aiParoImportEntry").hidden = true;
   }
+
+  window.OCParoLayouts?.openEditor(paroId ? paros.find(p=>p.id===paroId) : null);
 
   modal.classList.add("active");
 }
@@ -2612,14 +2623,17 @@ function saveParoForm() {
 
   const checkedMembers = Array.from(document.querySelectorAll("#paroCharCheckboxes input:checked")).map(cb => cb.value);
 
+  const existingParo = id ? paros.find(p => p.id === id) : null;
   const paroData = {
+    ...(existingParo || {}),
     id: id || `paro_${Date.now()}`,
     name: name,
     description: document.getElementById("paroDescription").value.trim(),
     fields: fields,
     members: checkedMembers,
     dormRooms: id ? (paros.find(p => p.id === id)?.dormRooms || []).map(room => ({...room, members:(room.members || []).filter(memberId => checkedMembers.includes(memberId))})) : [],
-    dormManagedIds: id ? (paros.find(p => p.id === id)?.dormManagedIds || []).filter(memberId => checkedMembers.includes(memberId)) : []
+    dormManagedIds: id ? (paros.find(p => p.id === id)?.dormManagedIds || []).filter(memberId => checkedMembers.includes(memberId)) : [],
+    layouts: window.OCParoLayouts?.saveEditor(checkedMembers) || existingParo?.layouts || {}
   };
 
   if (id) {
@@ -5233,12 +5247,6 @@ async function generateExportText() {
   } else if (mode === 'paros_only') {
     text = `# 【Paro 平行世界獨立設定】\n生成時間：${new Date().toLocaleString()}\n\n`;
     targetParos.forEach(p => {
-      if (p.id === 'paro_hogwarts' && window.OCHogwartsDorm?.exportText) {
-        const memberChars = characters.filter(c => !c.isHidden && (p.members || []).includes(c.id));
-        text += window.OCHogwartsDorm.exportText(p, memberChars, '###');
-        text += `\n-----------------------------------\n\n`;
-        return;
-      }
       text += `## Paro: ${p.name}\n`;
       text += `✦ Paro 介紹：${p.description || '未填寫'}\n`;
       const memberChars = characters.filter(c => !c.isHidden && (p.members || []).includes(c.id));
@@ -5249,6 +5257,7 @@ async function generateExportText() {
           text += `- ${f.name}${f.description ? `（${f.description}）` : ''}: ${valObj[f.id] || '未填寫'}\n`;
         });
       });
+      text += window.OCParoLayouts?.exportText(p,memberChars) || '';
       text += `\n-----------------------------------\n\n`;
     });
   } else if (mode === 'factions_only') {
@@ -5374,11 +5383,6 @@ async function generateExportText() {
       text += `\n===================================\n`;
       text += `## 【Paro 平行世界設定 (所選角色)】\n\n`;
       targetParos.forEach(p => {
-        if (p.id === 'paro_hogwarts' && window.OCHogwartsDorm?.exportText) {
-          const memberChars = targetChars.filter(c => (p.members || []).includes(c.id));
-          text += window.OCHogwartsDorm.exportText(p, memberChars, '###');
-          return;
-        }
         text += `### Paro: ${p.name}\n`;
         text += `✦ Paro 介紹：${p.description || '未填寫'}\n`;
         const memberChars = targetChars.filter(c => (p.members || []).includes(c.id));
@@ -5389,6 +5393,7 @@ async function generateExportText() {
             text += `   * ${f.name}${f.description ? `（${f.description}）` : ''}: ${valObj[f.id] || '未填寫'}\n`;
           });
         });
+        text += window.OCParoLayouts?.exportText(p,memberChars) || '';
         text += `\n`;
       });
     }
