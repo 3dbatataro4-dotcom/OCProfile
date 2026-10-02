@@ -26,7 +26,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=31.1">
+  <link rel="stylesheet" href="style.css?v=31.3">
   <link rel="stylesheet" href="app-drawer.css?v=2.0">
   <link rel="stylesheet" href="app-drawer-enhancements.css?v=1.3">
   <link rel="stylesheet" href="lottery.css?v=1.4">
@@ -37,7 +37,7 @@
   <link rel="stylesheet" href="music.css?v=1.5">
   <link rel="stylesheet" href="music-player-refresh.css?v=1.3">
   <link rel="stylesheet" href="vn-page.css?v=1.0">
-  <link rel="stylesheet" href="vn-page-responsive.css?v=1.0">
+  <link rel="stylesheet" href="vn-page-responsive.css?v=1.1">
   <link rel="stylesheet" href="vn-layout.css?v=1.0">
   <link rel="stylesheet" href="vn-library.css?v=1.0">
   <link rel="stylesheet" href="forum.css?v=21.52">
@@ -215,19 +215,11 @@
 
         <div class="rel-search-studio">
           <div class="rel-filter-section">
-            <div class="rel-filter-heading"><span>01</span><strong>選擇視角</strong><small>誰的稱呼與看法？</small></div>
+            <div class="rel-filter-heading"><strong>選擇視角</strong><small id="relResultCount" aria-live="polite">0 位對象</small><div class="rel-filter-actions"><button type="button" class="btn btn-xs btn-outline" onclick="clearRelationshipFilters()" aria-label="清除稱呼表篩選"><i class="fa-solid fa-filter-circle-xmark"></i></button><button type="button" id="relAddTargetButton" class="btn btn-xs btn-outline" onclick="openAddCallNameTargetModal()"><i class="fa-solid fa-user-plus"></i> 加入對象</button></div></div>
             <div class="rel-filter-grid">
               <label class="rel-search-field"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="relSubjectSearch" type="search" aria-label="搜尋視角角色" placeholder="搜尋視角角色名稱…" oninput="renderCallNameMatrix()"></label>
               <label><span class="sr-only">視角角色陣營</span><select id="relSubjectFaction" aria-label="視角角色陣營" onchange="renderCallNameMatrix()"><option value="">全部陣營</option></select></label>
               <label class="rel-perspective-choice"><span class="sr-only">選擇視角角色</span><select id="perspectiveCharSelect" aria-label="選擇視角角色" onchange="renderCallNameMatrix()"></select></label>
-            </div>
-          </div>
-          <div class="rel-filter-section">
-            <div class="rel-filter-heading"><span>02</span><strong>檢索稱呼對象</strong><small id="relResultCount" aria-live="polite">0 位對象</small></div>
-            <div class="rel-filter-grid rel-target-filter-grid">
-              <label class="rel-search-field"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="relTargetSearch" type="search" aria-label="搜尋稱呼對象" placeholder="搜尋對象名稱、英文名或別名…" oninput="renderCallNameMatrix()"></label>
-              <label><span class="sr-only">稱呼對象陣營</span><select id="relTargetFaction" aria-label="稱呼對象陣營" onchange="renderCallNameMatrix()"><option value="">全部陣營</option></select></label>
-              <div class="rel-filter-actions"><button type="button" class="btn btn-xs btn-outline" onclick="clearRelationshipFilters()" aria-label="清除稱呼表篩選"><i class="fa-solid fa-filter-circle-xmark"></i></button><button type="button" id="relAddTargetButton" class="btn btn-xs btn-outline" onclick="openAddCallNameTargetModal()"><i class="fa-solid fa-user-plus"></i> 加入對象</button></div>
             </div>
           </div>
         </div>
@@ -1562,16 +1554,21 @@
         <button class="close-btn" onclick="closeModal('addCallNameCharModal')">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="rel-filter-grid rel-add-filter-grid">
+          <label class="rel-search-field"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="callNameAddSearch" type="search" aria-label="搜尋可加入的稱呼對象" placeholder="搜尋名稱、英文名或別名…" oninput="renderAddCallNameTargets()"></label>
+          <label><span class="sr-only">篩選可加入對象的陣營</span><select id="callNameAddFaction" aria-label="篩選可加入對象的陣營" onchange="renderAddCallNameTargets()"><option value="">全部陣營</option></select></label>
+        </div>
         <div class="form-group">
           <label>選擇要編入該視角稱呼表的角色：</label>
           <select id="callNameTargetCharSelect">
             <!-- Populated by app.js -->
           </select>
+          <small id="callNameAddCount" class="form-help" aria-live="polite"></small>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal('addCallNameCharModal')">取消</button>
-        <button class="btn btn-primary" onclick="confirmAddCallNameTarget()">確認加入稱呼表</button>
+        <button id="callNameAddConfirm" class="btn btn-primary" onclick="confirmAddCallNameTarget()">確認加入稱呼表</button>
       </div>
     </div>
   </div>
@@ -1706,7 +1703,7 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=31.1"></script>
+  <script src="app.js?v=31.3"></script>
   <script src="character-archive.js?v=1.1"></script>
   <script src="app-drawer.js?v=2.7"></script>
   <script src="lottery.js?v=1.4"></script>
