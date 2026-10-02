@@ -24,5 +24,10 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 .vn-player-controls { padding-bottom: max(.6rem, env(safe-area-inset-bottom)); }
+#vnpAdvancedPlayer {
+  height: var(--oc-reader-height, 100%) !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
 body:has(.vn-player-backdrop.active) .mobile-bottom-bar,
 body:has(#vnpAdvancedPlayer) .mobile-bottom-bar { visibility: hidden !important; }
