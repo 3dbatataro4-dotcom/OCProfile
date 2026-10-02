@@ -26,7 +26,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=26.4">
+  <link rel="stylesheet" href="style.css?v=31.1">
   <link rel="stylesheet" href="app-drawer.css?v=2.0">
   <link rel="stylesheet" href="app-drawer-enhancements.css?v=1.3">
   <link rel="stylesheet" href="lottery.css?v=1.4">
@@ -192,15 +192,15 @@
     <section id="tab-relationships" class="tab-content">
       <div class="section-banner">
         <div>
-          <h2><i class="fa-solid fa-heart-circle-bolt"></i> 角色稱呼矩陣與互動關係圖網</h2>
-          <p>可選擇要加入稱呼表的對象，畫面上直觀展示視角角色的頭像。</p>
+          <h2><i class="fa-solid fa-heart-circle-bolt"></i> 角色稱呼與關係</h2>
+          <p>選擇一位角色，查看他對其他人物的稱呼與看法。</p>
         </div>
       </div>
 
       <!-- Relationship View Mode Switcher -->
       <div class="rel-mode-bar" style="margin-bottom:1rem;">
         <button class="btn btn-pill active" id="relModeMatrixBtn" onclick="switchRelView('matrix')">
-          <i class="fa-solid fa-table-cells"></i> 雙向稱呼矩陣
+          <i class="fa-solid fa-table-cells"></i> 稱呼表
         </button>
         <button class="btn btn-pill" id="relModeGraphBtn" onclick="switchRelView('graph')">
           <i class="fa-solid fa-circle-nodes"></i> 可拖拽圖像與縮放關係圖
@@ -213,17 +213,23 @@
           <!-- Rendered by app.js with Avatar -->
         </div>
 
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
-          <div style="display:flex; align-items:center; gap:0.6rem;">
-            <label>選擇視角角色：</label>
-            <select id="perspectiveCharSelect" onchange="renderCallNameMatrix()" style="padding:0.4rem 0.8rem;">
-              <!-- Options populated by app.js -->
-            </select>
+        <div class="rel-search-studio">
+          <div class="rel-filter-section">
+            <div class="rel-filter-heading"><span>01</span><strong>選擇視角</strong><small>誰的稱呼與看法？</small></div>
+            <div class="rel-filter-grid">
+              <label class="rel-search-field"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="relSubjectSearch" type="search" aria-label="搜尋視角角色" placeholder="搜尋視角角色名稱…" oninput="renderCallNameMatrix()"></label>
+              <label><span class="sr-only">視角角色陣營</span><select id="relSubjectFaction" aria-label="視角角色陣營" onchange="renderCallNameMatrix()"><option value="">全部陣營</option></select></label>
+              <label class="rel-perspective-choice"><span class="sr-only">選擇視角角色</span><select id="perspectiveCharSelect" aria-label="選擇視角角色" onchange="renderCallNameMatrix()"></select></label>
+            </div>
           </div>
-
-          <button class="btn btn-xs btn-outline" onclick="openAddCallNameTargetModal()">
-            <i class="fa-solid fa-user-plus"></i> 選擇要加入稱呼表的對象
-          </button>
+          <div class="rel-filter-section">
+            <div class="rel-filter-heading"><span>02</span><strong>檢索稱呼對象</strong><small id="relResultCount" aria-live="polite">0 位對象</small></div>
+            <div class="rel-filter-grid rel-target-filter-grid">
+              <label class="rel-search-field"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="relTargetSearch" type="search" aria-label="搜尋稱呼對象" placeholder="搜尋對象名稱、英文名或別名…" oninput="renderCallNameMatrix()"></label>
+              <label><span class="sr-only">稱呼對象陣營</span><select id="relTargetFaction" aria-label="稱呼對象陣營" onchange="renderCallNameMatrix()"><option value="">全部陣營</option></select></label>
+              <div class="rel-filter-actions"><button type="button" class="btn btn-xs btn-outline" onclick="clearRelationshipFilters()" aria-label="清除稱呼表篩選"><i class="fa-solid fa-filter-circle-xmark"></i></button><button type="button" id="relAddTargetButton" class="btn btn-xs btn-outline" onclick="openAddCallNameTargetModal()"><i class="fa-solid fa-user-plus"></i> 加入對象</button></div>
+            </div>
+          </div>
         </div>
 
         <div class="table-responsive rel-desktop-table">
@@ -1101,6 +1107,7 @@
           <textarea id="factionDescription" rows="2" placeholder="簡單介紹陣營內容..."></textarea>
         </div>
         <div class="form-group"><label>世界觀主題漸層</label><div class="world-color-controls"><label>起色 <input type="color" id="factionColorA" value="#a56e79" oninput="OCFeatures.updateFactionColorPreview()"></label><label>終色 <input type="color" id="factionColorB" value="#686a9c" oninput="OCFeatures.updateFactionColorPreview()"></label><span class="world-color-preview" id="factionColorPreview" aria-hidden="true"></span></div></div>
+        <div class="faction-filter-setting"><label><input id="factionShowInFilters" type="checkbox" checked> 此陣營加入篩選列表</label><p>下方可分別設定子陣營；未勾選的項目仍保留成員與標籤，只從篩選選單隱藏。</p></div>
         <div class="form-group">
           <label>子標籤管理</label>
           <div id="subTagsContainer">
@@ -1699,7 +1706,7 @@
 
   <!-- Scripts -->
   <script src="data.js"></script>
-  <script src="app.js?v=31.0"></script>
+  <script src="app.js?v=31.1"></script>
   <script src="character-archive.js?v=1.1"></script>
   <script src="app-drawer.js?v=2.7"></script>
   <script src="lottery.js?v=1.4"></script>
