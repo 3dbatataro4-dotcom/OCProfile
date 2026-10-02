@@ -1715,7 +1715,7 @@ function matchesRelationshipFaction(char,value) {
 
 function renderRelationshipFactionFilters() {
   const choices=getFactionFilterChoices();
-  for(const id of ['relSubjectFaction','relTargetFaction']){
+  for(const id of ['relSubjectFaction','callNameAddFaction']){
     const select=document.getElementById(id);if(!select)continue;
     const previous=select.value;
     select.innerHTML='<option value="">全部陣營</option>'+choices.map(row=>`<option value="${escapeHtml(row.value)}">${escapeHtml(row.label)}</option>`).join('');
@@ -1735,7 +1735,7 @@ function openRelationshipForTarget(sourceId,targetId) {
 }
 
 function clearRelationshipFilters() {
-  for(const id of ['relSubjectSearch','relSubjectFaction','relTargetSearch','relTargetFaction']){const input=document.getElementById(id);if(input)input.value='';}
+  for(const id of ['relSubjectSearch','relSubjectFaction']){const input=document.getElementById(id);if(input)input.value='';}
   renderCallNameMatrix();
 }
 
@@ -1743,9 +1743,7 @@ function renderCallNameMatrix() {
   renderRelationshipFactionFilters();
   const select=document.getElementById('perspectiveCharSelect');
   const subjectQuery=(document.getElementById('relSubjectSearch')?.value||'').trim().toLocaleLowerCase();
-  const targetQuery=(document.getElementById('relTargetSearch')?.value||'').trim().toLocaleLowerCase();
   const subjectFaction=document.getElementById('relSubjectFaction')?.value||'';
-  const targetFaction=document.getElementById('relTargetFaction')?.value||'';
   const matchesName=(char,query)=>!query||[char.name,char.englishName,Array.isArray(char.aliases)?char.aliases.join(' '):char.aliases].some(value=>String(value||'').toLocaleLowerCase().includes(query));
   const activeChars=characters.filter(char=>!char.isHidden&&matchesName(char,subjectQuery)&&matchesRelationshipFaction(char,subjectFaction));
   const previous=select.value;
@@ -1763,12 +1761,12 @@ function renderCallNameMatrix() {
   }
   const names=perspectiveTargets[subject.id];
   const allTargets=characters.filter(char=>char.id!==subject.id&&(!char.isHidden||char.isAiPlaceholder)&&names.some(name=>sameCharacterName(name,char.name)));
-  const targets=allTargets.filter(char=>matchesName(char,targetQuery)&&matchesRelationshipFaction(char,targetFaction));
-  if(count)count.textContent=`${targets.length} / ${allTargets.length} 位對象`;
+  const targets=allTargets;
+  if(count)count.textContent=`${targets.length} 位對象`;
   const actions=target=>`<div class="rel-card-actions"><button type="button" class="btn btn-xs btn-outline" data-rel-edit="${escapeHtml(target.id)}" data-rel-source="${escapeHtml(subject.id)}"><i class="fa-solid fa-pen"></i> 編輯</button><button type="button" class="btn btn-xs btn-outline rel-remove" data-rel-remove="${escapeHtml(target.id)}" data-rel-source="${escapeHtml(subject.id)}" aria-label="移除 ${escapeHtml(target.name)}"><i class="fa-solid fa-user-minus"></i></button></div>`;
   const person=target=>`<div class="rel-person"><img src="${escapeHtml(target.avatar||DEFAULT_VN_AVATAR)}" alt=""><strong>${escapeHtml(target.name)}</strong></div>`;
   const label=rel=>`<span class="rel-call-badge">${escapeHtml(rel.callName||'—')}</span>`;
-  if(!targets.length){empty(allTargets.length?'沒有符合的對象，請調整名稱或陣營條件。':'尚未加入對象，點選「加入對象」開始建立稱呼。');return;}
+  if(!targets.length){empty('尚未加入對象，點選「加入對象」開始建立稱呼。');return;}
   tbody.innerHTML=targets.map(target=>{const rel=relationshipForTarget(subject,target)||{};return `<tr><td>${person(target)}</td><td>${label(rel)}</td><td class="rel-opinion">${escapeHtml(rel.opinion||'尚無記載')}</td><td>${rel.isMainline===false?'<span class="rel-type-badge">番外</span>':'<span class="rel-mainline">主線</span>'}</td><td>${actions(target)}</td></tr>`;}).join('');
   if(mobile)mobile.innerHTML=targets.map(target=>{const rel=relationshipForTarget(subject,target)||{};return `<article class="rel-pair-card"><header class="rel-pair-header">${person(target)}${actions(target)}</header><div class="rel-pair-body">${label(rel)}${rel.isMainline===false?'<span class="rel-type-badge">番外</span>':''}<p class="rel-opinion">${escapeHtml(rel.opinion||'尚無記載')}</p></div></article>`;}).join('');
 }
@@ -1790,14 +1788,31 @@ function openAddCallNameTargetModal() {
   const currentTargets = perspectiveTargets[currentSubject.id] || [];
   const unadded = activeChars.filter(c => c.id !== currentSubject.id && !currentTargets.some(name=>sameCharacterName(name,c.name)));
 
-  const select = document.getElementById("callNameTargetCharSelect");
   if (!unadded.length) {
     alert("所有啟用角色均已在該稱呼表中！");
     return;
   }
 
-  select.innerHTML = unadded.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('callNameAddSearch').value='';
+  document.getElementById('callNameAddFaction').value='';
+  renderRelationshipFactionFilters();
+  renderAddCallNameTargets();
   document.getElementById("addCallNameCharModal").classList.add("active");
+}
+
+function renderAddCallNameTargets() {
+  const subjectId=document.getElementById('perspectiveCharSelect').value;
+  const names=perspectiveTargets[subjectId]||[];
+  const query=document.getElementById('callNameAddSearch').value.trim().toLocaleLowerCase();
+  const faction=document.getElementById('callNameAddFaction').value;
+  const candidates=characters.filter(char=>!char.isHidden&&String(char.id)!==subjectId&&!names.some(name=>sameCharacterName(name,char.name)));
+  const matches=candidates.filter(char=>matchesRelationshipFaction(char,faction)&&(!query||[char.name,char.englishName,Array.isArray(char.aliases)?char.aliases.join(' '):char.aliases].some(value=>String(value||'').toLocaleLowerCase().includes(query))));
+  const select=document.getElementById('callNameTargetCharSelect'),previous=select.value;
+  select.innerHTML=matches.length?matches.map(char=>`<option value="${escapeHtml(char.name)}">${escapeHtml(char.name)}</option>`).join(''):'<option value="">沒有符合的角色</option>';
+  if(matches.some(char=>char.name===previous))select.value=previous;
+  select.disabled=!matches.length;
+  document.getElementById('callNameAddConfirm').disabled=!matches.length;
+  document.getElementById('callNameAddCount').textContent=matches.length?`${matches.length} / ${candidates.length} 位可加入`:'沒有符合的角色，請調整名稱或陣營篩選。';
 }
 
 function confirmAddCallNameTarget() {
