@@ -4371,7 +4371,7 @@ function duckVisualNovelBgmForTypeSound() {
 function synthesizeVisualNovelTypeBeep() {
   if(!visualNovelAudioContext||visualNovelAudioContext.state!=='running'||!visualNovelTypeGain)return false;
   const oscillator=visualNovelAudioContext.createOscillator(),gain=visualNovelAudioContext.createGain(),now=visualNovelAudioContext.currentTime;
-  oscillator.type='triangle';oscillator.frequency.setValueAtTime(900,now);oscillator.frequency.exponentialRampToValueAtTime(590,now+0.045);gain.gain.setValueAtTime(0.15,now);gain.gain.exponentialRampToValueAtTime(0.00001,now+0.052);oscillator.connect(gain);gain.connect(visualNovelTypeGain);oscillator.start(now);oscillator.stop(now+0.055);duckVisualNovelBgmForTypeSound();return true;
+  oscillator.type='triangle';oscillator.frequency.setValueAtTime(900,now);oscillator.frequency.exponentialRampToValueAtTime(590,now+0.045);gain.gain.setValueAtTime(0.30,now);gain.gain.exponentialRampToValueAtTime(0.00002,now+0.052);oscillator.connect(gain);gain.connect(visualNovelTypeGain);oscillator.start(now);oscillator.stop(now+0.055);duckVisualNovelBgmForTypeSound();return true;
 }
 
 function playVisualNovelTypeBeep() {
