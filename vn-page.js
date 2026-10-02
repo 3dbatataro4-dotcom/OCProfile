@@ -14,7 +14,26 @@
   const assets=type=>mediaLibrary.filter(row=>row?.kind==='vn-asset'&&row.assetType===type&&row.listed!==false);
   const folders=type=>mediaLibrary.filter(row=>row?.kind==='vn-folder'&&row.assetType===type);
   const libraries=()=>mediaLibrary.filter(row=>row?.kind==='vn-sprite-library');
-  const configFor=doc=>({...defaultConfig(),...(books.find(book=>book.id===doc?.bookId)?.visualNovelPage||{}),...(doc?.visualNovelPage||{})});
+  function inheritsBook(doc){
+    if(!books.some(book=>book.id===doc?.bookId))return false;
+    const own=doc.visualNovelPage||{};
+    if(typeof own.inheritBook==='boolean')return own.inheritBook;
+    const defaults=defaultConfig();
+    return !Object.keys(defaults).some(key=>key!=='cues'&&Object.hasOwn(own,key)&&JSON.stringify(own[key])!==JSON.stringify(defaults[key]));
+  }
+  function configFor(doc){
+    const parent=books.find(book=>book.id===doc?.bookId)?.visualNovelPage||{},own=doc?.visualNovelPage||{},overrides={};
+    if(!inheritsBook(doc))for(const [key,value] of Object.entries(own)){
+      if(own.inheritBook===false||(!Array.isArray(value)&&value!==''&&value!=null)||(Array.isArray(value)&&value.length))overrides[key]=value;
+    }
+    return {...defaultConfig(),...parent,...overrides,cues:own.cues||{}};
+  }
+  function classicCue(doc,event){
+    const cue=configFor(doc).cues?.[event?.sourceLineIndex]||{};
+    const scene=linkedAssets(doc,'bg').find(row=>row.id===cue.sceneId);
+    const track=linkedAssets(doc,'bgm').find(row=>row.id===cue.musicId);
+    return {sceneSource:scene?(scene.url||`asset:${scene.id}`):'',musicSource:track?(track.url||`asset:${track.id}`):''};
+  }
   const scopeRecord=()=>context?.type==='book'?books.find(row=>row.id===context.id):documents.find(row=>row.id===context?.id);
   const scopeLabel=()=>context?.type==='book'?'整本書':'本篇文章';
   function requireSaved(type,recordId){if(recordId)return true;alert(`請先儲存${type==='book'?'書籍':'文檔'}，再設定視覺小說頁面。`);return false;}
@@ -39,7 +58,7 @@
   async function handleSettingsClick(event){const button=event.target.closest('[data-action]');if(!button)return;const action=button.dataset.action;if(action==='close')return close();if(action==='save')return save();if(action==='new-folder'){const name=prompt('資料夾名稱（例如：校園）');if(!name?.trim())return;mediaLibrary.push({id:id('vnf'),kind:'vn-folder',assetType:button.dataset.type,name:name.trim()});saveStateToLocalStorage();return renderSettings();}if(action==='rename-folder'){const row=mediaLibrary.find(item=>item.id===button.dataset.id),name=prompt('資料夾名稱',row?.name||'');if(row&&name?.trim()){row.name=name.trim();saveStateToLocalStorage();renderSettings();}return;}if(action==='upload-asset')return uploadAsset(button.dataset.type);if(action==='new-asset'){const type=button.dataset.type,title=prompt(type==='bg'?'場景名稱（如 校園-教室）':'音樂名稱');if(!title?.trim())return;const url=prompt('素材直接網址（https://）。若要上傳本機素材，可在劇本編輯器的素材庫上傳後回來編輯。');if(!url?.trim()||!/^https?:\/\//i.test(url.trim()))return alert('請輸入有效的 HTTPS 圖片或音訊網址。');const group=folders(type),folderId=group.length?prompt(`資料夾 ID（可留空）：\n${group.map(row=>`${row.name}: ${row.id}`).join('\n')}`)||'':'';const tags=type==='bgm'?prompt(`情緒標籤（逗號分隔）\n建議：${moods.join('、')}`)||'':'';mediaLibrary.push({id:id('vna'),kind:'vn-asset',assetType:type,title:title.trim(),url:url.trim(),folderId:group.some(row=>row.id===folderId)?folderId:'',tags:tags.split(/[,，、]/).map(s=>s.trim()).filter(Boolean),listed:true,createdAt:Date.now()});saveStateToLocalStorage();return renderSettings();}if(action==='edit-asset'){const row=mediaLibrary.find(item=>item.id===button.dataset.id);if(!row)return;const title=prompt('素材名稱',row.title||'');if(title===null)return;row.title=title.trim()||row.title;const group=folders(row.assetType),folder=prompt(`所屬資料夾 ID（留空為根目錄）：\n${group.map(item=>`${item.name}: ${item.id}`).join('\n')}`,row.folderId||'');if(folder!==null)row.folderId=group.some(item=>item.id===folder)?folder:'';if(row.assetType==='bgm'){const tags=prompt('情緒標籤（逗號分隔）',(row.tags||[]).join('、'));if(tags!==null)row.tags=tags.split(/[,，、]/).map(s=>s.trim()).filter(Boolean);}saveStateToLocalStorage();return renderSettings();}if(action==='all-music'){modal.querySelectorAll('[data-link-asset]').forEach(input=>{if(assets('bgm').some(row=>row.id===input.dataset.linkAsset))input.checked=true;});return;}if(action==='new-library'){const name=prompt('立繪素材庫名稱');if(!name?.trim())return;const row={id:id('vns'),kind:'vn-sprite-library',name:name.trim(),cast:{},allCharacters:false};mediaLibrary.push(row);saveStateToLocalStorage();renderSettings();$('vnpSpriteLibrary').value=row.id;renderSpriteEditor();return;}const library=libraries().find(row=>row.id===$('vnpSpriteLibrary')?.value);if(!library)return;if(action==='rename-library'){const name=prompt('立繪素材庫名稱',library.name);if(name?.trim()){library.name=name.trim();saveStateToLocalStorage();renderSettings();$('vnpSpriteLibrary').value=library.id;renderSpriteEditor();}return;}if(action==='add-character'){const charId=$('vnpAddCharacter')?.value;if(charId){library.cast=library.cast||{};library.cast[charId]={images:{},crop:{x:25,y:0,w:50,h:50},avatarMode:false};saveStateToLocalStorage();renderSpriteEditor();}return;}if(action==='new-expression'){const name=prompt('自訂情緒名稱');if(!name?.trim())return;library.cast[button.dataset.char].images[name.trim()]='';saveStateToLocalStorage();return renderSpriteEditor();}}
   document.addEventListener('change',async event=>{if(!modal?.classList.contains('active')||!modal.contains(event.target))return;const target=event.target;if(target.id==='vnpSpriteLibrary')return renderSpriteEditor();const library=libraries().find(row=>row.id===$('vnpSpriteLibrary')?.value);if(!library)return;if(target.id==='vnpLibraryAll'){library.allCharacters=target.checked;saveStateToLocalStorage();return;}const cast=library.cast?.[target.dataset.char];if(!cast)return;if(target.dataset.crop){cast.crop[target.dataset.crop]=Math.max(0,Math.min(100,Number(target.value)||0));saveStateToLocalStorage();}if(target.dataset.avatarMode){cast.avatarMode=target.checked;saveStateToLocalStorage();}if(target.dataset.imageUrl){cast.images[target.dataset.imageUrl]=target.value.trim();saveStateToLocalStorage();}if(target.dataset.imageFile){const file=target.files?.[0];if(!file)return;if(!file.type.startsWith('image/'))return alert('請選擇圖片。');const assetId=id('vna');try{await OCFeatures.storeFile(assetId,file);mediaLibrary.push({id:assetId,kind:'vn-asset',assetType:'sprite',title:`${characters.find(row=>String(row.id)===String(target.dataset.char))?.name||'人物'}-${target.dataset.imageFile}`,type:file.type,size:file.size,localOnly:true,listed:false,createdAt:Date.now()});cast.images[target.dataset.imageFile]=`asset:${assetId}`;saveStateToLocalStorage();}catch(error){alert(`立繪儲存失敗：${error.message}`);}}});
   function linkedAssets(doc,type){const cfg=configFor(doc),folderIds=type==='bg'?cfg.sceneFolderIds:cfg.musicFolderIds,assetIds=type==='bg'?cfg.sceneAssetIds:cfg.musicAssetIds;return assets(type).filter(row=>assetIds?.includes(row.id)||folderIds?.includes(row.folderId)||(type==='bgm'&&cfg.allMusic));}
-  async function analyze(kind){
+  async function analyze(kind,options={}){
     const doc=documents.find(row=>row.id===$('vnDocumentId')?.value);
     if(!doc)return alert('請先開啟文章的視覺小說編輯器。');
     if(!deepseekSettings.apiKey)return alert('請先設定 DeepSeek API Key。');
@@ -50,7 +69,8 @@
     if(kind==='scene'&&!sceneChoices.length)return alert('請先在頁面設置關聯場景素材或資料夾。');
     if(kind==='music'&&!musicChoices.length)return alert('請先在頁面設置關聯音樂素材或資料夾。');
     const choices=kind==='scene'?sceneChoices.map(row=>({id:row.id,name:row.title})):kind==='music'?musicChoices.map(row=>({id:row.id,name:row.title,tags:row.tags||[]})):characters.map(row=>({id:row.id,name:row.name}));
-    const cues={...(doc.visualNovelPage?.cues||{})};
+    const cues={...(options.cues||doc.visualNovelPage?.cues||{})};
+    if(kind==='scene')for(const row of lines){const cue=cues[row.sourceLineIndex];if(cue?.sceneId&&cue.sceneSource!=='manual'){const next={...cue};delete next.sceneId;delete next.sceneSource;cues[row.sourceLineIndex]=next;}}
     if(kind==='music')for(const row of lines){const cue=cues[row.sourceLineIndex];if(cue?.musicId&&cue.musicSource!=='manual'){const next={...cue};delete next.musicId;delete next.musicSource;cues[row.sourceLineIndex]=next;}}
     const chunks=[];for(let i=0;i<lines.length;i+=55)chunks.push(lines.slice(i,i+55));
     const label={scene:'場景',emotion:'情緒與站位',music:'音樂'}[kind];
@@ -65,9 +85,9 @@
         for(const row of chunk){
           const value=parsed[String(row.sourceLineIndex)],old=cues[row.sourceLineIndex]||{};
           if(kind==='emotion'){
-            if(value&&typeof value==='object')cues[row.sourceLineIndex]={...old,emotion:String(value.emotion||'普通').slice(0,24),position:['left','center','right'].includes(value.position)?value.position:'center',emotionSource:'ai'};
+            if(old.emotionSource!=='manual'&&value&&typeof value==='object')cues[row.sourceLineIndex]={...old,emotion:String(value.emotion||'普通').slice(0,24),position:['left','center','right'].includes(value.position)?value.position:'center',emotionSource:'ai'};
           }else if(kind==='scene'){
-            if(choices.some(choice=>choice.id===value))cues[row.sourceLineIndex]={...old,sceneId:value,sceneSource:'ai'};
+            if(old.sceneSource!=='manual'&&choices.some(choice=>choice.id===value))cues[row.sourceLineIndex]={...old,sceneId:value,sceneSource:'ai'};
           }else{
             if(old.musicSource==='manual'&&old.musicId){lastMusicId=old.musicId;lastMusicOrdinal=ordinal;}
             else if(choices.some(choice=>choice.id===value)&&value!==lastMusicId&&ordinal-lastMusicOrdinal>=10){cues[row.sourceLineIndex]={...old,musicId:value,musicSource:'ai'};lastMusicId=value;lastMusicOrdinal=ordinal;changes++;}
@@ -75,10 +95,54 @@
           }
         }
       }
-      doc.visualNovelPage={...defaultConfig(),...doc.visualNovelPage,cues};
+      if(options.persist!==false){doc.visualNovelPage={...doc.visualNovelPage,cues};saveStateToLocalStorage();renderAnnotations();}
+      if(!options.silent)alert(`已完成${label}獨立標註，共檢查 ${lines.length} 句${kind==='music'?`，保留 ${changes} 個段落換曲點`:''}；正文與說話人保持不變。`);
+      return {cues,lines:lines.length,changes};
+    }catch(error){if(options.silent)throw error;alert(`AI 標註失敗：${error.message}`);return null;}finally{hideToast();}
+  }
+  let analyzingAll=false;
+  async function analyzeAll(){
+    if(analyzingAll)return;
+    const doc=documents.find(row=>row.id===$('vnDocumentId')?.value),editor=$('vnScriptText');
+    if(!doc||!editor)return;
+    if(!deepseekSettings.apiKey)return alert('請先設定 DeepSeek API Key。');
+    analyzingAll=true;
+    const oldScript=editor.value,oldNovel=doc.visualNovel?structuredClone(doc.visualNovel):null,oldPage=doc.visualNovelPage?structuredClone(doc.visualNovelPage):null,controls=[...document.querySelectorAll('#visualNovelEditorModal button,#visualNovelEditorModal input,#visualNovelEditorModal select,#visualNovelEditorModal textarea')];
+    const disabled=controls.map(control=>control.disabled);controls.forEach(control=>control.disabled=true);
+    $('visualNovelEditorModal')?.setAttribute('aria-busy','true');
+    try{
+      if(!await generateVisualNovelWithAi(true)){if(oldNovel)doc.visualNovel=oldNovel;else delete doc.visualNovel;return;}
+      if($('vnDocumentId')?.value!==doc.id)throw new Error('編輯中的篇章已變更');
+      const prior=new Map();
+      for(const row of parseVisualNovelScript(oldScript))if(row.type==='dialogue'){
+        if(!prior.has(row.text))prior.set(row.text,[]);
+        prior.get(row.text).push(doc.visualNovelPage?.cues?.[row.sourceLineIndex]);
+      }
+      let cues={};
+      for(const row of parseVisualNovelScript(editor.value))if(row.type==='dialogue'){
+        const cue=prior.get(row.text)?.shift();if(cue)cues[row.sourceLineIndex]={...cue};
+      }
+      const skipped=[];
+      for(const kind of ['emotion','scene','music']){
+        if(kind==='scene'&&!linkedAssets(doc,'bg').length){skipped.push('場景');continue;}
+        if(kind==='music'&&!linkedAssets(doc,'bgm').length){skipped.push('音樂');continue;}
+        const result=await analyze(kind,{silent:true,persist:false,cues});
+        if($('vnDocumentId')?.value!==doc.id)throw new Error('編輯中的篇章已變更');
+        if(!result)throw new Error('沒有可標註的台詞');
+        cues=result.cues;
+      }
+      doc.visualNovel={...doc.visualNovel,scriptText:editor.value,settings:collectVisualNovelSettings(),aiCustomPrompt:$('vnAiCustomPrompt')?.value.trim()||'',eventIndexVersion:2,updatedAt:new Date().toISOString()};
+      doc.visualNovelPage={...doc.visualNovelPage,cues};
+      alignVisualNovelBookmarkToScript(doc,parseVisualNovelScript(editor.value));
       saveStateToLocalStorage();renderAnnotations();
-      alert(`已完成${label}獨立標註，共檢查 ${lines.length} 句${kind==='music'?`，保留 ${changes} 個段落換曲點`:''}；正文與說話人保持不變。`);
-    }catch(error){alert(`AI 標註失敗：${error.message}`);}finally{hideToast();}
+      alert(`已完成並儲存說話人、情緒${skipped.includes('場景')?'':'、場景'}${skipped.includes('音樂')?'':'、音樂'}判斷。${skipped.length?`尚未關聯${skipped.join('與')}素材，因此略過這些項目。`:''}`);
+    }catch(error){
+      if(oldNovel)doc.visualNovel=oldNovel;else delete doc.visualNovel;
+      if(oldPage)doc.visualNovelPage=oldPage;else delete doc.visualNovelPage;
+      if($('vnDocumentId')?.value===doc.id)editor.value=oldScript;
+      renderAnnotations();alert(`一鍵判斷未完成：${error.message}。已保留原本腳本與標註。`);
+    }
+    finally{analyzingAll=false;controls.forEach((control,index)=>control.disabled=disabled[index]);$('visualNovelEditorModal')?.removeAttribute('aria-busy');hideToast();}
   }
   function renderAnnotations(){
     const panel=$('vnpAnnotations'),editor=$('vnScriptText'),doc=documents.find(row=>row.id===$('vnDocumentId')?.value);
@@ -99,7 +163,7 @@
     const cues={...(doc.visualNovelPage?.cues||{})},cue={...(cues[line]||{})},value=input.value.trim();
     if(value){cue[field]=value;if(field==='musicId')cue.musicSource='manual';if(field==='sceneId')cue.sceneSource='manual';if(field==='emotion'||field==='position')cue.emotionSource='manual';}
     else{delete cue[field];if(field==='musicId')delete cue.musicSource;if(field==='sceneId')delete cue.sceneSource;}
-    cues[line]=cue;doc.visualNovelPage={...defaultConfig(),...doc.visualNovelPage,cues};saveStateToLocalStorage();renderAnnotations();
+    cues[line]=cue;doc.visualNovelPage={...doc.visualNovelPage,cues};saveStateToLocalStorage();renderAnnotations();
   });
   document.addEventListener('click',event=>{
     const button=event.target.closest?.('#vnpAnnotations [data-jump-line]');if(!button)return;
@@ -192,12 +256,45 @@
   document.addEventListener('click',event=>{const button=event.target.closest?.('[data-action="open-library"]');if(!button||!modal?.contains(button))return;event.stopImmediatePropagation();window.OCVnLibrary?.open(button.dataset.type);},true);
   renderSpriteEditor=function(){const box=$('vnpSpriteEditor');if(box)box.innerHTML='<p class="vnp-help">人物表情、立繪與頭像裁切請在共用素材庫管理；這裡只選擇要關聯的立繪庫。</p>';};
   const baseRenderSettings=renderSettings;
-  renderSettings=function(){const selected=$('vnpLayoutTemplate')?.value;baseRenderSettings();window.OCVnLayout?.injectSettings(modal,scopeRecord(),context?.type==='doc'?configFor(scopeRecord()):{...defaultConfig(),...(scopeRecord()?.visualNovelPage||{})});if(selected&&$('vnpLayoutTemplate')?.querySelector(`option[value="${CSS.escape(selected)}"]`))$('vnpLayoutTemplate').value=selected;};
+  renderSettings=function(){
+    const selected=$('vnpLayoutTemplate')?.value,inheritDraft=$('vnpInheritBook')?.checked;
+    baseRenderSettings();
+    const record=scopeRecord();
+    window.OCVnLayout?.injectSettings(modal,record,context?.type==='doc'?configFor(record):{...defaultConfig(),...(record?.visualNovelPage||{})});
+    if(selected&&$('vnpLayoutTemplate')?.querySelector(`option[value="${CSS.escape(selected)}"]`))$('vnpLayoutTemplate').value=selected;
+    const book=context?.type==='doc'?books.find(row=>row.id===record?.bookId):null;
+    if(book){
+      const section=document.createElement('section');section.className='vnp-panel';
+      section.innerHTML=`<label class="vnp-check"><input id="vnpInheritBook" type="checkbox" ${(inheritDraft??inheritsBook(record))?'checked':''}> 沿用整本書的對話模板與關聯素材</label><p class="vnp-help">跟隨「${esc(book.title||'所屬小說')}」的對話版型、版面模板、場景、音樂與立繪庫。每篇的 AI 標註仍獨立保存；取消勾選即可自訂本篇。</p>`;
+      modal.querySelector('.vnp-body').prepend(section);
+      const toggle=$('vnpInheritBook');
+      const update=()=>{
+        if(toggle.checked){
+          const cfg={...defaultConfig(),...book.visualNovelPage};
+          modal.querySelectorAll('[name="vnpMode"]').forEach(input=>input.checked=input.value===cfg.mode);
+          modal.querySelectorAll('[data-link-folder]').forEach(input=>input.checked=[...cfg.sceneFolderIds,...cfg.musicFolderIds].includes(input.dataset.linkFolder));
+          modal.querySelectorAll('[data-link-asset]').forEach(input=>input.checked=[...cfg.sceneAssetIds,...cfg.musicAssetIds].includes(input.dataset.linkAsset));
+          for(const [key,field] of [['spriteLibraryId','vnpSpriteLibrary'],['allMusic','vnpAllMusic'],['highlightSpeaker','vnpHighlight'],['autoScene','vnpAutoScene']]){
+            const input=$(field);if(input){if(input.type==='checkbox')input.checked=!!cfg[key];else input.value=cfg[key];}
+          }
+          modal.querySelector('.vnl-settings')?.remove();window.OCVnLayout?.injectSettings(modal,record,cfg);
+        }
+        modal.querySelectorAll('.vnp-body input,.vnp-body select,#vnlOpenStudio').forEach(input=>{if(input!==toggle)input.disabled=toggle.checked;});
+      };
+      toggle.addEventListener('change',update);update();
+    }
+    const notes=modal.querySelector('.vnp-body>section:last-child p');
+    if(notes)notes.textContent='可用一鍵判斷完成說話人、場景、人物情緒與音樂標註，也可分別判斷。原版閱讀器將 AI 場景作為 CG 切換，並讀取情緒頭像與音樂；橫版與直版使用場景背景。標註不改寫正文，手動標註會保留。';
+  };
   const baseSave=save;
-  save=function(){const record=scopeRecord();if(record)record.visualNovelPage={...(record.visualNovelPage||{}),layoutTemplateId:$('vnpLayoutTemplate')?.value||''};baseSave();};
+  save=function(){
+    const record=scopeRecord();if(!record)return;
+    if($('vnpInheritBook')?.checked){record.visualNovelPage={...record.visualNovelPage,inheritBook:true};saveStateToLocalStorage();close();return;}
+    record.visualNovelPage={...record.visualNovelPage,inheritBook:false,layoutTemplateId:$('vnpLayoutTemplate')?.value||''};baseSave();
+  };
   const baseRenderPlayer=renderPlayer;
   renderPlayer=function(){baseRenderPlayer();window.OCVnLayout?.apply(player,currentConfig);};
   const legacyStart=window.startVisualNovel;
   window.startVisualNovel=function(docId,withTransition=true,preserveHistory=false){const doc=documents.find(row=>row.id===docId);if(doc&&configFor(doc).mode!=='classic'){openAdvanced(docId);return;}return legacyStart(docId,withTransition,preserveHistory);};
-  window.OCVnPage={open,openFromBook,openFromDocument,openFromEditor,close,refreshSettings:()=>modal?.classList.contains('active')&&renderSettings(),renderAnnotations,analyze,closePlayer,expressionAvatar,applyAvatarCrop};
+  window.OCVnPage={open,openFromBook,openFromDocument,openFromEditor,close,refreshSettings:()=>modal?.classList.contains('active')&&renderSettings(),renderAnnotations,analyze,analyzeAll,configFor,classicCue,closePlayer,expressionAvatar,applyAvatarCrop};
 })();
