@@ -3770,9 +3770,9 @@ function generateVisualNovelLocally() {
 
 async function generateVisualNovelWithAi(forceRecalculate = false) {
   const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
-  if (!doc?.content?.trim()) { alert("此章沒有正文內容可供判斷。"); return; }
-  if (!deepseekSettings.apiKey) { alert("請先在 DeepSeek AI API 設定中填入 API Key。"); return; }
-  if (forceRecalculate && document.getElementById("vnScriptText").value.trim() && !confirm("AI 將重新判斷全文並取代目前編輯框中的腳本，確定繼續嗎？")) return;
+  if (!doc?.content?.trim()) { alert("此章沒有正文內容可供判斷。"); return false; }
+  if (!deepseekSettings.apiKey) { alert("請先在 DeepSeek AI API 設定中填入 API Key。"); return false; }
+  if (forceRecalculate && document.getElementById("vnScriptText").value.trim() && !confirm("AI 將重新判斷全文並取代目前編輯框中的腳本，確定繼續嗎？")) return false;
   const customPrompt = document.getElementById("vnAiCustomPrompt")?.value.trim() || "";
   if (doc?.visualNovel) doc.visualNovel.aiCustomPrompt = customPrompt;
   const customPromptInstruction = customPrompt ? `\n【使用者自訂角色分配指令／稱呼與別名對應關係】：\n${customPrompt}\n請務必嚴格遵循上述指示，若原文出現別名或稱呼，務必對應指認為指定的角色名稱！` : '';
@@ -3799,9 +3799,11 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
     }
     let script = buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters);
     if (!visualNovelScriptPreservesSegments(script, segments)) throw new Error("完整性驗證未通過，沒有覆蓋目前腳本");
+    if(document.getElementById('vnDocumentId').value!==doc.id)throw new Error('編輯中的篇章已變更，未寫入判斷結果');
     script=removeRedundantVisualNovelSpeakerCues(script);document.getElementById("vnScriptText").value = script;
     if (fallbackBatchCount) alert(`AI 辨識完成。共有 ${fallbackBatchCount} 批存在漏標行，這些行已由本機規則補上說話者；所有原文字句仍完整保留。`);
-  } catch (error) { alert(`AI 視覺小說化失敗：${error.message}\n\n已保留原本腳本，您也可以先使用「本機製作基礎腳本」。`); }
+    return true;
+  } catch (error) { alert(`AI 視覺小說化失敗：${error.message}\n\n已保留原本腳本，您也可以先使用「本機製作基礎腳本」。`); return false; }
   finally { hideToast(); }
 }
 
@@ -4096,10 +4098,13 @@ function ensureVisualNovelCgMatchesScript(upToIndex = currentVisualNovelIndex) {
   let expected = "none";
   for (let index = limit; index >= 0; index--) {
     const event = currentVisualNovelEvents[index];
-    if (event?.type === "cg") {
+    if (event?.type === "cg" || event?.type === "bg") {
       expected = String(event.value || "none").trim() || "none";
       break;
     }
+    const doc=documents.find(item=>item.id===currentVisualNovelDocId);
+    const cue=window.OCVnPage?.classicCue?.(doc,event);
+    if(cue?.sceneSource){expected=cue.sceneSource;break;}
   }
   const normalizedExpected = expected.toLowerCase() === "none" ? "none" : expected;
   if (visualNovelActiveCgSource === normalizedExpected || visualNovelPendingCgSource === normalizedExpected) return;
@@ -4190,6 +4195,9 @@ function ensureVisualNovelBgmMatchesScript(upToIndex = currentVisualNovelIndex) 
   for (let index = limit; index >= 0; index--) {
     const event = currentVisualNovelEvents[index];
     if (event?.type === "bgm") { expected = normalizeVisualNovelAudioSource(event.value || "none") || "none"; break; }
+    const doc=documents.find(item=>item.id===currentVisualNovelDocId);
+    const cue=window.OCVnPage?.classicCue?.(doc,event);
+    if(cue?.musicSource){expected=normalizeVisualNovelAudioSource(cue.musicSource);break;}
   }
   const normalizedExpected = expected.toLowerCase() === "none" ? "none" : expected;
   if (visualNovelPendingBgmSource === normalizedExpected) return;
@@ -4473,7 +4481,7 @@ function executeVisualNovelEvent(event) {
     return false;
   }
   if (event.type === "bgm" || event.type === "se") { playVisualNovelAudio(event.type, event.value); return false; }
-  if (event.type === "cg") {
+  if (event.type === "cg" || event.type === "bg") {
     transitionVisualNovelCg(event.value);
     return false;
   }
