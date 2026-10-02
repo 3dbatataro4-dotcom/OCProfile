@@ -408,11 +408,11 @@ function syncGlobalTags() {
   if (docTagSelect) docTagSelect.innerHTML = `<option value="">全部標籤</option>`;
 
   globalTags.forEach(tag => {
-    if (filterSelect) filterSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
-    if (modalSelect) modalSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
+    if (filterSelect&&isTagAllowedInFilters(tag)) filterSelect.innerHTML += `<option value="${escapeHtml(tag)}">${escapeHtml(tag)}</option>`;
+    if (modalSelect) modalSelect.innerHTML += `<option value="${escapeHtml(tag)}">${escapeHtml(tag)}</option>`;
   });
   articleTags.forEach(tag => {
-    if (docTagSelect) docTagSelect.innerHTML += `<option value="${tag}">${tag}</option>`;
+    if (docTagSelect&&isTagAllowedInFilters(tag)) docTagSelect.innerHTML += `<option value="${escapeHtml(tag)}">${escapeHtml(tag)}</option>`;
   });
   if (filterSelect && [...filterSelect.options].some(option => option.value === previousFilterTag)) filterSelect.value = previousFilterTag;
   if (docTagSelect && [...docTagSelect.options].some(option => option.value === previousDocTag)) docTagSelect.value = previousDocTag;
@@ -1696,108 +1696,99 @@ function switchRelView(mode) {
   }
 }
 
-function renderCallNameMatrix() {
-  const activeChars = characters.filter(c => !c.isHidden);
-  const select = document.getElementById("perspectiveCharSelect");
+function getFactionFilterChoices() {
+  return factions.flatMap(f => [
+    ...(f.showInFilters!==false?[{value:`faction:${f.id}`,label:f.name,faction:f}]:[]),
+    ...(f.subTags||[]).filter(sub=>sub.showInFilters!==false).map(sub=>({value:`sub:${f.id}:${encodeURIComponent(sub.name)}`,label:`${f.name} / ${sub.name}`,faction:f,sub}))
+  ]);
+}
 
-  if (!activeChars.length) {
-    select.innerHTML = `<option value="">無角色</option>`;
-    document.getElementById("callNameTableBody").innerHTML = `<tr><td colspan="4">尚無角色</td></tr>`;
-    document.getElementById("perspectiveHeaderCard").innerHTML = '';
-    return;
-  }
+function isTagAllowedInFilters(tag) {
+  const flags=factions.flatMap(f=>[...(f.name===tag?[f.showInFilters!==false]:[]),...(f.subTags||[]).filter(sub=>sub.name===tag).map(sub=>sub.showInFilters!==false)]);
+  return !flags.length||flags.some(Boolean);
+}
 
-  const selectedCharId = select.value || activeChars[0].id;
-  select.innerHTML = activeChars.map(c => `
-    <option value="${c.id}" ${c.id === selectedCharId ? 'selected' : ''}>${c.name} 的視角</option>
-  `).join('');
+function matchesRelationshipFaction(char,value) {
+  const choice=getFactionFilterChoices().find(row=>row.value===value);
+  return !choice||(choice.sub?(char.tags||[]).includes(choice.sub.name):characterBelongsToFaction(char,choice.faction));
+}
 
-  const currentSubject = activeChars.find(c => c.id === selectedCharId) || activeChars[0];
-
-  document.getElementById("perspectiveHeaderCard").innerHTML = `
-    <img class="perspective-avatar" src="${currentSubject.avatar}" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
-    <div>
-      <h3 style="font-size:1.15rem; color:var(--text-main);">${currentSubject.name} 的社交關係視角</h3>
-      <p style="font-size:0.82rem; color:var(--text-muted);">${currentSubject.occupation || '角色'} ｜ CP: ${currentSubject.fixedCp || '無'}</p>
-    </div>
-  `;
-
-  if (!perspectiveTargets[currentSubject.id]) {
-    perspectiveTargets[currentSubject.id] = (currentSubject.relationships || []).map(r => r.targetName);
-    if (!perspectiveTargets[currentSubject.id].length) {
-      perspectiveTargets[currentSubject.id] = activeChars.filter(c => c.id !== currentSubject.id).slice(0, 5).map(c => c.name);
-    }
-  }
-
-  const targetNames = perspectiveTargets[currentSubject.id];
-  const targetChars = characters.filter(c => c.id !== currentSubject.id && (!c.isHidden || c.isAiPlaceholder) && targetNames.some(name=>sameCharacterName(name,c.name)));
-  const tbody = document.getElementById("callNameTableBody");
-
-  tbody.innerHTML = targetChars.length ? targetChars.map(target => {
-    const relObj = (currentSubject.relationships || []).find(r => r.targetName === target.name) || { callName: "—", opinion: "（尚無記載）", isMainline: true };
-    const isMain = relObj.isMainline !== false;
-    return `
-      <tr>
-        <td>
-          <div style="display:flex; align-items:center; gap:0.5rem;">
-            <img src="${target.avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
-            <strong>${target.name}</strong>
-          </div>
-        </td>
-        <td><span class="badge" style="background:var(--accent-gold); color:#1c1815;">${relObj.callName}</span></td>
-        <td>${relObj.opinion}</td>
-        <td>${isMain ? '' : '<span class="badge" style="background:#6b7280; color:#ffffff; font-size:11px; padding:2px 7px; border-radius:4px;">番外</span>'}</td>
-        <td>
-          <button class="btn btn-xs btn-outline" onclick="openRelationshipModal('${currentSubject.id}', '${target.name}', '${relObj.callName !== '—' ? relObj.callName : ''}', '${relObj.opinion !== '（尚無記載）' ? relObj.opinion : ''}', ${isMain})">
-            <i class="fa-solid fa-pen"></i> 編輯
-          </button>
-          <button class="btn btn-xs btn-danger" onclick="removeCallNameTarget('${currentSubject.id}', '${target.name}')">&times;</button>
-        </td>
-      </tr>
-    `;
-  }).join('') : `<tr><td colspan="5" style="color:var(--text-muted);">尚未添加稱呼目標。點擊「選擇要加入稱呼表的對象」新增對象！</td></tr>`;
-
-  // Render Mobile Pairwise Cards
-  const mobileContainer = document.getElementById("callNameMobileCards");
-  if (mobileContainer) {
-    mobileContainer.innerHTML = targetChars.length ? targetChars.map(target => {
-      const relA = (currentSubject.relationships || []).find(r => r.targetName === target.name) || { callName: "—", opinion: "（尚無記載）", isMainline: true };
-      const mainA = relA.isMainline !== false;
-
-      return `
-        <div class="rel-pair-card" style="margin-bottom:12px;">
-          <div class="rel-pair-header">
-            <div class="rel-pair-chars">
-              <img src="${target.avatar}" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
-              <div>
-                <strong style="font-size:1rem;">${target.name}</strong>
-                ${mainA ? '' : '<span class="badge" style="background:#6b7280; color:#ffffff; font-size:10px; margin-left:6px; padding:1px 6px; border-radius:4px;">番外</span>'}
-              </div>
-            </div>
-            <div class="rel-card-actions"><button class="btn btn-xs btn-outline" onclick="openRelationshipModal('${currentSubject.id}', '${target.name}', '${relA.callName !== '—' ? relA.callName : ''}', '${relA.opinion !== '（尚無記載）' ? relA.opinion : ''}', ${mainA})"><i class="fa-solid fa-pen"></i> 編輯</button><button class="btn btn-xs btn-danger" onclick="removeCallNameTarget('${currentSubject.id}', '${target.name}')" title="從稱呼表移除"><i class="fa-solid fa-user-minus"></i><span>移除</span></button></div>
-          </div>
-          <div class="rel-pair-body" style="font-size:0.88rem; line-height:1.6;">
-            <div class="rel-muted-label" style="margin-bottom:4px; font-size:0.8rem;">${currentSubject.name} 對 ${target.name} 的稱呼與印象：</div>
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
-              <span class="badge" style="background:var(--accent-gold, #d9ae70); color:#1c1815; font-weight:600;">${relA.callName}</span>
-              <span class="rel-opinion-text">${relA.opinion}</span>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('') : `<div class="empty-state" style="color:var(--text-muted);"><p>尚未添加稱呼目標。</p></div>`;
+function renderRelationshipFactionFilters() {
+  const choices=getFactionFilterChoices();
+  for(const id of ['relSubjectFaction','relTargetFaction']){
+    const select=document.getElementById(id);if(!select)continue;
+    const previous=select.value;
+    select.innerHTML='<option value="">全部陣營</option>'+choices.map(row=>`<option value="${escapeHtml(row.value)}">${escapeHtml(row.label)}</option>`).join('');
+    select.value=choices.some(row=>row.value===previous)?previous:'';
   }
 }
+
+function relationshipForTarget(subject,target) {
+  return (subject.relationships||[]).find(row=>String(row.targetId||'')===String(target.id)||sameCharacterName(row.targetName,target.name));
+}
+
+function openRelationshipForTarget(sourceId,targetId) {
+  const subject=characters.find(row=>String(row.id)===String(sourceId)),target=characters.find(row=>String(row.id)===String(targetId));
+  if(!subject||!target)return;
+  const rel=relationshipForTarget(subject,target)||{};
+  openRelationshipModal(subject.id,target.name,rel.callName||'',rel.opinion||'',rel.isMainline!==false);
+}
+
+function clearRelationshipFilters() {
+  for(const id of ['relSubjectSearch','relSubjectFaction','relTargetSearch','relTargetFaction']){const input=document.getElementById(id);if(input)input.value='';}
+  renderCallNameMatrix();
+}
+
+function renderCallNameMatrix() {
+  renderRelationshipFactionFilters();
+  const select=document.getElementById('perspectiveCharSelect');
+  const subjectQuery=(document.getElementById('relSubjectSearch')?.value||'').trim().toLocaleLowerCase();
+  const targetQuery=(document.getElementById('relTargetSearch')?.value||'').trim().toLocaleLowerCase();
+  const subjectFaction=document.getElementById('relSubjectFaction')?.value||'';
+  const targetFaction=document.getElementById('relTargetFaction')?.value||'';
+  const matchesName=(char,query)=>!query||[char.name,char.englishName,Array.isArray(char.aliases)?char.aliases.join(' '):char.aliases].some(value=>String(value||'').toLocaleLowerCase().includes(query));
+  const activeChars=characters.filter(char=>!char.isHidden&&matchesName(char,subjectQuery)&&matchesRelationshipFaction(char,subjectFaction));
+  const previous=select.value;
+  select.innerHTML=activeChars.length?activeChars.map(char=>`<option value="${escapeHtml(char.id)}">${escapeHtml(char.name)} 的視角</option>`).join(''):'<option value="">沒有符合的角色</option>';
+  if(activeChars.some(char=>String(char.id)===previous))select.value=previous;
+  const subject=activeChars.find(char=>String(char.id)===select.value);
+  const header=document.getElementById('perspectiveHeaderCard'),tbody=document.getElementById('callNameTableBody'),mobile=document.getElementById('callNameMobileCards'),count=document.getElementById('relResultCount');
+  const empty=message=>{tbody.innerHTML=`<tr><td colspan="5" class="rel-empty">${message}</td></tr>`;if(mobile)mobile.innerHTML=`<div class="rel-empty">${message}</div>`;if(count)count.textContent='0 位對象';};
+  const add=document.getElementById('relAddTargetButton');if(add)add.disabled=!subject;
+  if(!subject){header.innerHTML='';empty('沒有符合的視角角色，請調整檢索條件。');return;}
+  header.innerHTML=`<img class="perspective-avatar" src="${escapeHtml(subject.avatar||DEFAULT_VN_AVATAR)}" alt=""><div><small>RELATIONSHIP NOTES / 角色稱呼</small><h3>${escapeHtml(subject.name)} 的視角</h3><p>${escapeHtml(subject.occupation||'角色')}${subject.fixedCp?` · CP：${escapeHtml(subject.fixedCp)}`:''}</p></div>`;
+  if(!perspectiveTargets[subject.id]){
+    perspectiveTargets[subject.id]=(subject.relationships||[]).map(row=>row.targetName);
+    if(!perspectiveTargets[subject.id].length)perspectiveTargets[subject.id]=characters.filter(char=>!char.isHidden&&char.id!==subject.id).slice(0,5).map(char=>char.name);
+  }
+  const names=perspectiveTargets[subject.id];
+  const allTargets=characters.filter(char=>char.id!==subject.id&&(!char.isHidden||char.isAiPlaceholder)&&names.some(name=>sameCharacterName(name,char.name)));
+  const targets=allTargets.filter(char=>matchesName(char,targetQuery)&&matchesRelationshipFaction(char,targetFaction));
+  if(count)count.textContent=`${targets.length} / ${allTargets.length} 位對象`;
+  const actions=target=>`<div class="rel-card-actions"><button type="button" class="btn btn-xs btn-outline" data-rel-edit="${escapeHtml(target.id)}" data-rel-source="${escapeHtml(subject.id)}"><i class="fa-solid fa-pen"></i> 編輯</button><button type="button" class="btn btn-xs btn-outline rel-remove" data-rel-remove="${escapeHtml(target.id)}" data-rel-source="${escapeHtml(subject.id)}" aria-label="移除 ${escapeHtml(target.name)}"><i class="fa-solid fa-user-minus"></i></button></div>`;
+  const person=target=>`<div class="rel-person"><img src="${escapeHtml(target.avatar||DEFAULT_VN_AVATAR)}" alt=""><strong>${escapeHtml(target.name)}</strong></div>`;
+  const label=rel=>`<span class="rel-call-badge">${escapeHtml(rel.callName||'—')}</span>`;
+  if(!targets.length){empty(allTargets.length?'沒有符合的對象，請調整名稱或陣營條件。':'尚未加入對象，點選「加入對象」開始建立稱呼。');return;}
+  tbody.innerHTML=targets.map(target=>{const rel=relationshipForTarget(subject,target)||{};return `<tr><td>${person(target)}</td><td>${label(rel)}</td><td class="rel-opinion">${escapeHtml(rel.opinion||'尚無記載')}</td><td>${rel.isMainline===false?'<span class="rel-type-badge">番外</span>':'<span class="rel-mainline">主線</span>'}</td><td>${actions(target)}</td></tr>`;}).join('');
+  if(mobile)mobile.innerHTML=targets.map(target=>{const rel=relationshipForTarget(subject,target)||{};return `<article class="rel-pair-card"><header class="rel-pair-header">${person(target)}${actions(target)}</header><div class="rel-pair-body">${label(rel)}${rel.isMainline===false?'<span class="rel-type-badge">番外</span>':''}<p class="rel-opinion">${escapeHtml(rel.opinion||'尚無記載')}</p></div></article>`;}).join('');
+}
+
+document.addEventListener('click',event=>{
+  const button=event.target.closest?.('[data-rel-edit],[data-rel-remove]');if(!button)return;
+  const targetId=button.dataset.relEdit||button.dataset.relRemove;
+  if(button.hasAttribute('data-rel-edit'))openRelationshipForTarget(button.dataset.relSource,targetId);
+  else {const target=characters.find(char=>String(char.id)===targetId);if(target)removeCallNameTarget(button.dataset.relSource,target.name);}
+});
 
 function openAddCallNameTargetModal() {
   const activeChars = characters.filter(c => !c.isHidden);
   const selectCharId = document.getElementById("perspectiveCharSelect").value;
-  const currentSubject = activeChars.find(c => c.id === selectCharId);
+  const currentSubject = activeChars.find(c => String(c.id) === selectCharId);
 
   if (!currentSubject) return;
 
   const currentTargets = perspectiveTargets[currentSubject.id] || [];
-  const unadded = activeChars.filter(c => c.id !== currentSubject.id && !currentTargets.includes(c.name));
+  const unadded = activeChars.filter(c => c.id !== currentSubject.id && !currentTargets.some(name=>sameCharacterName(name,c.name)));
 
   const select = document.getElementById("callNameTargetCharSelect");
   if (!unadded.length) {
@@ -1805,7 +1796,7 @@ function openAddCallNameTargetModal() {
     return;
   }
 
-  select.innerHTML = unadded.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+  select.innerHTML = unadded.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
   document.getElementById("addCallNameCharModal").classList.add("active");
 }
 
@@ -1826,7 +1817,7 @@ function confirmAddCallNameTarget() {
 
 function removeCallNameTarget(sourceId, targetName) {
   if (perspectiveTargets[sourceId]) {
-    perspectiveTargets[sourceId] = perspectiveTargets[sourceId].filter(t => t !== targetName);
+    perspectiveTargets[sourceId] = perspectiveTargets[sourceId].filter(t => !sameCharacterName(t,targetName));
     saveStateToLocalStorage();
     renderCallNameMatrix();
   }
@@ -1849,14 +1840,17 @@ function saveRelationshipForm() {
   const opinion = document.getElementById("relOpinion").value.trim();
   const isMainline = document.getElementById("relIsMainline") ? document.getElementById("relIsMainline").checked : true;
 
-  const sourceChar = characters.find(c => c.id === sourceId);
+  const sourceChar = characters.find(c => String(c.id) === sourceId);
   if (sourceChar) {
     if (!sourceChar.relationships) sourceChar.relationships = [];
-    const relIndex = sourceChar.relationships.findIndex(r => r.targetName === targetName);
+    const target=characters.find(c=>sameCharacterName(c.name,targetName));
+    const matches=r=>(target&&String(r.targetId||'')===String(target.id))||sameCharacterName(r.targetName,targetName);
+    const relIndex = sourceChar.relationships.findIndex(matches);
+    const updated={...(sourceChar.relationships[relIndex]||{}),targetName:target?.name||targetName,callName,opinion,isMainline,...(target?{targetId:target.id}:{})};
     if (relIndex !== -1) {
-      sourceChar.relationships[relIndex] = { targetName, callName, opinion, isMainline };
+      sourceChar.relationships=sourceChar.relationships.map(row=>matches(row)?{...row,targetName:updated.targetName,callName,opinion,isMainline,...(target?{targetId:target.id}:{})}:row);
     } else {
-      sourceChar.relationships.push({ targetName, callName, opinion, isMainline });
+      sourceChar.relationships.push(updated);
     }
     saveStateToLocalStorage();
     renderCallNameMatrix();
@@ -2748,16 +2742,18 @@ function openFactionModal(factionId = null) {
     document.getElementById("factionId").value = f.id;
     document.getElementById("factionName").value = f.name;
     document.getElementById("factionDescription").value = f.description || "";
+    document.getElementById("factionShowInFilters").checked=f.showInFilters!==false;
     document.getElementById("factionColorA").value = /^#[0-9a-f]{6}$/i.test(f.themeColor?.primary||'')?f.themeColor.primary:'#a56e79';
     document.getElementById("factionColorB").value = /^#[0-9a-f]{6}$/i.test(f.themeColor?.secondary||'')?f.themeColor.secondary:'#686a9c';
 
-    (f.subTags || []).forEach(sub => addSubTagRow(sub.name, sub.description));
+    (f.subTags || []).forEach(sub => addSubTagRow(sub.name, sub.description, sub.showInFilters!==false));
     (f.customSections || []).forEach(sec => addFactionSectionRow(sec.title, sec.content, sec.id));
   } else {
     document.getElementById("factionModalTitle").innerText = "新建陣營與世界觀";
     document.getElementById("factionId").value = "";
     document.getElementById("factionName").value = "";
     document.getElementById("factionDescription").value = "";
+    document.getElementById("factionShowInFilters").checked=true;
     document.getElementById("factionColorA").value = "#a56e79";
     document.getElementById("factionColorB").value = "#686a9c";
 
@@ -2768,15 +2764,15 @@ function openFactionModal(factionId = null) {
   modal.classList.add("active");
 }
 
-function addSubTagRow(name = "", desc = "") {
+function addSubTagRow(name = "", desc = "", showInFilters = true) {
   const container = document.getElementById("subTagsContainer");
   const row = document.createElement("div");
   row.className = "sub-tag-row";
   row.dataset.originalName = name;
-  row.style.cssText = "display:flex; gap:0.5rem; margin-bottom:0.4rem;";
   row.innerHTML = `
     <input type="text" class="sub-name" placeholder="子標籤名稱" value="${escapeHtml(name)}" style="flex:1;">
     <input type="text" class="sub-desc" placeholder="簡介說明" value="${escapeHtml(desc)}" style="flex:2;">
+    <label class="sub-filter-toggle"><input type="checkbox" class="sub-show-filter" ${showInFilters?'checked':''}> 加入篩選列表</label>
     <button type="button" class="btn btn-xs btn-danger" onclick="this.parentElement.remove()">&times;</button>
   `;
   container.appendChild(row);
@@ -2818,7 +2814,7 @@ function saveFactionForm() {
     const subDesc = row.querySelector(".sub-desc").value.trim();
     const origName = row.dataset.originalName ? row.dataset.originalName.trim() : "";
     if (subName) {
-      subTags.push({ name: subName, description: subDesc });
+      subTags.push({...(oldFaction?.subTags||[]).find(sub=>sub.name===origName), name: subName, description: subDesc, showInFilters:row.querySelector('.sub-show-filter').checked });
       if (origName && origName !== subName) {
         tagReplacements.set(origName, subName);
       }
@@ -2836,9 +2832,11 @@ function saveFactionForm() {
   }).filter(s => s.title);
 
   const factionData = {
+    ...(oldFaction||{}),
     id: id || `faction_${Date.now()}`,
     name,
     description: document.getElementById("factionDescription").value.trim(),
+    showInFilters:document.getElementById('factionShowInFilters').checked,
     themeColor: {primary:document.getElementById("factionColorA").value,secondary:document.getElementById("factionColorB").value,mode:'gradient'},
     subTags,
     customSections
@@ -2875,6 +2873,7 @@ function saveFactionForm() {
   renderFactionList();
   renderCharacterCards();
   renderDocumentsModule();
+  renderCallNameMatrix();
   window.OCFeatures?.renderTimeline?.();
   closeModal("factionModal");
 }
@@ -2949,7 +2948,7 @@ function renderDocumentsModule() {
   }
   if (factionFilterSelect) {
     const previous = factionFilterSelect.value;
-    factionFilterSelect.innerHTML = `<option value="">全部世界觀</option>` + factions.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+    factionFilterSelect.innerHTML = `<option value="">全部世界觀</option>` + factions.filter(f=>f.showInFilters!==false).map(f => `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join('');
     factionFilterSelect.value = previous;
   }
 
