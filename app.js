@@ -217,7 +217,7 @@ function loadStateFromLocalStorage() {
   if (savedRankings) {
     try {
       rankings = JSON.parse(savedRankings);
-      if (!Array.isArray(rankings) || rankings.length === 0) rankings = [...PRESET_RANKINGS];
+      if (!Array.isArray(rankings)) rankings = [...PRESET_RANKINGS];
     } catch (e) { rankings = [...PRESET_RANKINGS]; }
   } else { rankings = [...PRESET_RANKINGS]; }
 
@@ -1832,6 +1832,11 @@ function confirmAddCallNameTarget() {
 
 function removeCallNameTarget(sourceId, targetName) {
   if (perspectiveTargets[sourceId]) {
+    const sourceChar=characters.find(char=>String(char.id)===String(sourceId));
+    const target=characters.find(char=>sameCharacterName(char.name,targetName));
+    const hasRelation=(sourceChar?.relationships||[]).some(row=>(target&&String(row.targetId||'')===String(target.id))||sameCharacterName(row.targetName,targetName));
+    if(hasRelation&&!confirm(`確定移除對「${targetName}」的稱呼與看法？`))return;
+    if(sourceChar)sourceChar.relationships=(sourceChar.relationships||[]).filter(row=>!((target&&String(row.targetId||'')===String(target.id))||sameCharacterName(row.targetName,targetName)));
     perspectiveTargets[sourceId] = perspectiveTargets[sourceId].filter(t => !sameCharacterName(t,targetName));
     saveStateToLocalStorage();
     renderCallNameMatrix();
@@ -2180,6 +2185,7 @@ async function downloadRelationshipGraph() {
 
 // ========== 8. 評分與排名板塊 ==========
 function renderRankingModule() {
+  if (window.OCTierList) return window.OCTierList.render();
   const bar = document.getElementById("rankingSubjectBar");
   const card = document.getElementById("rankingCard");
 
@@ -3490,6 +3496,7 @@ function openVisualNovelEditor(docId) {
   document.getElementById("vnEditorChapterTitle").textContent = doc.title;
   document.getElementById("vnScriptText").value = formatVisualNovelScriptBlocks(doc.visualNovel?.scriptText || "");
   window.OCVnPage?.renderAnnotations?.();
+  window.OCVnPage?.renderPromptEditor?.();
   document.getElementById("vnTemplateName").value = "";
   const customPromptEl = document.getElementById("vnAiCustomPrompt");
   if (customPromptEl) customPromptEl.value = doc.visualNovel?.aiCustomPrompt || "";
@@ -3586,7 +3593,7 @@ function importVisualNovelScriptFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => { document.getElementById("vnScriptText").value = formatVisualNovelScriptBlocks(reader.result || ""); };
+  reader.onload = () => { document.getElementById("vnScriptText").value = formatVisualNovelScriptBlocks(reader.result || "");window.OCVnPage?.renderAnnotations?.(); };
   reader.onerror = () => alert("文字腳本讀取失敗。");
   reader.readAsText(file, "utf-8");
   event.target.value = "";
@@ -3596,6 +3603,7 @@ function insertVisualNovelCommand(type) {
   const editor = document.getElementById("vnScriptText");
   let command = "@shake";
   if (type === "cg-none") command = "@cg none";
+  else if (type === "sys-hide") command = "sys(hide:all)";
   else if (type === "bg-none") command = "@bg none";
   else if (type === "bgm-none") command = "@bgm none";
   else if (type !== "shake") {
@@ -3611,6 +3619,7 @@ function insertVisualNovelCommand(type) {
   const prefix = !before ? "" : (before.endsWith("\n\n") ? "" : (before.endsWith("\n") ? "\n" : "\n\n"));
   const suffix = !after ? "" : (after.startsWith("\n\n") ? "" : (after.startsWith("\n") ? "\n" : "\n\n"));
   editor.setRangeText(`${prefix}${command}${suffix}`, start, end, "end");
+  window.OCVnPage?.renderAnnotations?.();
   editor.focus();
 }
 
@@ -3779,7 +3788,7 @@ function generateVisualNovelLocally() {
   if (!visualNovelScriptPreservesSegments(script, segments)) {
     alert("完整性檢查失敗，已停止產生腳本以保護原文。"); return;
   }
-  script=removeRedundantVisualNovelSpeakerCues(script);document.getElementById("vnScriptText").value = script;
+  script=removeRedundantVisualNovelSpeakerCues(script);document.getElementById("vnScriptText").value = script;window.OCVnPage?.renderAnnotations?.();
 }
 
 async function generateVisualNovelWithAi(forceRecalculate = false) {
@@ -3790,6 +3799,7 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
   const customPrompt = document.getElementById("vnAiCustomPrompt")?.value.trim() || "";
   if (doc?.visualNovel) doc.visualNovel.aiCustomPrompt = customPrompt;
   const customPromptInstruction = customPrompt ? `\n【使用者自訂角色分配指令／稱呼與別名對應關係】：\n${customPrompt}\n請務必嚴格遵循上述指示，若原文出現別名或稱呼，務必對應指認為指定的角色名稱！` : '';
+  const promptRules=window.OCVnPage?.promptFor?.('speaker',doc)||'';
   const possibleCharacters = getDocumentPossibleCharacters(doc);
   const characterContext = possibleCharacters.map(character => `- ${character.name}：${character.personality || "無性格資料"}；稱呼線索：${(character.relationships || []).map(item => `${item.targetName}=${item.callName}`).join("、")}`).join("\n");
   const segments = createLosslessVisualNovelSegments(doc.content);
@@ -3802,7 +3812,7 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
       document.getElementById("toastMessage").textContent = `AI 正在辨識說話者（${index + 1} / ${batches.length}）…原文由程式鎖定，不交給 AI 改寫`;
       const batch = batches[index];
       const result = await requestDeepSeek({ model:"deepseek-v4-flash", thinking:{ type:"disabled" }, temperature:0, max_tokens:3000, response_format:{ type:"json_object" }, messages:[
-          { role:"system", content:`你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isSystem=true 或整行由【】包住時一律標系統；其餘 isDialogue=false 標旁白，isDialogue=true 才判斷角色。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物（包含「尤佩特羅斯」等完整名稱），並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。可用角色：\n${characterContext || "（無已關聯角色）"}${customPromptInstruction}` },
+          { role:"system", content:`${promptRules||'你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isSystem=true 或整行由【】包住時一律標系統；其餘 isDialogue=false 標旁白，isDialogue=true 才判斷角色。每段對話都是獨立事件，絕對不可把兩段合併；輸出後程式會強制讓每次對話與操作之間隔一個完整空白行。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或下列角色的完整名稱。禁止在名稱前後加入引號、空格、零寬字元、BOM、項目符號或任何特殊記號；禁止自行創造角色名稱。每個收到的 ID 都必須恰好出現一次。務必優先比對下列已勾選登場人物，並利用相鄰片段的「某某說／問／回答」判斷；只有對話片段找不到任何人物線索時才標路人。'}\n可用角色：\n${characterContext || "（無已關聯角色）"}${customPromptInstruction}` },
           { role:"user", content:JSON.stringify(batch) }
         ]});
       try {
@@ -3814,7 +3824,7 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
     let script = buildLosslessVisualNovelScript(segments, speakerMap, possibleCharacters);
     if (!visualNovelScriptPreservesSegments(script, segments)) throw new Error("完整性驗證未通過，沒有覆蓋目前腳本");
     if(document.getElementById('vnDocumentId').value!==doc.id)throw new Error('編輯中的篇章已變更，未寫入判斷結果');
-    script=removeRedundantVisualNovelSpeakerCues(script);document.getElementById("vnScriptText").value = script;
+    script=removeRedundantVisualNovelSpeakerCues(script);document.getElementById("vnScriptText").value = script;window.OCVnPage?.renderAnnotations?.();
     if (fallbackBatchCount) alert(`AI 辨識完成。共有 ${fallbackBatchCount} 批存在漏標行，這些行已由本機規則補上說話者；所有原文字句仍完整保留。`);
     return true;
   } catch (error) { alert(`AI 視覺小說化失敗：${error.message}\n\n已保留原本腳本，您也可以先使用「本機製作基礎腳本」。`); return false; }
@@ -3862,6 +3872,11 @@ function parseVisualNovelScript(scriptText) {
     const command = trimmedLine.match(/^@(cg|bg|bgm|se)\s+(.+)$/i);
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
+    const systemCommand=trimmedLine.match(/^sys\(([^()]*)\)$/i);
+    if(systemCommand){
+      const parts=systemCommand[1].split(':').map(part=>part.trim()),name=parts.shift()?.toLowerCase();
+      if(['closer','move','front','jump','flip','scale','hide'].includes(name))return {type:'sys',command:name,args:parts,sourceLineIndex};
+    }
     const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
     if (!separator) return { type:"dialogue", speaker:"旁白", text:decodeVisualNovelInlineLineBreaks(contentLine), sourceLineIndex };
     const index = contentLine.indexOf(separator);
@@ -4500,6 +4515,7 @@ function executeVisualNovelEvent(event) {
     return false;
   }
   if (event.type === "shake") { player.classList.remove("vn-shake"); void player.offsetWidth; player.classList.add("vn-shake"); return false; }
+  if (event.type === "sys") return false;
   ensureVisualNovelCgMatchesScript(currentVisualNovelIndex);
   ensureVisualNovelBgmMatchesScript(currentVisualNovelIndex);
   const rawSpeaker = stripInvisibleFormatting(event.speaker).trim();
@@ -5190,7 +5206,7 @@ function renderExportCharList() {
 
   const rankContainer = document.getElementById("exportRankingList");
   if (rankContainer) {
-    rankContainer.innerHTML = rankings.map(r => `
+    rankContainer.innerHTML = rankings.filter(r => r.mode !== 'quadrant').map(r => `
       <label class="checkbox-label">
         <input type="checkbox" class="export-rank-cb" value="${r.id}" checked>
         <span>${r.subject}</span>
@@ -5231,7 +5247,7 @@ async function generateExportText() {
   }
 
   const selectedRankIds = Array.from(document.querySelectorAll(".export-rank-cb:checked")).map(cb => cb.value);
-  const targetRankings = rankings.filter(r => selectedRankIds.includes(r.id));
+  const targetRankings = rankings.filter(r => r.mode !== 'quadrant' && selectedRankIds.includes(r.id));
 
   const selectedParoIds = Array.from(document.querySelectorAll(".export-paro-cb:checked")).map(cb => cb.value);
   const targetParos = paros.filter(p => selectedParoIds.includes(p.id));
@@ -5260,19 +5276,7 @@ async function generateExportText() {
   } else if (mode === 'rankings_only') {
     text = `# 【評分與排名獨立報告】\n生成時間：${new Date().toLocaleString()}\n\n`;
     targetRankings.forEach(r => {
-      text += `## 評比主題: ${r.subject}\n`;
-      const itemStr = (r.items || []).map(it => {
-        const char = characters.find(c => c.id === it.charId);
-        return char ? `${char.name} ${it.operator}` : '';
-      }).join(' ');
-      text += `排序: ${itemStr}\n`;
-      if ((r.cutoffs || []).length) {
-        r.cutoffs.forEach(co => {
-          const char = characters.find(c => c.id === co.charId);
-          if (char) text += `- 分級切點 (${co.label}): 自 ${char.name} 開始\n`;
-        });
-      }
-      text += `\n`;
+      text += `${window.OCTierList?.textFor(r) || r.subject}\n\n`;
     });
   } else if (mode === 'paros_only') {
     text = `# 【Paro 平行世界獨立設定】\n生成時間：${new Date().toLocaleString()}\n\n`;
@@ -5377,35 +5381,9 @@ async function generateExportText() {
 
     if (targetRankings.length) {
       text += `\n===================================\n`;
-      text += `## 【評分與排名評比 (已順用切點，去除未選角色)】\n\n`;
+      text += `## 【評分與排名（所選角色）】\n\n`;
       targetRankings.forEach(r => {
-        text += `### 主題: ${r.subject}\n`;
-        const items = r.items || [];
-        const filteredItems = items.filter(it => selectedCharIds.includes(it.charId));
-        
-        let seqStr = "";
-        filteredItems.forEach((it, i) => {
-          const char = targetChars.find(c => c.id === it.charId);
-          if (!char) return;
-          seqStr += char.name;
-
-          const origIdx = items.findIndex(orig => orig.charId === it.charId);
-          let attachedCutoffLabel = null;
-          if (origIdx !== -1 && (r.cutoffs || []).length) {
-            const prevOrigIdx = i > 0 ? items.findIndex(orig => orig.charId === filteredItems[i-1].charId) : -1;
-            r.cutoffs.forEach(co => {
-              const coOrigIdx = items.findIndex(orig => orig.charId === co.charId);
-              if (coOrigIdx > prevOrigIdx && coOrigIdx <= origIdx) {
-                attachedCutoffLabel = co.label;
-              }
-            });
-          }
-
-          if (attachedCutoffLabel) seqStr += `【切點: ${attachedCutoffLabel}】`;
-          if (i < filteredItems.length - 1) seqStr += ` ${it.operator || '>'} `;
-        });
-
-        text += `順序: ${seqStr || '（無所選角色）'}\n\n`;
+        text += `${window.OCTierList?.textFor(r,selectedCharIds) || r.subject}\n\n`;
       });
     }
 
@@ -5940,7 +5918,10 @@ function applyAdvancedImport() {
   rankings = mergeImportedNamedRecords(rankings, data.rankings, "ranking", unusedMap, record => ({
     ...record,
     items: (record.items || []).map(item => ({ ...item, charId: charIdMap.get(String(item.charId)) ?? item.charId })),
-    cutoffs: (record.cutoffs || []).map(item => ({ ...item, charId: charIdMap.get(String(item.charId)) ?? item.charId }))
+    cutoffs: (record.cutoffs || []).map(item => ({ ...item, charId: charIdMap.get(String(item.charId)) ?? item.charId })),
+    ...(Array.isArray(record.poolIds)?{poolIds:record.poolIds.map(id => charIdMap.get(String(id)) ?? id)}:{}),
+    ...(Array.isArray(record.tiers)?{tiers:record.tiers.map(tier => ({...tier,entries:(tier.entries || []).map(entry=>({...entry,charId:charIdMap.get(String(entry.charId)) ?? entry.charId}))}))}:{}),
+    ...(record.quadrant?{quadrant:{...record.quadrant,points:(record.quadrant.points||[]).map(point=>({...point,charId:charIdMap.get(String(point.charId)) ?? point.charId}))}}:{})
   }));
   cps = mergeImportedNamedRecords(cps, normalizeCpCollection(data.cps || data.couples || []), "cp", new Map(), record => ({
     ...record, members: (record.members || []).map(member => ({ ...member, charId: charIdMap.get(String(member.charId)) ?? member.charId }))
