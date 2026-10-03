@@ -6,6 +6,17 @@
   const id=prefix=>`${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
   const moods=['開心','悲傷','感動','浪漫','恐怖','憤怒','俏皮','寧靜','日常','神秘','嚴肅','緊張'];
   const expressions=['普通','喜','怒','哀','樂','驚'];
+  const promptDefaults={
+    speaker:'你只負責替已編號的原文片段判斷說話者，絕對不要回傳、抄寫、摘要或改寫原文。程式已依「……」拆分內容：isSystem=true 或整行由【】包住時一律標系統；其餘 isDialogue=false 標旁白，isDialogue=true 才判斷角色。每段對話都是獨立事件，絕對不可把兩段合併。輸出必須是單一 JSON 物件，鍵是每個 ID，值只能是「旁白」、「系統」、「路人」或可用角色的完整名稱。每個收到的 ID 都必須恰好出現一次。利用相鄰片段的說話線索判斷；找不到人物線索時才標路人。',
+    scene:'先依故事開頭選擇一個適合的場景，在第一句回傳已提供的場景素材 ID。之後只有地點或時間造成畫面明顯轉換時才回傳新 ID；同一場景持續時回傳空字串。',
+    music:'先依故事開頭選擇一首適合的背景音樂，在第一句回傳已提供的音樂 ID。之後以完整段落與場景為單位判斷，只有情緒明顯且持續轉折時才換曲，同一段至少維持約十句台詞；其餘回傳空字串。',
+    emotion:'判斷人物情緒（普通、喜、怒、哀、樂、驚或素材庫已有的自訂情緒）與橫版站位（left、center、right）；旁白不需站位。',
+    hide:'判斷橫版何時應降下所有說話人，例如對話結束、轉入純旁白段落或切換場景。只有需要清空畫面人物的第一句回傳 true，其餘回傳 false。'
+  };
+  const promptNames={speaker:'說話人',scene:'場景切換',music:'背景音樂',emotion:'情緒與站位',hide:'降下所有說話人'};
+  function promptFor(kind,doc){let global={};try{global=JSON.parse(localStorage.getItem('vnp-ai-prompt-defaults')||'{}');}catch{}return [global[kind]||promptDefaults[kind],doc?.visualNovelPage?.promptOverrides?.[kind]].filter(Boolean).join('\n\n本篇補充：\n');}
+  function renderPromptEditor(){const box=$('vnpPromptFields'),doc=documents.find(row=>row.id===$('vnDocumentId')?.value);if(!box||!doc)return;let global={};try{global=JSON.parse(localStorage.getItem('vnp-ai-prompt-defaults')||'{}');}catch{}box.innerHTML=Object.keys(promptDefaults).map(kind=>`<section><h4>${promptNames[kind]}</h4><label>預設指令<textarea data-prompt-kind="${kind}" data-prompt-scope="global" rows="4">${esc(global[kind]||promptDefaults[kind])}</textarea></label><label>本篇補充<textarea data-prompt-kind="${kind}" data-prompt-scope="story" rows="3" placeholder="只在這篇故事增加判斷條件">${esc(doc.visualNovelPage?.promptOverrides?.[kind]||'')}</textarea></label></section>`).join('');}
+  document.addEventListener('change',event=>{const field=event.target.closest?.('#vnpPromptFields [data-prompt-kind]');if(!field)return;const kind=field.dataset.promptKind,value=field.value.trim();if(field.dataset.promptScope==='global'){let global={};try{global=JSON.parse(localStorage.getItem('vnp-ai-prompt-defaults')||'{}');}catch{}if(value)global[kind]=value;else delete global[kind];localStorage.setItem('vnp-ai-prompt-defaults',JSON.stringify(global));}else{const doc=documents.find(row=>row.id===$('vnDocumentId')?.value);if(!doc)return;doc.visualNovelPage=doc.visualNovelPage||{};doc.visualNovelPage.promptOverrides={...(doc.visualNovelPage.promptOverrides||{}),[kind]:value};saveStateToLocalStorage();}});
   const defaultConfig=()=>({mode:'classic',sceneFolderIds:[],sceneAssetIds:[],musicFolderIds:[],musicAssetIds:[],allMusic:false,spriteLibraryId:'',layoutTemplateId:'',highlightSpeaker:true,avatarCharacterIds:[],autoScene:false,cues:{}});
   let context=null,modal=null,player=null,events=[],eventIndex=-1,currentDoc=null,currentConfig=null,playing=false,autoTimer=0,openingTimer=0,typingTimer=0,skipTimer=0,skipMode=false,skipBusy=false,typingFullText='',typeAudio=null,orientationHandler=null,history=[],sceneSource='',cgSource='',activeMusicId='',music=null,menuOpen=false,autoMode=false;
   let dialogueCount=0,lastMusicChangeAt=-Infinity,pendingMusicId='';
@@ -45,7 +56,7 @@
   function close(){modal?.classList.remove('active');context=null;}
   function optionGrid(type,selectedFolders,selectedAssets){const label=type==='bg'?'場景':'音樂',rows=assets(type),group=folders(type);return `<section class="vnp-panel"><div class="vnp-panel-head"><div><small>${type==='bg'?'SCENE LIBRARY':'MUSIC LIBRARY'}</small><h3>關聯${label}素材</h3></div><button type="button" class="btn btn-xs btn-outline" data-action="open-library" data-type="${type}">管理共用素材庫 ↗</button></div><p class="vnp-help">勾選這本書／篇文檔可使用的資料夾或個別素材。素材新增與編輯在共用素材庫完成。</p><div class="vnp-folder-list">${group.map(folder=>`<label><input type="checkbox" data-link-folder="${esc(folder.id)}" ${selectedFolders.includes(folder.id)?'checked':''}><span><i class="fa-solid fa-folder"></i> ${esc(folder.name)}</span></label>`).join('')||'<small>尚無資料夾</small>'}</div><div class="vnp-asset-list">${rows.map(row=>`<label><input type="checkbox" data-link-asset="${esc(row.id)}" ${selectedAssets.includes(row.id)?'checked':''}><span>${esc(row.title||'未命名')}${row.folderId?` <small>· ${esc(group.find(folder=>folder.id===row.folderId)?.name||'')}</small>`:''}${type==='bgm'?` <small>${esc((row.tags||[]).join('、'))}</small>`:''}</span></label>`).join('')||'<small>尚無素材</small>'}</div>${type==='bgm'?'<label class="vnp-check"><input id="vnpAllMusic" type="checkbox"> 包含整個音樂庫（之後新增的音樂也會納入）</label>':''}</section>`;}
   function spritePanel(config){return `<section class="vnp-panel"><div class="vnp-panel-head"><div><small>CAST & EXPRESSIONS</small><h3>關聯立繪素材庫</h3></div><button type="button" class="btn btn-xs btn-outline" data-action="open-library" data-type="sprite">管理共用素材庫 ↗</button></div><label class="vnp-field">${scopeLabel()}使用的立繪庫<select id="vnpSpriteLibrary"><option value="">不使用（人物頭像）</option>${libraries().map(row=>`<option value="${esc(row.id)}" ${config.spriteLibraryId===row.id?'selected':''}>${esc(row.name)}</option>`).join('')}</select></label><div id="vnpSpriteEditor"></div></section>`;}
-  function renderSettings(){const record=scopeRecord(),config={...(context?.type==='doc'?configFor(record):{...defaultConfig(),...(record?.visualNovelPage||{})}),...(settingsDraft()||{})};modal.innerHTML=`<div class="modal-box modal-lg vnp-shell" role="dialog" aria-modal="true"><header class="vnp-header"><div><small>VISUAL NOVEL · PAGE STUDIO</small><h2>視覺小說頁面設置</h2><p>${esc(record?.title||'')} · ${scopeLabel()}</p></div><button type="button" data-action="close" aria-label="關閉">×</button></header><div class="vnp-body"><section class="vnp-panel"><div class="vnp-panel-head"><div><small>READING EXPERIENCE</small><h3>對話模板</h3></div></div><div class="vnp-mode-grid"><label><input type="radio" name="vnpMode" value="classic" ${config.mode==='classic'?'checked':''}><b>原版視覺小說</b><small>沿用目前閱讀介面 · 預設</small></label><label><input type="radio" name="vnpMode" value="landscape" ${config.mode==='landscape'?'checked':''}><b>進階橫版</b><small>左・中・右，最多三位人物</small></label><label><input type="radio" name="vnpMode" value="portrait" ${config.mode==='portrait'?'checked':''}><b>進階直版</b><small>單一正比立繪與漸層對話框</small></label></div><label class="vnp-check"><input id="vnpHighlight" type="checkbox" ${config.highlightSpeaker!==false?'checked':''}> 橫版微微高亮並放大說話者，其他人物稍微壓暗</label><label class="vnp-check"><input id="vnpAutoScene" type="checkbox" ${config.autoScene?'checked':''}> AI 標註後自動切換場景背景</label></section>${optionGrid('bg',config.sceneFolderIds||[],config.sceneAssetIds||[])}${optionGrid('bgm',config.musicFolderIds||[],config.musicAssetIds||[])}${spritePanel(config)}<section class="vnp-panel"><small>MANUAL NOTES</small><h3>腳本與 AI 分工</h3><p>說話人仍在原編輯器判斷。場景、人物情緒／橫版站位、音樂各有獨立 AI 按鈕；AI 只寫入標註，不改寫正文。劇本可用 <code>@bg</code>、<code>@cg</code>、<code>@bgm</code> 及 <code>none</code> 手動切換。進階閱讀器支援每句手動修正。</p></section></div><footer class="vnp-footer"><button type="button" class="btn btn-outline" data-action="close">取消</button><button type="button" class="btn btn-primary" data-action="save">儲存頁面設置</button></footer></div>`;if($('vnpAllMusic'))$('vnpAllMusic').checked=!!config.allMusic;renderSpriteEditor();modal.onclick=handleSettingsClick;}
+  function renderSettings(){const record=scopeRecord(),config={...(context?.type==='doc'?configFor(record):{...defaultConfig(),...(record?.visualNovelPage||{})}),...(settingsDraft()||{})};modal.innerHTML=`<div class="modal-box modal-lg vnp-shell" role="dialog" aria-modal="true"><header class="vnp-header"><div><small>VISUAL NOVEL · PAGE STUDIO</small><h2>視覺小說頁面設置</h2><p>${esc(record?.title||'')} · ${scopeLabel()}</p></div><button type="button" data-action="close" aria-label="關閉">×</button></header><div class="vnp-body"><section class="vnp-panel"><div class="vnp-panel-head"><div><small>READING EXPERIENCE</small><h3>對話模板</h3></div></div><div class="vnp-mode-grid"><label><input type="radio" name="vnpMode" value="classic" ${config.mode==='classic'?'checked':''}><b>原版視覺小說</b><small>沿用目前閱讀介面 · 預設</small></label><label><input type="radio" name="vnpMode" value="landscape" ${config.mode==='landscape'?'checked':''}><b>進階橫版</b><small>左・中・右，最多三位人物</small></label><label><input type="radio" name="vnpMode" value="portrait" ${config.mode==='portrait'?'checked':''}><b>進階直版</b><small>單一正比立繪與漸層對話框</small></label></div><label class="vnp-check"><input id="vnpHighlight" type="checkbox" ${config.highlightSpeaker!==false?'checked':''}> 橫版微微高亮並放大說話者，其他人物稍微壓暗</label><label class="vnp-check"><input id="vnpAutoScene" type="checkbox" ${config.autoScene?'checked':''}> 舊版逐句場景標註自動切換</label></section>${optionGrid('bg',config.sceneFolderIds||[],config.sceneAssetIds||[])}${optionGrid('bgm',config.musicFolderIds||[],config.musicAssetIds||[])}${spritePanel(config)}<section class="vnp-panel"><small>MANUAL NOTES</small><h3>腳本與 AI 分工</h3><p>說話人仍在原編輯器判斷。場景、人物情緒／橫版站位、音樂各有獨立 AI 按鈕；AI 將場景、音樂與人物退場寫入劇本指令，不改寫原文台詞。劇本可用 <code>@bg</code>、<code>@cg</code>、<code>@bgm</code> 及 <code>none</code> 手動切換。進階閱讀器支援每句手動修正。</p></section></div><footer class="vnp-footer"><button type="button" class="btn btn-outline" data-action="close">取消</button><button type="button" class="btn btn-primary" data-action="save">儲存頁面設置</button></footer></div>`;if($('vnpAllMusic'))$('vnpAllMusic').checked=!!config.allMusic;renderSpriteEditor();modal.onclick=handleSettingsClick;}
   function save(){const record=scopeRecord();if(!record)return;const previous=record.visualNovelPage||{};record.visualNovelPage={...defaultConfig(),...previous,mode:modal.querySelector('[name="vnpMode"]:checked')?.value||'classic',sceneFolderIds:[...modal.querySelectorAll('[data-link-folder]:checked')].filter(el=>folders('bg').some(row=>row.id===el.dataset.linkFolder)).map(el=>el.dataset.linkFolder),sceneAssetIds:[...modal.querySelectorAll('[data-link-asset]:checked')].filter(el=>assets('bg').some(row=>row.id===el.dataset.linkAsset)).map(el=>el.dataset.linkAsset),musicFolderIds:[...modal.querySelectorAll('[data-link-folder]:checked')].filter(el=>folders('bgm').some(row=>row.id===el.dataset.linkFolder)).map(el=>el.dataset.linkFolder),musicAssetIds:[...modal.querySelectorAll('[data-link-asset]:checked')].filter(el=>assets('bgm').some(row=>row.id===el.dataset.linkAsset)).map(el=>el.dataset.linkAsset),spriteLibraryId:$('vnpSpriteLibrary')?.value||'',allMusic:!!$('vnpAllMusic')?.checked,highlightSpeaker:$('vnpHighlight')?.checked!==false,autoScene:!!$('vnpAutoScene')?.checked};saveStateToLocalStorage();close();}
   function renderSpriteEditor(){const library=libraries().find(row=>row.id===$('vnpSpriteLibrary')?.value),box=$('vnpSpriteEditor');if(!box)return;if(!library){box.innerHTML='<p class="vnp-help">選擇或建立立繪庫後，可替人物設定普通與其他表情立繪。沒有立繪的人物會使用以人物主題色呈現的路人剪影。</p>';return;}box.innerHTML=`<div class="vnp-sprite-head"><strong>${esc(library.name)}</strong><button type="button" class="btn btn-xs btn-outline" data-action="rename-library">重新命名</button></div><p class="vnp-help">選擇人物後填入圖片網址，或上傳本機圖片。頭像裁切範圍使用百分比；所有表情共用普通立繪的裁切框。</p><label class="vnp-field">加入人物<select id="vnpAddCharacter"><option value="">選擇人物</option>${characters.filter(char=>!library.cast?.[char.id]).map(char=>`<option value="${esc(char.id)}">${esc(char.name)}</option>`).join('')}</select></label><button type="button" class="btn btn-xs btn-outline" data-action="add-character">＋ 加入人物</button><label class="vnp-check"><input id="vnpLibraryAll" type="checkbox" ${library.allCharacters?'checked':''}> 這個立繪庫關聯全部人物</label>${Object.entries(library.cast||{}).map(([charId,entry])=>{const char=characters.find(row=>String(row.id)===String(charId));return `<details class="vnp-cast"><summary>${esc(char?.name||charId)} <small>${Object.keys(entry.images||{}).length} 種表情</small></summary><div class="vnp-crop"><label>頭像裁切 X <input type="number" min="0" max="100" data-crop="x" data-char="${esc(charId)}" value="${Number(entry.crop?.x)||25}"></label><label>Y <input type="number" min="0" max="100" data-crop="y" data-char="${esc(charId)}" value="${Number(entry.crop?.y)||0}"></label><label>寬 <input type="number" min="1" max="100" data-crop="w" data-char="${esc(charId)}" value="${Number(entry.crop?.w)||50}"></label><label>高 <input type="number" min="1" max="100" data-crop="h" data-char="${esc(charId)}" value="${Number(entry.crop?.h)||50}"></label></div><div class="vnp-crop-board" data-crop-board="${esc(charId)}"><img alt="立繪裁切預覽"><span class="vnp-crop-box"></span><small>拖曳框選頭像範圍</small></div>${[...new Set([...expressions,...Object.keys(entry.images||{})])].map(mood=>`<div class="vnp-expression"><strong>${esc(mood)}</strong><input type="url" data-image-url="${esc(mood)}" data-char="${esc(charId)}" value="${esc(entry.images?.[mood]||'')}" placeholder="https:// 圖片網址"><input type="file" accept="image/*" data-image-file="${esc(mood)}" data-char="${esc(charId)}"></div>`).join('')}<button type="button" class="btn btn-xs btn-outline" data-action="new-expression" data-char="${esc(charId)}">＋ 自訂情緒</button><label class="vnp-check"><input type="checkbox" data-avatar-mode="${esc(charId)}" ${entry.avatarMode?'checked':''}> 此人物預設使用左下角頭像模式</label></details>`}).join('')}`;hydrateCropBoards();}
   function paintCropBoard(board,entry){const crop=entry?.crop||{x:25,y:0,w:50,h:50},box=board.querySelector('.vnp-crop-box');if(!box)return;box.style.left=`${crop.x}%`;box.style.top=`${crop.y}%`;box.style.width=`${crop.w}%`;box.style.height=`${crop.h}%`;}
@@ -58,6 +69,63 @@
   async function handleSettingsClick(event){const button=event.target.closest('[data-action]');if(!button)return;const action=button.dataset.action;if(action==='close')return close();if(action==='save')return save();if(action==='new-folder'){const name=prompt('資料夾名稱（例如：校園）');if(!name?.trim())return;mediaLibrary.push({id:id('vnf'),kind:'vn-folder',assetType:button.dataset.type,name:name.trim()});saveStateToLocalStorage();return renderSettings();}if(action==='rename-folder'){const row=mediaLibrary.find(item=>item.id===button.dataset.id),name=prompt('資料夾名稱',row?.name||'');if(row&&name?.trim()){row.name=name.trim();saveStateToLocalStorage();renderSettings();}return;}if(action==='upload-asset')return uploadAsset(button.dataset.type);if(action==='new-asset'){const type=button.dataset.type,title=prompt(type==='bg'?'場景名稱（如 校園-教室）':'音樂名稱');if(!title?.trim())return;const url=prompt('素材直接網址（https://）。若要上傳本機素材，可在劇本編輯器的素材庫上傳後回來編輯。');if(!url?.trim()||!/^https?:\/\//i.test(url.trim()))return alert('請輸入有效的 HTTPS 圖片或音訊網址。');const group=folders(type),folderId=group.length?prompt(`資料夾 ID（可留空）：\n${group.map(row=>`${row.name}: ${row.id}`).join('\n')}`)||'':'';const tags=type==='bgm'?prompt(`情緒標籤（逗號分隔）\n建議：${moods.join('、')}`)||'':'';mediaLibrary.push({id:id('vna'),kind:'vn-asset',assetType:type,title:title.trim(),url:url.trim(),folderId:group.some(row=>row.id===folderId)?folderId:'',tags:tags.split(/[,，、]/).map(s=>s.trim()).filter(Boolean),listed:true,createdAt:Date.now()});saveStateToLocalStorage();return renderSettings();}if(action==='edit-asset'){const row=mediaLibrary.find(item=>item.id===button.dataset.id);if(!row)return;const title=prompt('素材名稱',row.title||'');if(title===null)return;row.title=title.trim()||row.title;const group=folders(row.assetType),folder=prompt(`所屬資料夾 ID（留空為根目錄）：\n${group.map(item=>`${item.name}: ${item.id}`).join('\n')}`,row.folderId||'');if(folder!==null)row.folderId=group.some(item=>item.id===folder)?folder:'';if(row.assetType==='bgm'){const tags=prompt('情緒標籤（逗號分隔）',(row.tags||[]).join('、'));if(tags!==null)row.tags=tags.split(/[,，、]/).map(s=>s.trim()).filter(Boolean);}saveStateToLocalStorage();return renderSettings();}if(action==='all-music'){modal.querySelectorAll('[data-link-asset]').forEach(input=>{if(assets('bgm').some(row=>row.id===input.dataset.linkAsset))input.checked=true;});return;}if(action==='new-library'){const name=prompt('立繪素材庫名稱');if(!name?.trim())return;const row={id:id('vns'),kind:'vn-sprite-library',name:name.trim(),cast:{},allCharacters:false};mediaLibrary.push(row);saveStateToLocalStorage();renderSettings();$('vnpSpriteLibrary').value=row.id;renderSpriteEditor();return;}const library=libraries().find(row=>row.id===$('vnpSpriteLibrary')?.value);if(!library)return;if(action==='rename-library'){const name=prompt('立繪素材庫名稱',library.name);if(name?.trim()){library.name=name.trim();saveStateToLocalStorage();renderSettings();$('vnpSpriteLibrary').value=library.id;renderSpriteEditor();}return;}if(action==='add-character'){const charId=$('vnpAddCharacter')?.value;if(charId){library.cast=library.cast||{};library.cast[charId]={images:{},crop:{x:25,y:0,w:50,h:50},avatarMode:false};saveStateToLocalStorage();renderSpriteEditor();}return;}if(action==='new-expression'){const name=prompt('自訂情緒名稱');if(!name?.trim())return;library.cast[button.dataset.char].images[name.trim()]='';saveStateToLocalStorage();return renderSpriteEditor();}}
   document.addEventListener('change',async event=>{if(!modal?.classList.contains('active')||!modal.contains(event.target))return;const target=event.target;if(target.id==='vnpSpriteLibrary')return renderSpriteEditor();const library=libraries().find(row=>row.id===$('vnpSpriteLibrary')?.value);if(!library)return;if(target.id==='vnpLibraryAll'){library.allCharacters=target.checked;saveStateToLocalStorage();return;}const cast=library.cast?.[target.dataset.char];if(!cast)return;if(target.dataset.crop){cast.crop[target.dataset.crop]=Math.max(0,Math.min(100,Number(target.value)||0));saveStateToLocalStorage();}if(target.dataset.avatarMode){cast.avatarMode=target.checked;saveStateToLocalStorage();}if(target.dataset.imageUrl){cast.images[target.dataset.imageUrl]=target.value.trim();saveStateToLocalStorage();}if(target.dataset.imageFile){const file=target.files?.[0];if(!file)return;if(!file.type.startsWith('image/'))return alert('請選擇圖片。');const assetId=id('vna');try{await OCFeatures.storeFile(assetId,file);mediaLibrary.push({id:assetId,kind:'vn-asset',assetType:'sprite',title:`${characters.find(row=>String(row.id)===String(target.dataset.char))?.name||'人物'}-${target.dataset.imageFile}`,type:file.type,size:file.size,localOnly:true,listed:false,createdAt:Date.now()});cast.images[target.dataset.imageFile]=`asset:${assetId}`;saveStateToLocalStorage();}catch(error){alert(`立繪儲存失敗：${error.message}`);}}});
   function linkedAssets(doc,type){const cfg=configFor(doc),folderIds=type==='bg'?cfg.sceneFolderIds:cfg.musicFolderIds,assetIds=type==='bg'?cfg.sceneAssetIds:cfg.musicAssetIds;return assets(type).filter(row=>assetIds?.includes(row.id)||folderIds?.includes(row.folderId)||(type==='bgm'&&cfg.allMusic));}
+  function materializeAiCommands(doc,cues,kinds){
+    const editor=$('vnScriptText');if(!editor)return cues;
+    const oldEvents=parseVisualNovelScript(editor.value),oldCues={...cues};
+    const remembered=doc.visualNovelPage?.aiCommands||[];
+    let rows=oldEvents.map(event=>event.sourceLine);
+    if(rows.some(line=>line==null))rows=editor.value.split(/\r?\n/).filter(line=>line.trim());
+    const remove=new Set();
+    for(const marker of remembered.filter(row=>kinds.includes(row.kind))){
+      const index=rows.findIndex((line,i)=>!remove.has(i)&&line===marker.command&&rows.slice(i+1).find(next=>!/^(@|sys\()/i.test(next.trim()))===marker.nextLine);
+      if(index>=0)remove.add(index);
+    }
+    rows=rows.filter((_,index)=>!remove.has(index));
+    const oldDialogue=oldEvents.filter(row=>row.type==='dialogue');
+    const output=[],markers=[];let ordinal=0,activeScene='',activeMusic='';
+    const identity=(value,type)=>{if(value==='none')return '';if(value.startsWith('asset:'))return value.slice(6);return mediaLibrary.find(item=>item.kind==='vn-asset'&&item.assetType===type&&item.url===value)?.id||value;};
+    for(const row of rows){
+      const event=parseVisualNovelScript(row)[0];
+      if(event?.type==='dialogue'){
+        const sourceCue=oldCues[oldDialogue[ordinal]?.sourceLineIndex]||{};
+        const commands=[];
+        if(kinds.includes('hide')&&sourceCue.hideAll)commands.push(['hide','sys(hide:all)']);
+        if(kinds.includes('scene')&&sourceCue.sceneId&&sourceCue.sceneId!==activeScene)commands.push(['scene',`@bg asset:${sourceCue.sceneId}`]);
+        if(kinds.includes('music')&&sourceCue.musicId&&sourceCue.musicId!==activeMusic)commands.push(['music',`@bgm asset:${sourceCue.musicId}`]);
+        for(const [kind,command] of commands){output.push(command);markers.push({kind,command,nextLine:row});if(kind==='scene')activeScene=sourceCue.sceneId;if(kind==='music')activeMusic=sourceCue.musicId;}
+        ordinal++;
+      }
+      output.push(row);
+      if(event?.type==='bg')activeScene=identity(event.value,'bg');
+      if(event?.type==='bgm')activeMusic=identity(event.value,'bgm');
+    }
+    const newEvents=parseVisualNovelScript(output.join('\n')).filter(row=>row.type==='dialogue'),remapped={};
+    newEvents.forEach((row,index)=>{const old=oldCues[oldDialogue[index]?.sourceLineIndex];if(old){const cue={...old};for(const kind of kinds){if(kind==='scene'){delete cue.sceneId;delete cue.sceneSource;}if(kind==='music'){delete cue.musicId;delete cue.musicSource;}if(kind==='hide')delete cue.hideAll;}if(Object.keys(cue).length)remapped[row.sourceLineIndex]=cue;}});
+    editor.value=output.join('\n\n');doc.visualNovelPage={...doc.visualNovelPage,aiCommands:[...remembered.filter(row=>!kinds.includes(row.kind)),...markers]};
+    return remapped;
+  }
+  async function ensureOpeningAsset(kind,doc,script,lines,choices,cues){
+    if(!['scene','music'].includes(kind)||!choices.length||!lines.length)return false;
+    const field=kind==='scene'?'sceneId':'musicId',source=kind==='scene'?'sceneSource':'musicSource',first=lines[0],current=cues[first.sourceLineIndex]||{};
+    const events=parseVisualNovelScript(script),firstDialogue=events.findIndex(row=>row.type==='dialogue');
+    const oldAi=new Set((doc.visualNovelPage?.aiCommands||[]).filter(row=>row.kind===kind).map(row=>row.command));
+    const manualOpening=events.slice(0,firstDialogue).some(row=>row.type===(kind==='scene'?'bg':'bgm')&&!oldAi.has(row.sourceLine));
+    if(manualOpening){if(current[source]==='ai'){const next={...current};delete next[field];delete next[source];cues[first.sourceLineIndex]=next;}return false;}
+    if(current[source]==='manual'||choices.some(choice=>choice.id===current[field]))return false;
+    const sample=lines.slice(0,8).map(row=>({speaker:row.speaker,text:row.text.slice(0,500)}));
+    let selected='';
+    try{
+      const result=await requestDeepSeek({model:'deepseek-v4-flash',thinking:{type:'disabled'},temperature:0,max_tokens:200,response_format:{type:'json_object'},messages:[{role:'system',content:`你是視覺小說的開場${kind==='scene'?'場景':'背景音樂'}選擇器。根據開頭片段，必須從可用素材中選出最適合的一個。只回傳 {"id":"素材 ID"}，不得創造 ID。可用素材：${JSON.stringify(choices)}`},{role:'user',content:JSON.stringify(sample)}]});
+      selected=JSON.parse(result.choices?.[0]?.message?.content||'{}').id;
+    }catch(error){console.warn('開場素材 AI 選擇失敗，改用第一個關聯素材：',error);}
+    if(!choices.some(choice=>choice.id===selected))selected=choices[0].id;
+    cues[first.sourceLineIndex]={...current,[field]:selected,[source]:'ai'};
+    if(kind==='music')for(let i=1;i<Math.min(10,lines.length);i++){
+      const cue=cues[lines[i].sourceLineIndex];
+      if(cue?.musicId&&cue.musicSource!=='manual'){const next={...cue};delete next.musicId;delete next.musicSource;cues[lines[i].sourceLineIndex]=next;}
+    }
+    return true;
+  }
   async function analyze(kind,options={}){
     const doc=documents.find(row=>row.id===$('vnDocumentId')?.value);
     if(!doc)return alert('請先開啟文章的視覺小說編輯器。');
@@ -73,19 +141,21 @@
     if(kind==='scene')for(const row of lines){const cue=cues[row.sourceLineIndex];if(cue?.sceneId&&cue.sceneSource!=='manual'){const next={...cue};delete next.sceneId;delete next.sceneSource;cues[row.sourceLineIndex]=next;}}
     if(kind==='music')for(const row of lines){const cue=cues[row.sourceLineIndex];if(cue?.musicId&&cue.musicSource!=='manual'){const next={...cue};delete next.musicId;delete next.musicSource;cues[row.sourceLineIndex]=next;}}
     const chunks=[];for(let i=0;i<lines.length;i+=55)chunks.push(lines.slice(i,i+55));
-    const label={scene:'場景',emotion:'情緒與站位',music:'音樂'}[kind];
+    const label={scene:'場景',emotion:'情緒與站位',music:'音樂',hide:'降下所有說話人'}[kind];
     let lastMusicOrdinal=-Infinity,lastMusicId='',ordinal=0,changes=0;
     showToast(`AI 正在獨立判斷${label}…`);
     try{
       for(const chunk of chunks){
-        const request=chunk.map(row=>({line:row.sourceLineIndex,speaker:row.speaker,text:row.text.slice(0,500)}));
-        const instruction=kind==='scene'?'依文字選最符合當前地點的場景 ID；場景不變可回傳空字串。':kind==='music'?'以完整段落與場景為單位選背景音樂。除非情緒有明顯、持續的轉折，否則保持目前音樂；同一段至少維持約十句台詞。僅在真正需要換曲的那一句回傳音樂 ID，其餘一律回傳空字串。':'只判斷人物情緒（普通、喜、怒、哀、樂、驚，或角色素材庫已有的自訂情緒）與橫版站位（left、center、right）。旁白不需站位。';
-        const result=await requestDeepSeek({model:'deepseek-v4-flash',thinking:{type:'disabled'},temperature:0,max_tokens:4000,response_format:{type:'json_object'},messages:[{role:'system',content:`你是視覺小說標註器。${instruction}只回傳 JSON 物件，鍵為行號，值為 ${kind==='emotion'?'{"emotion":"普通","position":"center"}':'素材 ID 字串'}。禁止改寫原文，禁止創造素材 ID。可用選項：${JSON.stringify(choices)}`},{role:'user',content:JSON.stringify(request)}]});
+        const request=chunk.map(row=>({line:row.sourceLineIndex,speaker:row.speaker,text:row.text.slice(0,500),...(row===lines[0]&&['scene','music'].includes(kind)?{opening:true}:{} )}));
+        const instruction=promptFor(kind,doc);
+        const result=await requestDeepSeek({model:'deepseek-v4-flash',thinking:{type:'disabled'},temperature:0,max_tokens:4000,response_format:{type:'json_object'},messages:[{role:'system',content:`你是視覺小說標註器。${instruction}${['scene','music'].includes(kind)?'標有 opening:true 的整篇第一句，必須從可用素材中選一個合適的 ID；後續只在切換時回傳 ID。':''}只回傳 JSON 物件，鍵為行號，值為 ${kind==='emotion'?'{"emotion":"普通","position":"center"}':kind==='hide'?'布林值 true 或 false':'素材 ID 字串或空字串'}。禁止改寫原文，禁止創造素材 ID。可用選項：${JSON.stringify(choices)}`},{role:'user',content:JSON.stringify(request)}]});
         const parsed=JSON.parse(result.choices?.[0]?.message?.content||'{}');
         for(const row of chunk){
           const value=parsed[String(row.sourceLineIndex)],old=cues[row.sourceLineIndex]||{};
           if(kind==='emotion'){
             if(old.emotionSource!=='manual'&&value&&typeof value==='object')cues[row.sourceLineIndex]={...old,emotion:String(value.emotion||'普通').slice(0,24),position:['left','center','right'].includes(value.position)?value.position:'center',emotionSource:'ai'};
+          }else if(kind==='hide'){
+            if(value===true||value==='true')cues[row.sourceLineIndex]={...old,hideAll:true};
           }else if(kind==='scene'){
             if(old.sceneSource!=='manual'&&choices.some(choice=>choice.id===value))cues[row.sourceLineIndex]={...old,sceneId:value,sceneSource:'ai'};
           }else{
@@ -95,7 +165,10 @@
           }
         }
       }
-      if(options.persist!==false){doc.visualNovelPage={...doc.visualNovelPage,cues};saveStateToLocalStorage();renderAnnotations();}
+      await ensureOpeningAsset(kind,doc,script,lines,choices,cues);
+      if(kind==='music')changes=lines.filter(row=>cues[row.sourceLineIndex]?.musicId).length;
+      const finalCues=options.persist!==false&&kind!=='emotion'?materializeAiCommands(doc,cues,[kind]):cues;
+      if(options.persist!==false){doc.visualNovelPage={...doc.visualNovelPage,cues:finalCues};doc.visualNovel={...doc.visualNovel,scriptText:$('vnScriptText').value};saveStateToLocalStorage();renderAnnotations();}
       if(!options.silent)alert(`已完成${label}獨立標註，共檢查 ${lines.length} 句${kind==='music'?`，保留 ${changes} 個段落換曲點`:''}；正文與說話人保持不變。`);
       return {cues,lines:lines.length,changes};
     }catch(error){if(options.silent)throw error;alert(`AI 標註失敗：${error.message}`);return null;}finally{hideToast();}
@@ -123,7 +196,7 @@
         const cue=prior.get(row.text)?.shift();if(cue)cues[row.sourceLineIndex]={...cue};
       }
       const skipped=[];
-      for(const kind of ['emotion','scene','music']){
+      for(const kind of ['emotion','scene','music','hide']){
         if(kind==='scene'&&!linkedAssets(doc,'bg').length){skipped.push('場景');continue;}
         if(kind==='music'&&!linkedAssets(doc,'bgm').length){skipped.push('音樂');continue;}
         const result=await analyze(kind,{silent:true,persist:false,cues});
@@ -131,11 +204,12 @@
         if(!result)throw new Error('沒有可標註的台詞');
         cues=result.cues;
       }
+      cues=materializeAiCommands(doc,cues,['scene','music','hide']);
       doc.visualNovel={...doc.visualNovel,scriptText:editor.value,settings:collectVisualNovelSettings(),aiCustomPrompt:$('vnAiCustomPrompt')?.value.trim()||'',eventIndexVersion:2,updatedAt:new Date().toISOString()};
       doc.visualNovelPage={...doc.visualNovelPage,cues};
       alignVisualNovelBookmarkToScript(doc,parseVisualNovelScript(editor.value));
       saveStateToLocalStorage();renderAnnotations();
-      alert(`已完成並儲存說話人、情緒${skipped.includes('場景')?'':'、場景'}${skipped.includes('音樂')?'':'、音樂'}判斷。${skipped.length?`尚未關聯${skipped.join('與')}素材，因此略過這些項目。`:''}`);
+      alert(`已完成並儲存說話人、情緒、場景、音樂及降下人物判斷。場景、音樂與清空人物時機已直接寫入劇本。${skipped.length?`尚未關聯${skipped.join('與')}素材，因此略過這些項目。`:''}`);
     }catch(error){
       if(oldNovel)doc.visualNovel=oldNovel;else delete doc.visualNovel;
       if(oldPage)doc.visualNovelPage=oldPage;else delete doc.visualNovelPage;
@@ -147,24 +221,14 @@
   function renderAnnotations(){
     const panel=$('vnpAnnotations'),editor=$('vnScriptText'),doc=documents.find(row=>row.id===$('vnDocumentId')?.value);
     if(!panel||!editor||!doc)return;
-    const wasOpen=panel.querySelector('details')?.open!==false;
-    const cues=doc.visualNovelPage?.cues||{},sceneChoices=linkedAssets(doc,'bg'),musicChoices=linkedAssets(doc,'bgm');
-    const rows=parseVisualNovelScript(editor.value).filter(row=>row.type==='dialogue'&&((cue=>cue.sceneId||cue.musicId||cue.emotion||cue.position)(cues[row.sourceLineIndex]||{})));
-    if(!rows.length){panel.innerHTML='<div class="vnp-annotation-empty"><i class="fa-solid fa-wand-magic-sparkles"></i> 尚無舞台標註。執行上方的 AI 判斷後，場景、情緒與音樂會以橘色顯示在這裡，並可逐句調整。</div>';return;}
-    const options=(list,value,empty)=>`<option value="">${empty}</option>${list.map(item=>`<option value="${esc(item.id)}" ${item.id===value?'selected':''}>${esc(item.title||item.name||item.id)}</option>`).join('')}${value&&!list.some(item=>item.id===value)?`<option value="${esc(value)}" selected>已解除關聯 · ${esc(value)}</option>`:''}`;
-    panel.innerHTML=`<details ${wasOpen?'open':''}><summary><span><i class="fa-solid fa-sparkles"></i> 舞台標註 <b>${rows.length} 句</b></span><small>橘色標籤可點選對應台詞；下方可直接修改</small></summary><div class="vnp-annotation-list">${rows.map(row=>{const cue=cues[row.sourceLineIndex]||{},scene=sceneChoices.find(item=>item.id===cue.sceneId),track=musicChoices.find(item=>item.id===cue.musicId);return `<article class="vnp-annotation-row"><button type="button" class="vnp-annotation-line" data-jump-line="${row.sourceLineIndex}"><strong>第 ${row.sourceLineIndex+1} 句 · ${esc(row.speaker)}</strong><span>${esc(row.text.slice(0,90))}</span></button><div class="vnp-annotation-tags">${cue.sceneId?`<span>場景 · ${esc(scene?.title||cue.sceneId)}</span>`:''}${cue.emotion?`<span>情緒 · ${esc(cue.emotion)}</span>`:''}${cue.position?`<span>站位 · ${esc({left:'左',center:'中',right:'右'}[cue.position]||cue.position)}</span>`:''}${cue.musicId?`<span>音樂 · ${esc(track?.title||cue.musicId)}</span>`:''}</div><div class="vnp-annotation-controls"><label>場景<select data-cue-line="${row.sourceLineIndex}" data-cue-field="sceneId">${options(sceneChoices,cue.sceneId,'沿用上一場景')}</select></label><label>情緒<input data-cue-line="${row.sourceLineIndex}" data-cue-field="emotion" maxlength="24" value="${esc(cue.emotion||'')}" placeholder="普通"></label><label>站位<select data-cue-line="${row.sourceLineIndex}" data-cue-field="position"><option value="">自動</option>${['left','center','right'].map((position,index)=>`<option value="${position}" ${cue.position===position?'selected':''}>${['左','中','右'][index]}</option>`).join('')}</select></label><label>音樂<select data-cue-line="${row.sourceLineIndex}" data-cue-field="musicId">${options(musicChoices,cue.musicId,'沿用目前音樂')}</select></label></div></article>`;}).join('')}</div></details>`;
+    renderCommandColors();
+    const commands=parseVisualNovelScript(editor.value).filter(row=>['cg','bg','bgm','se','shake','sys'].includes(row.type));
+    panel.innerHTML=commands.length?`<details><summary>劇本指令 <b>${commands.length}</b> 個 · 點選可定位修改</summary><div class="vnp-command-list">${commands.map(row=>`<button type="button" data-jump-line="${row.sourceLineIndex}"><code>${esc(row.type==='sys'?`sys(${row.command}:${row.args.join(':')})`:row.type==='shake'?'@shake':`@${row.type} ${row.value}`)}</code></button>`).join('')}</div></details>`:'<small>場景、音樂及人物動作會以橘色指令寫在劇本中，可直接修改。</small>';
+
   }
+  function renderCommandColors(){const editor=$('vnScriptText');if(!editor)return;let shell=editor.parentElement;if(!shell?.classList.contains('vnp-script-shell')){shell=document.createElement('div');shell.className='vnp-script-shell';editor.before(shell);shell.append(editor);const mirror=document.createElement('pre');mirror.className='vnp-script-mirror';mirror.setAttribute('aria-hidden','true');shell.prepend(mirror);editor.addEventListener('scroll',()=>{mirror.scrollTop=editor.scrollTop;mirror.scrollLeft=editor.scrollLeft;});}const mirror=shell.querySelector('.vnp-script-mirror');mirror.innerHTML=(editor.value||' ').split('\n').map(line=>/^(?:\s*@(?:bg|cg|bgm|se|shake)\b|\s*sys\([^)]*\))/i.test(line)?`<span class="vnp-command-color">${esc(line||' ')}</span>`:esc(line||' ')).join('\n')+'\n';mirror.scrollTop=editor.scrollTop;mirror.scrollLeft=editor.scrollLeft;}
   let annotationTimer=0;
   document.addEventListener('input',event=>{if(event.target?.id!=='vnScriptText')return;clearTimeout(annotationTimer);annotationTimer=setTimeout(renderAnnotations,180);});
-  document.addEventListener('change',event=>{
-    const input=event.target.closest?.('#vnpAnnotations [data-cue-field]');if(!input)return;
-    const doc=documents.find(row=>row.id===$('vnDocumentId')?.value),line=Number(input.dataset.cueLine),field=input.dataset.cueField;
-    if(!doc||!Number.isInteger(line)||!['sceneId','musicId','emotion','position'].includes(field))return;
-    const cues={...(doc.visualNovelPage?.cues||{})},cue={...(cues[line]||{})},value=input.value.trim();
-    if(value){cue[field]=value;if(field==='musicId')cue.musicSource='manual';if(field==='sceneId')cue.sceneSource='manual';if(field==='emotion'||field==='position')cue.emotionSource='manual';}
-    else{delete cue[field];if(field==='musicId')delete cue.musicSource;if(field==='sceneId')delete cue.sceneSource;}
-    cues[line]=cue;doc.visualNovelPage={...doc.visualNovelPage,cues};saveStateToLocalStorage();renderAnnotations();
-  });
   document.addEventListener('click',event=>{
     const button=event.target.closest?.('#vnpAnnotations [data-jump-line]');if(!button)return;
     const editor=$('vnScriptText'),target=Number(button.dataset.jumpLine),lines=editor?.value.split(/\r?\n/)||[];if(!editor||!Number.isInteger(target))return;
@@ -183,15 +247,29 @@
   function avatarCropStyle(entry){const crop=entry?.crop||{},w=Math.max(1,Number(crop.w)||50),h=Math.max(1,Number(crop.h)||50),x=Math.max(0,Number(crop.x)||0),y=Math.max(0,Number(crop.y)||0);return `width:${10000/w}%;height:${10000/h}%;max-width:none;position:absolute;left:-${100*x/w}%;top:-${100*y/h}%;object-fit:fill;`;}
   function renderPlayer(){if(!player)return;const cfg=currentConfig,settings=currentDoc.visualNovel?.settings||{},accent=settings.primaryColor||'#9d78ad',second=settings.secondaryColor||accent,bright=(luminance(accent)+luminance(second))/2>.43;player.className=`vnp-player vnp-${cfg.mode}${menuOpen?' menu-open':''}`;player.style.setProperty('--vnp-accent',accent);player.style.setProperty('--vnp-second',second);player.style.setProperty('--vnp-ink',contrast(accent));player.style.setProperty('--vnp-chapter-ink',bright?'#221a28':'#fff');player.style.setProperty('--vnp-opening-wash',bright?'#ffffffaa':'#080710aa');player.innerHTML=`<div class="vnp-scene" id="vnpScene"></div><div class="vnp-sprites" id="vnpSprites"></div><div class="vnp-cg" id="vnpCg"></div><div class="vnp-chapter-opening" id="vnpOpening"><div class="vnp-geometry"></div><div><small>STORY CHRONICLE · ${esc(books.find(book=>book.id===currentDoc.bookId)?.title||'VISUAL NOVEL')}</small><strong>${String(Math.max(1,documents.filter(doc=>doc.bookId===currentDoc.bookId).findIndex(doc=>doc.id===currentDoc.id)+1)).padStart(2,'0')}</strong><h1>${esc(currentDoc.title)}</h1></div></div><header class="vnp-player-top"><button data-player="back" aria-label="返回">←</button><button data-player="menu" aria-label="設定與功能">☰</button></header><div class="vnp-dialogue" id="vnpDialogue"><div class="vnp-name" id="vnpName"></div><div class="vnp-text" id="vnpText"></div><button class="vnp-next" data-player="next" aria-label="下一句">⌄</button></div><aside class="vnp-menu" id="vnpMenu"><h2>系統設定</h2><label>文字大小 <input id="vnpFont" type="range" min="14" max="32" value="${Number(localStorage.getItem('vnp-font')||20)}"></label><label>BGM 音量 <input id="vnpMusicVolume" type="range" min="0" max="1" step=".05" value="${Number(localStorage.getItem('vnp-music-volume')||.65)}"></label><label>音效音量 <input id="vnpSeVolume" type="range" min="0" max="1" step=".05" value="${Number(localStorage.getItem('vnp-se-volume')||.65)}"></label><label>打字音量 <input id="vnpTypeVolume" type="range" min="0" max="1" step=".05" value="${Number(localStorage.getItem('vnp-type-volume')||.5)}"></label><label><input id="vnpTypeSound" type="checkbox" ${localStorage.getItem('vnp-type-sound')==='off'?'':'checked'}> 打字音</label><div class="vnp-menu-actions"><button data-player="bookmark">書籤</button><button data-player="auto">自動 ${autoMode?'✓':''}</button><button data-player="skip">SKIP</button><button data-player="history">回顧</button><button data-player="chapters">章節</button><button data-player="edit">快速編輯</button><button data-player="full-edit">完整編輯器</button><button data-player="stage">調整本句演出</button><button data-player="close-menu">返回閱讀</button></div><div id="vnpMenuExtra"></div></aside><audio id="vnpMusic" loop preload="none"></audio><audio id="vnpSe" preload="none"></audio>`;music=$('vnpMusic');music.volume=Number(localStorage.getItem('vnp-music-volume')||.65);player.style.setProperty('--vnp-font',`${Number(localStorage.getItem('vnp-font')||20)}px`);player.addEventListener('click',handlePlayerClick);player.addEventListener('input',handlePlayerInput);player.addEventListener('change',handlePlayerInput);}
   async function openAdvanced(docId){const doc=documents.find(row=>row.id===docId);if(!doc?.visualNovel?.scriptText)return false;const cfg=configFor(doc);if(cfg.mode==='classic')return false;currentDoc=doc;currentConfig=cfg;events=parseVisualNovelScript(doc.visualNovel.scriptText);eventIndex=Number.isInteger(doc.visualNovel.bookmarkIndex)&&doc.visualNovel.bookmarkIndex>0&&confirm(`找到第 ${doc.visualNovel.bookmarkIndex+1} 句書籤。要從書籤繼續嗎？`)?Math.min(doc.visualNovel.bookmarkIndex-1,events.length-1):-1;history=[];sceneSource='';cgSource='';activeMusicId='';dialogueCount=0;lastMusicChangeAt=-Infinity;pendingMusicId='';menuOpen=false;autoMode=false;playing=true;const needsLandscape=cfg.mode==='landscape';player=document.createElement('div');player.id='vnpAdvancedPlayer';document.body.append(player);document.body.classList.add('vnp-reading');renderPlayer();const start=()=>{if(!player||!playing)return;const mismatched=matchMedia('(pointer: coarse)').matches&&(needsLandscape?innerHeight>innerWidth:innerWidth>innerHeight);if(mismatched){let gate=$('vnpOrientationGate');if(!gate){gate=document.createElement('div');gate.id='vnpOrientationGate';gate.className='vnp-orientation-gate';gate.innerHTML=`<i class="fa-solid fa-mobile-screen-button"></i><h2>請先${needsLandscape?'橫置':'直立'}手機</h2><p>畫面方向正確後會自動開始閱讀。</p><button type="button" onclick="OCVnPage.closePlayer()">返回</button>`;player.append(gate);}return;}$('vnpOrientationGate')?.remove();window.removeEventListener('resize',start);prepareOpening();};orientationHandler=start;window.addEventListener('resize',start);start();return true;}
+  function resolveSpriteTarget(value){const key=String(value||'').toLowerCase(),slot={l:'left',c:'center',r:'right'}[key]||key;const visible=player?._visible||[];return visible.find(row=>row.position===slot||String(row.char.id)===String(value)||row.char.name===value)?.char;}
+  function paintSpriteEffect(node){if(!node)return;const state=node._effect||{};node.style.setProperty('--vnp-move-x',`${state.x||0}%`);node.style.setProperty('--vnp-move-y',`${state.y||0}%`);node.style.setProperty('--vnp-scale',state.scale||1);node.style.setProperty('--vnp-flip',state.flip?-1:1);node.style.setProperty('--vnp-closer',state.closer?1.18:1);node.style.transitionDuration=`${state.seconds??.5}s`;}
+  function runSystemCommand(event){const [target,a,b,c]=event.args||[],box=$('vnpSprites');if(!box)return;const nodes=[...box.querySelectorAll('.vnp-sprite')],nodeFor=value=>{const char=resolveSpriteTarget(value);return nodes.find(node=>node.dataset.char===String(char?.id));};
+    if(event.command==='hide'){player._visible=[];box.replaceChildren();return;}
+    if(event.command==='front'){const first=nodeFor(target),second=nodeFor(a);nodes.forEach(node=>node.style.zIndex=node===first?'7':node===second?'6':'1');return;}
+    if(event.command==='closer'){nodes.forEach(node=>{node._effect={...(node._effect||{}),closer:target!=='off'&&node===nodeFor(target)};paintSpriteEffect(node);});return;}
+    const node=nodeFor(target);if(!node)return;const state=node._effect||{};
+    if(event.command==='move'){if(a==='default'){state.x=0;state.y=0;state.seconds=0;}else{state.x=Math.max(-100,Math.min(100,Number(a)||0));state.y=Math.max(-100,Math.min(100,Number(b)||0));state.seconds=Math.max(0,Number(c)||0);} }
+    if(event.command==='scale'){state.scale=Math.max(.01,Math.min(5,Number(a)||1));state.seconds=Math.max(0,Number(b)||0);}
+    if(event.command==='flip')state.flip=a==='on';
+    if(event.command==='jump'){node.classList.remove('is-jumping');void node.offsetWidth;node.classList.add('is-jumping');}
+    node._effect=state;paintSpriteEffect(node);
+  }
   async function next(force=false){
     if(!playing)return;
     if(typingTimer){clearInterval(typingTimer);typingTimer=0;const text=$('vnpText');if(text)text.textContent=typingFullText;if(!force)return;}
     clearTimeout(autoTimer);eventIndex++;
     if(eventIndex>=events.length){const list=documents.filter(row=>row.bookId===currentDoc.bookId&&row.visualNovel?.scriptText),position=list.findIndex(row=>row.id===currentDoc.id);if(position>=0&&list[position+1]){closePlayer();openAdvanced(list[position+1].id);}else closePlayer();return;}
     const event=events[eventIndex];if(event.type==='blank'||event.type==='shake')return next();
+    if(event.type==='sys'){runSystemCommand(event);return next(true);}
     if(['cg','bg','bgm','se'].includes(event.type)){
       if(event.type==='cg'){cgSource=await source(event.value);const box=$('vnpCg');box.style.backgroundImage=cgSource?`url("${cgSource.replace(/"/g,'%22')}")`:'';box.classList.toggle('is-visible',!!cgSource);}
-      if(event.type==='bg'){sceneSource=await source(event.value);applyScene();}
+      if(event.type==='bg'){if(currentConfig.mode==='landscape'){player._visible=[];$('vnpSprites')?.replaceChildren();}sceneSource=await source(event.value);applyScene();}
       if(event.type==='bgm'){pendingMusicId='';await playMusic(event.value);}
       if(event.type==='se')await playEffect(event.value);
       return next();
@@ -284,7 +362,7 @@
       toggle.addEventListener('change',update);update();
     }
     const notes=modal.querySelector('.vnp-body>section:last-child p');
-    if(notes)notes.textContent='可用一鍵判斷完成說話人、場景、人物情緒與音樂標註，也可分別判斷。原版閱讀器將 AI 場景作為 CG 切換，並讀取情緒頭像與音樂；橫版與直版使用場景背景。標註不改寫正文，手動標註會保留。';
+    if(notes)notes.textContent='可用一鍵判斷說話人、場景、人物情緒、音樂及人物退場，也可分別執行。場景、音樂和退場時機直接寫入劇本指令；情緒與站位仍保存為逐句設定。劇本台詞保持原文。';
   };
   const baseSave=save;
   save=function(){
@@ -296,5 +374,7 @@
   renderPlayer=function(){baseRenderPlayer();window.OCVnLayout?.apply(player,currentConfig);};
   const legacyStart=window.startVisualNovel;
   window.startVisualNovel=function(docId,withTransition=true,preserveHistory=false){const doc=documents.find(row=>row.id===docId);if(doc&&configFor(doc).mode!=='classic'){openAdvanced(docId);return;}return legacyStart(docId,withTransition,preserveHistory);};
-  window.OCVnPage={open,openFromBook,openFromDocument,openFromEditor,close,refreshSettings:()=>modal?.classList.contains('active')&&renderSettings(),renderAnnotations,analyze,analyzeAll,configFor,classicCue,closePlayer,expressionAvatar,applyAvatarCrop};
+  window.OCVnPage={open,openFromBook,openFromDocument,openFromEditor,close,refreshSettings:()=>modal?.classList.contains('active')&&renderSettings(),renderAnnotations,renderPromptEditor,promptFor,analyze,analyzeAll,configFor,classicCue,closePlayer,expressionAvatar,applyAvatarCrop};
 })();
+
+
