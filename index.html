@@ -37,6 +37,7 @@
   <link rel="stylesheet" href="music.css?v=1.5">
   <link rel="stylesheet" href="music-player-refresh.css?v=1.3">
   <link rel="stylesheet" href="vn-page.css?v=1.0">
+  <link rel="stylesheet" href="tierlist.css?v=2.1">
   <link rel="stylesheet" href="vn-page-responsive.css?v=1.2">
   <link rel="stylesheet" href="vn-layout.css?v=1.0">
   <link rel="stylesheet" href="vn-library.css?v=1.0">
@@ -107,7 +108,7 @@
       <i class="fa-solid fa-diagram-project"></i> 關係與稱呼
     </button>
     <button class="nav-tab" data-tab="tab-rankings" onclick="switchTab('tab-rankings')">
-      <i class="fa-solid fa-trophy"></i> 評分與排名
+      <i class="fa-solid fa-layer-group"></i> 評分與排名
     </button>
     <button class="nav-tab" data-tab="tab-paros" onclick="switchTab('tab-paros')">
       <i class="fa-solid fa-hat-wizard"></i> Paro 世界
@@ -278,10 +279,10 @@
     <section id="tab-rankings" class="tab-content">
       <div class="section-banner">
         <div>
-          <h2><i class="fa-solid fa-trophy"></i> 人物評分與排名排序板塊</h2>
-          <p>依主題 (如顏值、廚藝、成績等) 排列角色順序，自訂大小比較關係與等級切點標註。</p>
+          <h2><i class="fa-solid fa-layer-group"></i> 評分與排名</h2>
+          <p>每個主題可使用 Tier List 或象限；拖曳頭像評比，並匯出圖片。</p>
         </div>
-        <button class="btn btn-primary" onclick="openRankingSubjectModal()">
+        <button class="btn btn-primary" onclick="OCTierList.createSubject()">
           <i class="fa-solid fa-plus"></i> 新增評分主題
         </button>
       </div>
@@ -417,7 +418,7 @@
               <option value="full">完整人設集 (全選/勾選角色與關聯內容)</option>
               <option value="character_archive">完整人物記事 (僅勾選人物的檔案書籍內容)</option>
               <option value="cps_only">獨立導出：僅 CP 關係細節與詞條</option>
-              <option value="rankings_only">獨立導出：僅評分與排名板塊</option>
+              <option value="rankings_only">獨立導出：僅評分與排名</option>
               <option value="paros_only">獨立導出：僅 Paro 平行世界設定</option>
               <option value="factions_only">獨立導出：僅世界觀與陣營簡介</option>
               <option value="timelines_only">獨立導出：僅時間線與事件文字</option>
@@ -518,7 +519,7 @@
     <button onclick="switchTab('tab-cps'); hideMobileCardSubmenu();"><i class="fa-solid fa-heart"></i> CP 關係細節</button>
     <button onclick="switchTab('tab-hidden'); hideMobileCardSubmenu();"><i class="fa-solid fa-eye-slash"></i> 草稿區</button>
     <button onclick="switchTab('tab-relationships'); hideMobileCardSubmenu();"><i class="fa-solid fa-diagram-project"></i> 稱呼表</button>
-    <button onclick="switchTab('tab-rankings'); hideMobileCardSubmenu();"><i class="fa-solid fa-trophy"></i> 評分排名</button>
+    <button onclick="switchTab('tab-rankings'); hideMobileCardSubmenu();"><i class="fa-solid fa-layer-group"></i> 評分與排名</button>
     <button onclick="switchTab('tab-documents'); hideMobileCardSubmenu();"><i class="fa-solid fa-book-bookmark"></i> 同人文檔書籍</button>
     <button onclick="switchTab('tab-timelines'); hideMobileCardSubmenu();"><i class="fa-solid fa-timeline"></i> 主線時間線</button>
   </div>
@@ -1284,10 +1285,11 @@
         </div>
         <div class="vn-ai-actions">
           <button class="btn btn-outline" onclick="OCVnPage.openFromEditor()"><i class="fa-solid fa-film"></i> 視覺小說頁面設置</button>
-          <button class="btn btn-magic" onclick="OCVnPage.analyzeAll()"><i class="fa-solid fa-wand-magic-sparkles"></i> 一鍵判斷說話人／場景／情緒／音樂</button>
-          <button class="btn btn-outline" onclick="OCVnPage.analyze('scene')">AI 判斷場景</button>
+          <button class="btn btn-magic" onclick="OCVnPage.analyzeAll()"><i class="fa-solid fa-wand-magic-sparkles"></i> 一鍵判斷說話人／場景／情緒／音樂／人物退場</button>
+          <button class="btn btn-outline" onclick="OCVnPage.analyze('scene')">AI 判斷場景切換並寫入指令</button>
           <button class="btn btn-outline" onclick="OCVnPage.analyze('emotion')">AI 判斷人物情緒與站位</button>
-          <button class="btn btn-outline" onclick="OCVnPage.analyze('music')">AI 判斷段落音樂</button>
+          <button class="btn btn-outline" onclick="OCVnPage.analyze('music')">AI 判斷音樂切換並寫入指令</button>
+          <button class="btn btn-outline" onclick="OCVnPage.analyze('hide')">AI 判斷人物退場並寫入指令</button>
           <button class="btn btn-magic" onclick="generateVisualNovelWithAi(false)"><i class="fa-solid fa-brain"></i> AI 判斷說話人並建立腳本</button>
           <button class="btn btn-outline" onclick="generateVisualNovelWithAi(true)"><i class="fa-solid fa-rotate"></i> AI 重新判斷說話人</button>
           <button class="btn btn-outline" onclick="generateVisualNovelLocally()"><i class="fa-solid fa-bolt"></i> 本機快速分段</button>
@@ -1295,6 +1297,7 @@
           <button class="btn btn-outline" onclick="document.getElementById('vnScriptFileInput').click()"><i class="fa-solid fa-file-arrow-up"></i> 讀入文字腳本</button>
           <input type="file" id="vnScriptFileInput" accept=".txt,text/plain" style="display:none" onchange="importVisualNovelScriptFile(event)">
         </div>
+        <details id="vnpPromptEditor" class="vnp-prompt-editor"><summary>AI 標註提示詞與目前規則</summary><p>「預設指令」適用所有故事；「本篇補充」只適用目前篇章。修改後會立即儲存。原文保護、JSON 格式與素材 ID 驗證仍由程式執行。</p><div id="vnpPromptFields"></div></details>
         <div class="vn-insert-actions">
           <span>插入到游標：</span>
           <button class="btn btn-xs btn-outline" onclick="OCVnAssets.open('cg')"><i class="fa-solid fa-image"></i> CG</button>
@@ -1305,6 +1308,7 @@
           <button class="btn btn-xs btn-outline" onclick="OCVnAssets.open('se')"><i class="fa-solid fa-volume-high"></i> SE</button>
           <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('shake')"><i class="fa-solid fa-burst"></i> 震動</button>
           <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('cg-none')"><i class="fa-solid fa-image-slash"></i> 收起 CG</button>
+          <button class="btn btn-xs btn-outline" onclick="insertVisualNovelCommand('sys-hide')">降下所有說話人</button>
         </div>
         <div class="form-group">
           <label>可手動編輯的視覺小說腳本</label>
@@ -1312,7 +1316,7 @@
           <div id="vnpAnnotations" class="vnp-annotations" aria-live="polite"></div>
           <div class="vn-script-help">
             <code>旁白｜內容</code> 敘述　<code>角色名｜台詞</code> 對話　<code>@bg 網址</code> 背景　<code>@bg none</code> 收起背景　<code>@cg 網址</code> CG　<code>@cg none</code> 收起 CG　
-            <code>@bgm 網址</code> 換音樂　<code>@bgm none</code> 停止音樂　<code>@se 網址</code> 音效　<code>@shake</code> 畫面震動
+            <code>@bgm 網址</code> 換音樂　<code>@bgm none</code> 停止音樂　<code>@se 網址</code> 音效　<code>@shake</code> 畫面震動　<code>sys(hide:all)</code> 降下人物　<code>sys(closer:c/off)</code> 拉近　<code>sys(move:c:20:-10:1)</code> 位移　<code>sys(move:c:default)</code> 歸位　<code>sys(front:c:l)</code> 前移　<code>sys(jump:c)</code> 跳躍　<code>sys(flip:c:on/off)</code> 反轉　<code>sys(scale:c:1.2:1)</code> 縮放。人物可用 l／c／r 或名稱。
           </div>
         </div>
       </div>
@@ -1705,6 +1709,7 @@
   <script src="data.js"></script>
   <script src="reader-viewport.js?v=1.0"></script>
   <script src="app.js?v=31.4"></script>
+  <script src="tierlist.js?v=2.0"></script>
   <script src="character-archive.js?v=1.1"></script>
   <script src="app-drawer.js?v=2.7"></script>
   <script src="lottery.js?v=1.4"></script>
@@ -1714,7 +1719,7 @@
   <script src="music.js?v=1.9"></script>
   <script src="features.js?v=29.4"></script>
   <script src="vn-assets.js?v=26.1"></script>
-  <script src="vn-page.js?v=1.2"></script>
+  <script src="vn-page.js?v=1.3"></script>
   <script src="vn-layout.js?v=1.0"></script>
   <script src="vn-library.js?v=1.0"></script>
   <script src="forum-chat-core.js?v=21.52"></script>
