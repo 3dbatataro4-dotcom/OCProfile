@@ -6,6 +6,7 @@
 let characters = [];
 let paros = [];
 let factions = [];
+let factionMemberDraft = null;
 let rankings = [];
 let cps = [];
 let books = [];
@@ -2692,6 +2693,48 @@ function characterBelongsToFaction(char, faction) {
   return tags.includes(faction.name) || (faction.subTags || []).some(sub => tags.includes(sub.name));
 }
 
+function factionSubTagMemberKey(row, index) {
+  if (!row.dataset.memberKey) row.dataset.memberKey = row.dataset.originalName ? `sub:${row.dataset.originalName}` : `sub:new:${Date.now()}_${index}`;
+  return row.dataset.memberKey;
+}
+
+function renderFactionMemberPicker() {
+  const categorySelect = document.getElementById('factionMemberCategory');
+  const list = document.getElementById('factionMemberPicker');
+  if (!categorySelect || !list || !factionMemberDraft) return;
+  const rows = [...document.querySelectorAll('#subTagsContainer .sub-tag-row')];
+  const categories = [{key:'main', label:document.getElementById('factionName')?.value.trim() || '主陣營'}];
+  rows.forEach((row, index) => {
+    const name = row.querySelector('.sub-name')?.value.trim();
+    if (name) categories.push({key:factionSubTagMemberKey(row,index), label:name});
+  });
+  const selectedCategory = categorySelect.value;
+  categorySelect.innerHTML = categories.map(item => `<option value="${escapeHtml(item.key)}">${escapeHtml(item.key==='main'?'主陣營：':'子陣營：')}${escapeHtml(item.label)}</option>`).join('');
+  categorySelect.value = categories.some(item => item.key === selectedCategory) ? selectedCategory : 'main';
+
+  const key = categorySelect.value;
+  if (!factionMemberDraft.has(key)) factionMemberDraft.set(key, new Set());
+  const query = (document.getElementById('factionMemberSearch')?.value || '').trim().toLocaleLowerCase();
+  const members = characters.filter(char => !query || [char.name,char.englishName,...(Array.isArray(char.aliases)?char.aliases:[])].some(value => String(value||'').toLocaleLowerCase().includes(query)));
+  list.innerHTML = `<div class="faction-member-picker-summary">${factionMemberDraft.get(key).size} 位人物已加入此分類</div>${members.length ? members.map(char => `<label class="faction-member-choice"><input type="checkbox" data-faction-member-id="${escapeHtml(char.id)}" ${factionMemberDraft.get(key).has(String(char.id))?'checked':''} onchange="toggleFactionMember(this)"><img src="${escapeHtml(char.avatar || 'https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png')}" alt=""><span>${escapeHtml(char.name || '未命名人物')}</span>${char.isHidden?'<small>隱藏</small>':''}</label>`).join('') : '<p class="faction-member-empty">沒有符合的人物</p>'}`;
+}
+
+function toggleFactionMember(input) {
+  const key = document.getElementById('factionMemberCategory')?.value || 'main';
+  if (!factionMemberDraft?.has(key)) factionMemberDraft?.set(key, new Set());
+  const members = factionMemberDraft?.get(key);
+  if (!members) return;
+  const id = String(input.dataset.factionMemberId);
+  input.checked ? members.add(id) : members.delete(id);
+  const summary = document.querySelector('#factionMemberPicker .faction-member-picker-summary');
+  if (summary) summary.textContent = `${members.size} 位人物已加入此分類`;
+}
+
+function removeFactionSubTagRow(button) {
+  button.closest('.sub-tag-row')?.remove();
+  renderFactionMemberPicker();
+}
+
 function appendFactionExportText(text, faction, headingLevel = 2) {
   const mark = "#".repeat(headingLevel);
   const members = getFactionMemberGroups(faction);
@@ -2756,6 +2799,7 @@ function openFactionModal(factionId = null) {
 
   subContainer.innerHTML = '';
   secContainer.innerHTML = '';
+  factionMemberDraft = new Map();
 
   if (factionId) {
     const f = factions.find(item => item.id === factionId);
@@ -2767,6 +2811,8 @@ function openFactionModal(factionId = null) {
     document.getElementById("factionColorA").value = /^#[0-9a-f]{6}$/i.test(f.themeColor?.primary||'')?f.themeColor.primary:'#a56e79';
     document.getElementById("factionColorB").value = /^#[0-9a-f]{6}$/i.test(f.themeColor?.secondary||'')?f.themeColor.secondary:'#686a9c';
 
+    factionMemberDraft.set('main', new Set(characters.filter(char => (char.tags||[]).includes(f.name)).map(char => String(char.id))));
+    (f.subTags || []).forEach(sub => factionMemberDraft.set(`sub:${sub.name}`, new Set(characters.filter(char => (char.tags||[]).includes(sub.name)).map(char => String(char.id)))));
     (f.subTags || []).forEach(sub => addSubTagRow(sub.name, sub.description, sub.showInFilters!==false));
     (f.customSections || []).forEach(sec => addFactionSectionRow(sec.title, sec.content, sec.id));
   } else {
@@ -2781,6 +2827,8 @@ function openFactionModal(factionId = null) {
     addSubTagRow("二年A班", "二年級A班");
     addFactionSectionRow("創世大事件", "在此填寫陣營重大歷史事件與法則...");
   }
+  document.getElementById('factionMemberSearch').value = '';
+  renderFactionMemberPicker();
   window.OCFeatures?.updateFactionColorPreview?.();
   modal.classList.add("active");
 }
@@ -2791,12 +2839,13 @@ function addSubTagRow(name = "", desc = "", showInFilters = true) {
   row.className = "sub-tag-row";
   row.dataset.originalName = name;
   row.innerHTML = `
-    <input type="text" class="sub-name" placeholder="子標籤名稱" value="${escapeHtml(name)}" style="flex:1;">
+    <input type="text" class="sub-name" placeholder="子標籤名稱" value="${escapeHtml(name)}" style="flex:1;" oninput="renderFactionMemberPicker()">
     <input type="text" class="sub-desc" placeholder="簡介說明" value="${escapeHtml(desc)}" style="flex:2;">
     <label class="sub-filter-toggle"><input type="checkbox" class="sub-show-filter" ${showInFilters?'checked':''}> 加入篩選列表</label>
-    <button type="button" class="btn btn-xs btn-danger" onclick="this.parentElement.remove()">&times;</button>
+    <button type="button" class="btn btn-xs btn-danger" onclick="removeFactionSubTagRow(this)">&times;</button>
   `;
   container.appendChild(row);
+  renderFactionMemberPicker();
 }
 
 function addFactionSectionRow(title = "", content = "", existingSecId = null) {
@@ -2881,6 +2930,24 @@ function saveFactionForm() {
       }
     });
   }
+
+  const managedFactionTags = new Set([
+    name,
+    ...(oldFaction ? [oldFaction.name, ...(oldFaction.subTags || []).map(sub => sub.name)] : []),
+    ...subTags.map(sub => sub.name)
+  ]);
+  const categoryTagNames = new Map([['main', name]]);
+  [...document.querySelectorAll('#subTagsContainer .sub-tag-row')].forEach((row, index) => {
+    const tagName = row.querySelector('.sub-name')?.value.trim();
+    if (tagName) categoryTagNames.set(factionSubTagMemberKey(row,index), tagName);
+  });
+  characters.forEach(char => {
+    const currentTags = Array.isArray(char.tags) ? char.tags : [];
+    char.tags = currentTags.filter(tag => !managedFactionTags.has(tag));
+    categoryTagNames.forEach((tagName, categoryKey) => {
+      if (factionMemberDraft?.get(categoryKey)?.has(String(char.id)) && !char.tags.includes(tagName)) char.tags.push(tagName);
+    });
+  });
 
   if (id) {
     const idx = factions.findIndex(f => f.id === id);
@@ -3603,7 +3670,7 @@ function insertVisualNovelCommand(type) {
   const editor = document.getElementById("vnScriptText");
   let command = "@shake";
   if (type === "cg-none") command = "@cg none";
-  else if (type === "sys-hide") command = "sys(hide:all)";
+  else if (type === "sys-hide") command = "@hide all";
   else if (type === "bg-none") command = "@bg none";
   else if (type === "bgm-none") command = "@bgm none";
   else if (type !== "shake") {
@@ -3666,7 +3733,7 @@ function createLosslessVisualNovelSegments(content) {
 }
 
 function cleanLegacyVisualNovelScript(scriptText) {
-  return String(scriptText || "").replace(/^@blank$/gm, "").replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/gm, "");
+  return String(scriptText || "").replace(/^[ \t]*sys\(([^()]*)\)[ \t]*$/gmi,(_,body)=>'@'+body.split(':').map(x=>x.trim()).join(' ')).replace(/^@blank$/gm, "").replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/gm, "");
 }
 
 function formatVisualNovelScriptBlocks(scriptText) {
@@ -3872,6 +3939,8 @@ function parseVisualNovelScript(scriptText) {
     const command = trimmedLine.match(/^@(cg|bg|bgm|se)\s+(.+)$/i);
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
+    const atSystem=trimmedLine.match(/^@(closer|move|front|jump|flip|scale|hide)\b\s*(.*)$/i);
+    if(atSystem)return {type:'sys',command:atSystem[1].toLowerCase(),args:atSystem[2].split(/[\s:]+/).filter(Boolean),sourceLineIndex};
     const systemCommand=trimmedLine.match(/^sys\(([^()]*)\)$/i);
     if(systemCommand){
       const parts=systemCommand[1].split(':').map(part=>part.trim()),name=parts.shift()?.toLowerCase();
@@ -3880,7 +3949,8 @@ function parseVisualNovelScript(scriptText) {
     const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
     if (!separator) return { type:"dialogue", speaker:"旁白", text:decodeVisualNovelInlineLineBreaks(contentLine), sourceLineIndex };
     const index = contentLine.indexOf(separator);
-    return { type:"dialogue", speaker:stripInvisibleFormatting(contentLine.slice(0, index)).trim() || "旁白", text:decodeVisualNovelInlineLineBreaks(contentLine.slice(index + separator.length)), sourceLineIndex };
+    const rawSpeaker=stripInvisibleFormatting(contentLine.slice(0,index)).trim(),mood=rawSpeaker.match(/^(.*?)(?:（([^（）]+)）|\(([^()]+)\))\s*$/),speaker=(mood?mood[1].trim():rawSpeaker)||'旁白',emotion=(mood?.[2]||mood?.[3]||'').trim();
+    return { type:"dialogue", speaker, ...(emotion?{emotion}:{}), text:decodeVisualNovelInlineLineBreaks(contentLine.slice(index + separator.length)), sourceLineIndex };
   });
 }
 
@@ -4564,7 +4634,7 @@ function executeVisualNovelEvent(event) {
     const frame = document.createElement("div"); frame.className = "vn-feed-avatar";
     frame.style.setProperty("--speaker-color", speakerColor);
     const image = document.createElement("img"); image.src = profile?.avatar || character?.avatar || DEFAULT_VN_AVATAR; image.alt = displaySpeaker;
-    if(character&&currentDoc){const chapter=currentDoc,lineIndex=Number.isFinite(event.sourceLineIndex)?event.sourceLineIndex:currentVisualNovelIndex;window.OCVnPage?.expressionAvatar?.(chapter,character,lineIndex).then(url=>{if(url&&image.isConnected){image.src=url;window.OCVnPage?.applyAvatarCrop?.(image,chapter,character);}});}
+    if(character&&currentDoc){const chapter=currentDoc,lineIndex=Number.isFinite(event.sourceLineIndex)?event.sourceLineIndex:currentVisualNovelIndex;window.OCVnPage?.expressionAvatar?.(chapter,character,lineIndex,event.emotion).then(url=>{if(url&&image.isConnected){image.src=url;window.OCVnPage?.applyAvatarCrop?.(image,chapter,character);}});}
     frame.appendChild(image);frame.title='在「編輯劇本模式」中雙擊／雙點校對這一句';
     const card = document.createElement("div"); card.className = "vn-feed-dialogue";
     card.style.setProperty("--speaker-color", speakerColor);
@@ -6094,7 +6164,8 @@ function setupEventListeners() {
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)ensureBackGuard();});
     window.addEventListener('popstate',()=>{
       const active=[...document.querySelectorAll('.modal-backdrop.active')].filter(node=>getComputedStyle(node).display!=='none').at(-1);
-      let handled=window.OCApps?.handleBack?.()||false;
+      let handled=window.OCInterrogation?.handleBack?.()||false;
+      if(!handled)handled=window.OCApps?.handleBack?.()||false;
       if(!handled)handled=window.OCLottery?.handleBack?.()||false;
       if(!handled)handled=window.OCMusic?.handleBack?.()||false;
       if(!handled)handled=window.OCScoreboard?.handleBack?.()||false;
