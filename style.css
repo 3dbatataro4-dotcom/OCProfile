@@ -340,6 +340,15 @@ h1, h2, h3, h4, h5 { color: var(--text-main); font-weight: 700; letter-spacing: 
 .faction-member-row { background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:.55rem .7rem; }
 .faction-member-row strong { display:block; color:var(--accent-coffee); font-size:.8rem; margin-bottom:.35rem; }
 .faction-member-empty { color:var(--text-dark); font-size:.76rem; font-style:italic; }
+.faction-member-editor { padding:.8rem; border:1px solid var(--border-color); border-radius:var(--radius-sm); background:var(--bg-secondary); }
+.faction-member-editor-controls { display:grid; grid-template-columns:minmax(180px,.8fr) minmax(200px,1.2fr); gap:.55rem; margin:.55rem 0; }
+.faction-member-picker { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:.4rem; max-height:280px; overflow:auto; padding:.5rem; border:1px solid var(--border-color); border-radius:var(--radius-sm); background:var(--bg-primary); }
+.faction-member-picker-summary { grid-column:1/-1; color:var(--text-muted); font-size:.78rem; padding:.1rem .15rem .3rem; }
+.faction-member-choice { display:flex; align-items:center; gap:.4rem; min-width:0; padding:.35rem .45rem; border:1px solid var(--border-color); border-radius:var(--radius-sm); cursor:pointer; font-size:.82rem; }
+.faction-member-choice img { width:28px; height:28px; flex:0 0 28px; border-radius:50%; object-fit:cover; }
+.faction-member-choice span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.faction-member-choice small { color:var(--text-muted); font-size:.68rem; }
+@media (max-width:600px) { .faction-member-editor-controls { grid-template-columns:1fr; } }
 
 /* Documents & Book Workspace */
 .doc-workspace { display: flex; flex-direction: column; gap: 1.2rem; }
