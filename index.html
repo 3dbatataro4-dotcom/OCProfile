@@ -48,6 +48,7 @@
   <link rel="stylesheet" href="features-timeline.css?v=1.4">
   <link rel="stylesheet" href="timeline-books.css?v=1.2">
   <link rel="stylesheet" href="character-archive.css?v=1.1">
+  <link rel="stylesheet" href="interrogation.css?v=4.3">
 </head>
 <body>
 
@@ -1111,6 +1112,16 @@
           </button>
         </div>
 
+        <div class="form-group faction-member-editor">
+          <label><i class="fa-solid fa-users"></i> 陣營成員</label>
+          <p class="form-help">勾選要加入目前分類的人物；儲存後會同步更新人物卡上的陣營標籤。移除勾選會刪除該陣營標籤，其他標籤不受影響。</p>
+          <div class="faction-member-editor-controls">
+            <select id="factionMemberCategory" aria-label="選擇主陣營或子陣營" onchange="renderFactionMemberPicker()"></select>
+            <input type="search" id="factionMemberSearch" name="oc_filter_faction_members" autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" placeholder="搜尋人物姓名" oninput="renderFactionMemberPicker()">
+          </div>
+          <div id="factionMemberPicker" class="faction-member-picker"></div>
+        </div>
+
         <div class="form-group mt-3">
           <label>自訂大事件與大段設定詞條 (不限數量)：</label>
           <div id="factionCustomSectionsContainer">
@@ -1315,8 +1326,8 @@
           <textarea id="vnScriptText" class="vn-script-editor" rows="18" spellcheck="false" placeholder="旁白｜黃昏落在窗邊。&#10;角色名｜「我們走吧。」&#10;@cg https://.../scene.jpg&#10;@bgm https://.../music.mp3&#10;@se https://.../door.mp3&#10;@shake"></textarea>
           <div id="vnpAnnotations" class="vnp-annotations" aria-live="polite"></div>
           <div class="vn-script-help">
-            <code>旁白｜內容</code> 敘述　<code>角色名｜台詞</code> 對話　<code>@bg 網址</code> 背景　<code>@bg none</code> 收起背景　<code>@cg 網址</code> CG　<code>@cg none</code> 收起 CG　
-            <code>@bgm 網址</code> 換音樂　<code>@bgm none</code> 停止音樂　<code>@se 網址</code> 音效　<code>@shake</code> 畫面震動　<code>sys(hide:all)</code> 降下人物　<code>sys(closer:c/off)</code> 拉近　<code>sys(move:c:20:-10:1)</code> 位移　<code>sys(move:c:default)</code> 歸位　<code>sys(front:c:l)</code> 前移　<code>sys(jump:c)</code> 跳躍　<code>sys(flip:c:on/off)</code> 反轉　<code>sys(scale:c:1.2:1)</code> 縮放。人物可用 l／c／r 或名稱。
+            <code>旁白｜內容</code> 敘述　<code>角色名｜台詞</code> 對話　<code>角色名（情緒）｜台詞</code> 切換已登記表情（也可用半形括號）　<code>@bg 網址</code> 背景　<code>@bg none</code> 收起背景　<code>@cg 網址</code> CG　<code>@cg none</code> 收起 CG　
+            <code>@bgm 網址</code> 換音樂　<code>@bgm none</code> 停止音樂　<code>@se 網址</code> 音效　<code>@shake</code> 畫面震動　<code>@hide all</code> 降下人物　<code>@closer c / @closer off</code> 拉近　<code>@move c 20 -10 1</code> 位移　<code>@move c default</code> 歸位　<code>@front c l</code> 前移　<code>@jump c</code> 跳躍　<code>@flip c on/off</code> 反轉　<code>@scale c 1.2 1</code> 縮放。人物可用 l／c／r 或名稱。
           </div>
         </div>
       </div>
@@ -1708,9 +1719,12 @@
   <!-- Scripts -->
   <script src="data.js"></script>
   <script src="reader-viewport.js?v=1.0"></script>
-  <script src="app.js?v=31.4"></script>
+  <script src="app.js?v=31.7"></script>
   <script src="tierlist.js?v=2.1"></script>
-  <script src="character-archive.js?v=1.1"></script>
+  <script src="character-archive.js?v=1.3"></script>
+  <script src="vn-script.js?v=1.4"></script>
+  <script src="vn-polish.js?v=1.0"></script>
+  <script src="interrogation.js?v=4.4"></script>
   <script src="app-drawer.js?v=2.7"></script>
   <script src="lottery.js?v=1.4"></script>
   <script src="hogwarts-dorm.js?v=2.0"></script>
@@ -1719,7 +1733,7 @@
   <script src="music.js?v=1.9"></script>
   <script src="features.js?v=29.4"></script>
   <script src="vn-assets.js?v=26.1"></script>
-  <script src="vn-page.js?v=1.3"></script>
+  <script src="vn-page.js?v=1.5"></script>
   <script src="vn-layout.js?v=1.0"></script>
   <script src="vn-library.js?v=1.0"></script>
   <script src="forum-chat-core.js?v=21.52"></script>
