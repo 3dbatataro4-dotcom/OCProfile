@@ -107,3 +107,8 @@
 .tl-quadrant .tl-person.tl-drag-source{opacity:.4}
 @media(max-width:700px){.tl-head{display:grid;padding:.8rem}.tl-head-actions{justify-content:flex-start}.tl-row{grid-template-columns:84px minmax(0,1fr);min-height:92px}.tl-label{padding:.4rem}.tl-label strong{font-size:.82rem}.tl-tier-controls{gap:.2rem}.tl-tier-controls button{width:22px;height:22px}.tl-tier-controls input[type=color]{width:24px;height:22px}.tl-tier-controls select{width:70px;height:22px}.tl-person,.tl-drop-preview{width:72px;height:72px}.tl-lane{gap:.3rem;padding:.35rem}.tl-pin-grid{max-height:210px}.tl-picker-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.tl-quadrant-shell{padding:0 .35rem}.tl-q-middle{grid-template-columns:36px minmax(0,1fr) 36px;gap:.2rem}.tl-q-left,.tl-q-right{font-size:.65rem}.tl-q-left input,.tl-q-right input{padding:.2rem;font-size:.65rem}.tl-quadrant{border-radius:10px}.tl-quadrant .tl-person{width:54px;height:54px}.tl-q-top,.tl-q-bottom{font-size:.75rem}}
+
+/* Responsive quadrant portraits stay fully inside the chart at its edges. */
+.tl-quadrant{--tl-point-size:74px;--tl-point-inset:calc(var(--tl-point-size)/2 + 3px)}
+.tl-quadrant .tl-person{width:var(--tl-point-size);height:var(--tl-point-size)}
+@media(max-width:700px){.tl-quadrant{--tl-point-size:clamp(32px,9vw,40px)}.tl-quadrant .tl-person:before{content:'';position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%);border-radius:50%}.tl-quadrant-mode .tl-pin .tl-person{width:44px;height:44px}.tl-quadrant-mode .tl-pin-grid{gap:.4rem}}
