@@ -83,6 +83,8 @@ let hogwartsTextFieldsOpen = false;
 let currentReadingDocId = null;
 let documentReaderFontSize = 1.05;
 let pendingAdvancedImport = null;
+let pendingImportReview = null;
+let pendingImportResults = null;
 let pendingImportConflicts = [];
 let draggedDocumentId = null;
 let currentVisualNovelDocId = null;
@@ -3010,11 +3012,23 @@ function formatDocumentCharacterCount(count) {
   return `${Number(count || 0).toLocaleString("zh-TW")} 字`;
 }
 
-function toggleBookCollapse(bookId) {
-  collapsedBooks[bookId] = !collapsedBooks[bookId];
-  try { saveStateToLocalStorage(); }
-  catch (error) { console.warn("書籍展開狀態暫時無法保存：", error); }
-  finally { renderDocumentsModule(); }
+const bookMotionBusy=new Set();
+function animateReadingContent(element){
+  if(!element?.animate||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  element.getAnimations().forEach(animation=>animation.cancel());
+  element.animate([{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'translateY(0)'}],{duration:200,easing:'cubic-bezier(.2,.75,.25,1)'});
+}
+async function toggleBookCollapse(bookId) {
+  if(bookMotionBusy.has(bookId))return;
+  bookMotionBusy.add(bookId);
+  try{
+    const folder=[...document.querySelectorAll('[data-reading-book]')].find(node=>node.dataset.readingBook===String(bookId)),body=folder?.querySelector('.book-chapter-body'),reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!collapsedBooks[bookId]&&body?.animate&&!reduce){const height=body.getBoundingClientRect().height;await body.animate([{height:height+'px',opacity:1,overflow:'hidden'},{height:'0px',opacity:0,overflow:'hidden'}],{duration:170,easing:'cubic-bezier(.4,0,.2,1)',fill:'forwards'}).finished.catch(()=>{});}
+    collapsedBooks[bookId]=!collapsedBooks[bookId];
+    try{saveStateToLocalStorage();}catch(error){console.warn('書籍展開狀態暫時無法保存：',error);}
+    renderDocumentsModule();
+    if(!collapsedBooks[bookId])animateReadingContent([...document.querySelectorAll('[data-reading-book]')].find(node=>node.dataset.readingBook===String(bookId))?.querySelector('.book-chapter-body'));
+  }finally{bookMotionBusy.delete(bookId);}
 }
 
 function renderDocumentsModule() {
@@ -3084,7 +3098,7 @@ function renderDocumentsModule() {
     const bookTagsHtml = (book.tags || []).map(tag => `<span class="tag-pill">${tag}</span>`).join(' ');
 
     return `
-      <div class="book-folder-card">
+      <div class="book-folder-card" data-reading-book="${book.id}">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
           <div style="display:flex; align-items:center; gap:0.6rem;">
             <input type="checkbox" class="book-summary-cb" value="${book.id}" title="勾選整本書籍進行 AI 總結" style="width:18px; height:18px;">
@@ -3113,7 +3127,7 @@ function renderDocumentsModule() {
         </div>
 
         ${!isCollapsed ? `
-          <div style="margin-top:0.8rem;">
+          <div class="book-chapter-body" style="margin-top:0.8rem;">
             ${bookDocs.length ? bookDocs.map(doc => renderSingleDocItemHtml(doc)).join('') : `<p style="font-size:0.82rem; color:var(--text-dark); margin-top:0.4rem;">此書籍尚無章節文檔。</p>`}
           </div>
         ` : ''}
@@ -3334,6 +3348,7 @@ function openDocumentReader(docId) {
   const content = document.getElementById("docReaderContent");
   content.innerHTML = renderDocumentMarkup(doc.content);
   content.style.fontSize = `${documentReaderFontSize}rem`;
+  animateReadingContent(content);
   document.querySelector("#documentReaderModal .doc-reader-scroll").scrollTop = 0;
   const sequence = getReaderSequence(doc);
   const index = sequence.findIndex(item => item.id === doc.id);
@@ -5805,11 +5820,11 @@ function prepareAdvancedImport(data, fileName) {
     { type:"document", incoming:Array.isArray(data.documents) ? data.documents : [], current:documents,
       getIncoming:item => `${item.title}@@${importedBookName(item.bookId)}`, getCurrent:item => `${item.title}@@${currentBookName(item.bookId)}`,
       compareIncoming:item => {
-        const { visualNovel, bookId, charIds = [], factionIds = [], ...article } = item;
+        const { visualNovel, visualNovelPage, bookId, charIds = [], factionIds = [], ...article } = item;
         return { ...article, book:importedBookName(bookId), characters:charIds.map(id => importedCharacters.find(char => String(char.id) === String(id))?.name || id).sort(), factions:factionIds.map(id => importedFactions.find(faction => String(faction.id) === String(id))?.name || id).sort() };
       },
       compareCurrent:item => {
-        const { visualNovel, bookId, charIds = [], factionIds = [], ...article } = item;
+        const { visualNovel, visualNovelPage, bookId, charIds = [], factionIds = [], ...article } = item;
         return { ...article, book:currentBookName(bookId), characters:charIds.map(id => characters.find(char => String(char.id) === String(id))?.name || id).sort(), factions:factionIds.map(id => factions.find(faction => String(faction.id) === String(id))?.name || id).sort() };
       } },
     { type:"vnTemplate", incoming:Array.isArray(data.visualNovelTemplates) ? data.visualNovelTemplates : [], current:visualNovelTemplates, getIncoming:item => item.name, getCurrent:item => item.name }
@@ -5831,10 +5846,10 @@ function prepareAdvancedImport(data, fileName) {
   (Array.isArray(data.documents) ? data.documents : []).forEach((record, importedIndex) => {
     const recordName = normalizedImportName(`${record.title}@@${importedBookName(record.bookId)}`);
     const currentIndex = recordName ? documents.findIndex(item => normalizedImportName(`${item.title}@@${currentBookName(item.bookId)}`) === recordName) : -1;
-    if (currentIndex >= 0 && importRecordsDiffer(documents[currentIndex].visualNovel ?? null, record.visualNovel ?? null)) {
+    if (currentIndex >= 0 && importRecordsDiffer({visualNovel:documents[currentIndex].visualNovel,visualNovelPage:documents[currentIndex].visualNovelPage}, {visualNovel:record.visualNovel,visualNovelPage:record.visualNovelPage})) {
       pendingImportConflicts.push({
         key:`visualNovel_${importedIndex}`, type:"visualNovel", name:record.title || "（未命名章節）",
-        importedIndex, currentIndex, current:documents[currentIndex].visualNovel ?? null, imported:record.visualNovel ?? null
+        importedIndex, currentIndex, current:{visualNovel:documents[currentIndex].visualNovel,visualNovelPage:documents[currentIndex].visualNovelPage}, imported:{visualNovel:record.visualNovel,visualNovelPage:record.visualNovelPage}
       });
     }
   });
@@ -5845,85 +5860,39 @@ function prepareAdvancedImport(data, fileName) {
 }
 
 function renderAdvancedImportConflicts(fileName, importedCharacters, importedFactions) {
-  const missingChars = importedCharacters.filter(record => !normalizedImportName(record.name) || !characters.some(item => normalizedImportName(item.name) === normalizedImportName(record.name))).length;
-  const missingFactions = importedFactions.filter(record => !normalizedImportName(record.name) || !factions.some(item => normalizedImportName(item.name) === normalizedImportName(record.name))).length;
-  const incomingTotal = [pendingAdvancedImport.paros, pendingAdvancedImport.rankings, pendingAdvancedImport.books, pendingAdvancedImport.documents, pendingAdvancedImport.cps || pendingAdvancedImport.couples, pendingAdvancedImport.visualNovelTemplates]
-    .reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
-  document.getElementById("advancedImportSummary").textContent =
-    `${fileName}：將自動合併缺少的資料（含 ${missingChars} 張人物卡、${missingFactions} 個陣營及其餘 ${incomingTotal} 筆設定）；有 ${pendingImportConflicts.length} 筆同名差異需要確認。`;
-  const container = document.getElementById("advancedImportConflicts");
-  container.replaceChildren();
-
-  const stickyBar = document.createElement("div");
-  stickyBar.className = "import-sticky-bar";
-  stickyBar.innerHTML = `
-    <div><strong>待確認差異：</strong>${pendingImportConflicts.length} 筆</div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-outline" onclick="cancelAdvancedImport()">取消</button>
-      <button class="btn btn-primary" onclick="applyAdvancedImport()"><i class="fa-solid fa-check"></i> 套用挑選結果</button>
-    </div>
-  `;
-  container.appendChild(stickyBar);
-
-  if (!pendingImportConflicts.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state compact";
-    empty.textContent = "沒有同名衝突，可直接套用。";
-    container.appendChild(empty);
-    return;
+  document.getElementById('advancedImportSummary').textContent=fileName+'：缺少的項目會加入；同名項目逐欄預選資訊較完整的版本，可再手動調整。';
+  const groups={character:'characters',faction:'factions',paro:'paros',ranking:'rankings',cp:'cps',book:'books',document:'documents',visualNovel:'documents',vnTemplate:'visualNovelTemplates'};
+  const left={},right={};
+  for(const conflict of pendingImportConflicts){
+    conflict.reviewGroup=groups[conflict.type];
+    const row=value=>{
+      const out=structuredClone(value||{});out.id=conflict.key;
+      if(conflict.type==='visualNovel')out.title=conflict.name+' · 劇場';
+      if(conflict.type==='document'){delete out.visualNovel;delete out.visualNovelPage;}
+      if(conflict.type==='ranking')out.name=conflict.name;
+      if(conflict.type==='character')out.relationships=(out.relationships||[]).map(r=>({...r,targetId:r.targetName?'import-person:'+normalizedImportName(r.targetName):r.targetId}));
+      return out;
+    };
+    (left[conflict.reviewGroup]||=[]).push(row(conflict.current));
+    (right[conflict.reviewGroup]||=[]).push(row(conflict.imported));
   }
-
-  const detailsGroup = document.createElement("details");
-  detailsGroup.className = "import-group-details";
-  detailsGroup.open = false;
-  const summary = document.createElement("summary");
-  summary.innerHTML = `<strong>修改項／同名差異項（${pendingImportConflicts.length} 筆）</strong> <span>點擊展開比對選擇</span>`;
-  detailsGroup.appendChild(summary);
-
-  const groupBody = document.createElement("div");
-  groupBody.className = "import-group-body";
-
-  pendingImportConflicts.forEach(conflict => {
-    const differences = collectImportDifferences(conflict.current, conflict.imported);
-    const card = document.createElement("section");
-    card.className = "import-conflict-card";
-    const title = document.createElement("h4");
-    const typeLabels = { character:"人物", faction:"陣營／世界觀", paro:"Paro", ranking:"排名", cp:"CP／其他關係", book:"書籍", document:"同人文章／章節", visualNovel:"視覺小說腳本／設定", vnTemplate:"視覺小說模板" };
-    title.textContent = `${typeLabels[conflict.type] || conflict.type}：${conflict.name}`;
-    card.appendChild(title);
-    const differenceSummary = document.createElement("div");
-    differenceSummary.className = "import-difference-summary";
-    const count = document.createElement("strong");
-    count.textContent = `共 ${differences.length} 處差異：`;
-    differenceSummary.appendChild(count);
-    differences.forEach(difference => {
-      const badge = document.createElement("span");
-      badge.textContent = formatImportDiffPath(difference.path);
-      differenceSummary.appendChild(badge);
-    });
-    card.appendChild(differenceSummary);
-    const grid = document.createElement("div");
-    grid.className = "import-version-grid";
-    [["current", "保留目前版本"], ["imported", "使用讀檔版本"]].forEach(([value, label]) => {
-      const option = document.createElement("label");
-      option.className = "import-version-option";
-      const radio = document.createElement("input");
-      radio.type = "radio"; radio.name = `import_choice_${conflict.key}`; radio.value = value; radio.checked = value === "current";
-      const heading = document.createElement("strong"); heading.textContent = label;
-      const preview = document.createElement("div"); preview.className = "import-diff-list";
-      differences.forEach(difference => {
-        const row = document.createElement("div"); row.className = "import-diff-row";
-        const field = document.createElement("small"); field.textContent = formatImportDiffPath(difference.path);
-        const content = document.createElement("pre");
-        content.textContent = formatImportDiffValue(value === "current" ? difference.current : difference.imported);
-        row.append(field, content); preview.appendChild(row);
-      });
-      option.append(radio, heading, preview); grid.appendChild(option);
-    });
-    card.appendChild(grid); groupBody.appendChild(card);
-  });
-  detailsGroup.appendChild(groupBody);
-  container.appendChild(detailsGroup);
+  const C=CloudSyncCore,local=C.snapshot('workshop',left),remote=C.snapshot('workshop',right);
+  pendingImportReview={direction:'import',items:[{scope:'workshop',local,remote,changes:C.plan(local,remote,null,'download'),decisions:{}}]};pendingImportResults=null;
+  const container=document.getElementById('advancedImportConflicts');
+  // Replace the host to discard handlers from the previous preview.
+  const host=container.cloneNode(false);container.replaceWith(host);
+  CloudSaveReview.mount(host,pendingImportReview,C);
+  host.addEventListener('click',event=>{const action=event.target.closest('[data-cloud]')?.dataset.cloud;if(action==='confirm')applyAdvancedImport();if(action==='cancel')cancelAdvancedImport();});
+}
+function selectedImportedRecord(conflict){
+  if(!pendingImportResults)return conflict.current;
+  const row=pendingImportResults.data[conflict.reviewGroup].find(item=>item.id===conflict.key);
+  if(!row)return conflict.current;
+  const result=structuredClone(row);result.id=conflict.current?.id;
+  if(conflict.type==='visualNovel'){delete result.id;delete result.title;}
+  if(conflict.type==='document'){if(conflict.current.visualNovel!==undefined)result.visualNovel=structuredClone(conflict.current.visualNovel);if(conflict.current.visualNovelPage!==undefined)result.visualNovelPage=structuredClone(conflict.current.visualNovelPage);}
+  if(conflict.type==='ranking'&&!Object.hasOwn(conflict.current,'name'))delete result.name;
+  return result;
 }
 
 function makeUniqueImportId(preferred, prefix, usedIds) {
@@ -5943,8 +5912,7 @@ function mergeImportedNamedRecords(current, incoming, type, idMap, transform = v
     const oldId = raw.id;
     if (sameIndex >= 0) {
       const conflict = pendingImportConflicts.find(item => item.type === type && item.importedIndex === importedIndex);
-      const choice = conflict ? document.querySelector(`input[name="import_choice_${conflict.key}"]:checked`)?.value : "current";
-      if (choice === "imported") result[sameIndex] = { ...record, id: result[sameIndex].id };
+      if (conflict) result[sameIndex] = { ...transform(selectedImportedRecord(conflict)), id: result[sameIndex].id };
       if (oldId != null) idMap.set(String(oldId), result[sameIndex].id);
     } else {
       const id = makeUniqueImportId(record.id, type, usedIds);
@@ -5962,8 +5930,9 @@ function remapImportIds(ids, idMap) {
 function applyAdvancedImport() {
   if (!pendingAdvancedImport) return;
   const data = pendingAdvancedImport;
+  const preview=pendingImportReview?.items[0];
+  if(preview)pendingImportResults=CloudSyncCore.merge(preview.local,preview.remote,preview.changes,preview.decisions);
   const charIdMap = new Map(), factionIdMap = new Map(), paroIdMap = new Map(), bookIdMap = new Map();
-  const previousDocuments = documents.map(item => ({ ...item }));
 
   characters = mergeImportedNamedRecords(characters, data.characters, "character", charIdMap);
   factions = mergeImportedNamedRecords(factions, data.factions, "faction", factionIdMap);
@@ -5973,13 +5942,13 @@ function applyAdvancedImport() {
     const target = characters.find(char => char.id === mappedId);
     if (!target || !importedChar.paroValues) return;
     const conflict = pendingImportConflicts.find(item => item.type === "character" && item.importedIndex === importedIndex);
-    const selectedImported = !conflict || document.querySelector(`input[name="import_choice_${conflict.key}"]:checked`)?.value === "imported";
-    if (!selectedImported) return;
-    target.paroValues = Object.entries(importedChar.paroValues).reduce((result, [oldParoId, values]) => {
+    const selected = conflict ? selectedImportedRecord(conflict) : target;
+    target.paroValues = Object.entries(selected.paroValues || target.paroValues || {}).reduce((result, [oldParoId, values]) => {
       result[paroIdMap.get(String(oldParoId)) ?? oldParoId] = values;
       return result;
     }, {});
   });
+  for(const char of characters)for(const relation of char.relationships||[]){const target=characters.find(c=>normalizedImportName(c.name)===normalizedImportName(relation.targetName));relation.targetId=target?.id || charIdMap.get(String(relation.targetId)) || relation.targetId;}
   books = mergeImportedNamedRecords(books, data.books, "book", bookIdMap, record => ({
     ...record, charIds: remapImportIds(record.charIds, charIdMap), factionIds: remapImportIds(record.factionIds, factionIdMap)
   }));
@@ -6017,10 +5986,8 @@ function applyAdvancedImport() {
     const target = documents.find(item => normalizedImportName(`${item.title}@@${item.bookId || "standalone"}`) === identity);
     const conflict = pendingImportConflicts.find(item => item.type === "visualNovel" && item.importedIndex === importedIndex);
     if (!target || !conflict) return;
-    const choice = document.querySelector(`input[name="import_choice_${conflict.key}"]:checked`)?.value || "current";
-    const selected = choice === "imported" ? raw.visualNovel : previousDocuments[conflict.currentIndex]?.visualNovel;
-    if (selected == null) delete target.visualNovel;
-    else target.visualNovel = selected;
+    const selected = selectedImportedRecord(conflict);
+    for(const field of ["visualNovel","visualNovelPage"]){if(selected[field]==null)delete target[field];else target[field]=selected[field];}
   });
   normalizeVisualNovelDocuments();
   visualNovelTemplates = mergeImportedNamedRecords(visualNovelTemplates, data.visualNovelTemplates, "vnTemplate", new Map());
@@ -6036,6 +6003,7 @@ function applyAdvancedImport() {
 function cancelAdvancedImport() {
   closeModal("advancedImportModal");
   pendingAdvancedImport = null;
+  pendingImportReview = null;pendingImportResults = null;
   pendingImportConflicts = [];
   const input = document.getElementById("jsonFileInput");
   if (input) input.value = "";
