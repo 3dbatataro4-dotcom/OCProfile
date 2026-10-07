@@ -14,7 +14,7 @@
   if(session&&(!session.user?.id||!session.access_token)){localStorage.removeItem(SESSION);session=null;}
   const labels={timelines:'故事時間線',mediaLibrary:'圖片圖庫',chatContacts:'私訊聯絡人',chats:'私人對話',chatMessages:'聊天紀錄',favoriteFolders:'收藏資料夾',tagCatalog:'論壇 Tag',characters:'人物',paros:'世界觀',worlds:'世界觀',factions:'陣營',rankings:'排名',cps:'CP',books:'書籍',documents:'文章',visualNovelTemplates:'劇場模板',visualNovelPreferences:'視覺小說閱讀偏好',customPresetAvatars:'自訂預設頭像',collapsedBooks:'書籍摺疊',perspectiveTargets:'視角設定',boards:'論壇空間',relationships:'關係',loreEntries:'注意詞條',accounts:'我的帳號',users:'同好帳號',posts:'貼文',comments:'留言'};
   const baselineKey=scope=>`oc_cloud_base_${session.user.id}_${scope}`;
-  const rememberRecovery=(scope,value)=>recoveryCopies.set(scope,C.clone?C.clone(value):JSON.parse(JSON.stringify(value)));
+  async function rememberRecovery(scope,value){const recoveryOwner=accountId();if(!recoveryOwner)throw new Error('請先登入雲端帳號。');recoveryCopies.set(scope,JSON.parse(JSON.stringify(value)));await new Promise((resolve,reject)=>{const req=indexedDB.open('oc-cloud-recovery',1);req.onupgradeneeded=()=>req.result.createObjectStore('snapshots',{keyPath:'id'});req.onerror=()=>reject(req.error);req.onsuccess=()=>{const db=req.result,tx=db.transaction('snapshots','readwrite');tx.objectStore('snapshots').put({id:recoveryOwner+':'+scope+':'+Date.now()+':'+Math.random(),owner:recoveryOwner,scope,createdAt:Date.now(),payload:value});const scan=tx.objectStore('snapshots').getAll();scan.onsuccess=()=>{const older=scan.result.filter(row=>row.owner===recoveryOwner&&row.scope===scope).sort((a,b)=>b.createdAt-a.createdAt).slice(20);older.forEach(row=>tx.objectStore('snapshots').delete(row.id));};tx.oncomplete=()=>{db.close();resolve();};tx.onerror=()=>{db.close();reject(tx.error);};};});}
   const cacheBaseline=(scope,value)=>{try{(window.ocSafeSetLocalStorage||((key,data)=>localStorage.setItem(key,data)))(baselineKey(scope),JSON.stringify(value));}catch{localStorage.removeItem(baselineKey(scope));}};
   function workshop(){return {characters,paros,factions,rankings,cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,visualNovelPreferences:{topDown:visualNovelTopDown},customPresetAvatars,collapsedBooks,perspectiveTargets};}
   function snapshot(scope){return scope==='forum'?OCForum.cloudSnapshot():C.snapshot(scope,workshop());}
@@ -28,18 +28,11 @@
     try{assign(data);normalizeVisualNovelDocuments();saveStateToLocalStorage();}catch(err){assign(old);for(const [k,v]of stored){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch{}}throw err;}
     syncGlobalTags();renderAllViews();
   }
-  function message(text){modal.querySelector('[role=status]').textContent=text;}
+  function message(text){if(modal)modal.querySelector('[role=status]').textContent=text;}
   function isInvalidRefreshToken(error){const text=String(error?.message||error||'').toLowerCase();return text.includes('invalid refresh token')||text.includes('refresh token not found')||text.includes('refresh_token_not_found');}
-  function clearExpiredCloudLogin(){localStorage.removeItem(SESSION);session=null;preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;if(modal)render();}
+  function clearExpiredCloudLogin(){localStorage.removeItem(SESSION);session=null;preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;window.dispatchEvent(new Event('oc-cloud-auth-changed'));if(modal)render();}
   async function request(path,body,auth=true){
-    if(auth){
-      if(!session?.access_token)throw new Error('請先登入雲端帳號。');
-      if(!Number.isFinite(Number(session.expires_at))||Number(session.expires_at)<Date.now()/1000+60){
-        if(!session.refresh_token){clearExpiredCloudLogin();throw new Error('雲端登入已過期，請重新登入。本機人物與論壇資料均已保留。');}
-        try{const renewed=await request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token},false);keepSession(renewed);}
-        catch(error){if(isInvalidRefreshToken(error)){clearExpiredCloudLogin();throw new Error('雲端登入已過期，請重新登入。本機人物與論壇資料均已保留。');}throw error;}
-      }
-    }
+    if(auth)await accessToken();
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
     try{
       const hasBody=body!==undefined&&body!==null,serialized=hasBody?JSON.stringify(body):'';
@@ -54,6 +47,7 @@
         return {response,result};
       };
       let {response,result}=await send(false);
+      if(response.status===401&&auth&&session?.refresh_token){await accessToken(true);({response,result}=await send(false));}
       // PGRST102 means PostgREST could not see a valid JSON request body. A few
       // mobile WebViews mishandle a large string body; Blob uses a separate and
       // reliable upload path. PGRST102 is safe to retry because the RPC did not run.
@@ -82,7 +76,45 @@
     message(`${scopeNames[scope]}正在上傳完整存檔（${Math.max(1,Math.round(fullSize/1024))} KB）…`);return pushSnapshot(scope,revision,next,note);
   }
   function isUnsupportedDeltaError(error){const text=String(error?.message||error?.details||error||'').toUpperCase();return ['PGRST202','42883'].includes(error?.code)||text.includes('INVALID_DELTA_ITEM')||text.includes('INVALID_DELTA_ORDER')||text.includes('INVALID_DELTA_GROUP');}
-  function keepSession(value){session={access_token:value.access_token,refresh_token:value.refresh_token,expires_at:value.expires_at||Date.now()/1000+value.expires_in,user:{id:value.user.id,email:value.user.email}};localStorage.setItem(SESSION,JSON.stringify(session));}
+  function keepSession(value){session={access_token:value.access_token,refresh_token:value.refresh_token,expires_at:value.expires_at||Date.now()/1000+value.expires_in,user:{id:value.user.id,email:value.user.email}};localStorage.setItem(SESSION,JSON.stringify(session));window.dispatchEvent(new Event('oc-cloud-auth-changed'));}
+  let refreshPromise=null;
+  async function accessToken(force=false){
+    let stored;try{stored=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}
+    if(!stored?.user?.id||!stored.access_token)throw new Error('請先登入雲端帳號；本機圖片與待傳佇列仍會保留。');
+    session=stored;if(!force&&Number(session.expires_at)>Date.now()/1000+90)return session.access_token;
+    if(!session.refresh_token){if(Number(session.expires_at)>Date.now()/1000)return session.access_token;throw new Error('雲端登入已過期，請重新登入；本機資料與待傳檔案已保留。');}
+    if(!refreshPromise){const original=session;refreshPromise=request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token},false).then(value=>{let now;try{now=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{}if(now?.user?.id!==original.user.id||now?.refresh_token!==original.refresh_token)throw new Error('帳號已切換，請重新同步。');keepSession(value);return session.access_token;}).catch(error=>{if(isInvalidRefreshToken(error)){clearExpiredCloudLogin();throw new Error('雲端登入已失效，請重新登入；本機人物與論壇資料均已保留。');}throw error;}).finally(()=>refreshPromise=null);}
+    return refreshPromise;
+  }
+  const accountId=()=>{try{return JSON.parse(localStorage.getItem(SESSION)||'null')?.user?.id||'';}catch{return '';}};
+  const musicKinds=new Set(['music-track','music-album','music-playlist']);
+  function mediaSelect(row,type,owner=accountId()){if(!row||row.cloudOwnerId&&row.cloudOwnerId!==owner)return false;if(row.kind==='media-tombstone')return row.collection===type;return type==='music'?musicKinds.has(row.kind)&&row.storage!=='local':row.kind==='gallery-album'||((row.kind==='cloud-album-image'||row.kind==='gallery'&&row.albumId||!row.kind&&row.albumId)&&!row.localOnly);}
+  let mediaSyncTail=Promise.resolve();const mediaTimers=new Map();
+  function scheduleMediaSync(type){clearTimeout(mediaTimers.get(type));mediaTimers.set(type,setTimeout(()=>{mediaTimers.delete(type);if(working){scheduleMediaSync(type);return;}syncMedia(type).catch(error=>window.dispatchEvent(new CustomEvent('oc-media-sync-status',{detail:{type,error:error.message}})));},750));}
+  function syncMedia(type){if(!['albums','music'].includes(type))return Promise.reject(new Error('不支援的媒體類型。'));const task=mediaSyncTail.catch(()=>{}).then(()=>syncMediaNow(type));mediaSyncTail=task;return task;}
+  async function syncMediaNow(type){
+    if(working)throw new Error('備份中心正在同步，稍後會繼續同步媒體。');await accessToken();const owner=accountId(),key='oc_cloud_media_base_'+owner+'_'+type;
+    let base=null;try{base=C.validate(JSON.parse(localStorage.getItem(key)));}catch{}
+    for(let attempt=0;attempt<3;attempt++){
+      const remote=await head('workshop');if(accountId()!==owner)throw new Error('帳號已切換，未套用其他帳號的資料。');
+      const local=C.snapshot('workshop',{mediaLibrary:mediaLibrary.filter(row=>mediaSelect(row,type,owner)).map(row=>({...row,cloudOwnerId:row.cloudOwnerId||owner}))}),remotePart=C.snapshot('workshop',{mediaLibrary:remote.payload.data.mediaLibrary.filter(row=>mediaSelect(row,type,owner))}),changes=C.plan(local,remotePart,base,'download'),merged=C.merge(local,remotePart,changes,{});
+      const conflictIds=new Set(changes.filter(row=>row.conflict).map(row=>row.id));
+      const tombstones=merged.data.mediaLibrary.filter(row=>row.kind==='media-tombstone'),deleted=new Set(tombstones.map(row=>row.targetId));
+      merged.data.mediaLibrary=merged.data.mediaLibrary.filter(row=>row.kind==='media-tombstone'||!deleted.has(row.id));
+      for(const id of deleted)conflictIds.delete(String(id));
+      const publishRows=merged.data.mediaLibrary.filter(row=>!conflictIds.has(String(row.id))).concat(remotePart.data.mediaLibrary.filter(row=>conflictIds.has(String(row.id))));
+      const next=JSON.parse(JSON.stringify(remote.payload));next.data.mediaLibrary=next.data.mediaLibrary.filter(row=>!mediaSelect(row,type,owner)).concat(publishRows);
+      try{if(!C.equal(next,remote.payload))await pushEfficientSnapshot('workshop',remote.revision,remote.payload,next,remote.note||'媒體自動同步');}
+      catch(error){if(attempt<2&&/另一台裝置|SYNC_CONFLICT|版本已更新/.test(error.message))continue;throw error;}
+      if(accountId()!==owner)throw new Error('帳號已切換，未套用其他帳號的資料。');
+      const latest=C.snapshot('workshop',{mediaLibrary:mediaLibrary.filter(row=>mediaSelect(row,type,owner))}),rebased=C.merge(latest,merged,C.plan(latest,merged,local,'download'),{});
+      await rememberRecovery(type,local);if(accountId()!==owner)throw new Error('帳號已切換，未套用其他帳號的資料。');
+      const old=mediaLibrary;try{mediaLibrary=mediaLibrary.filter(row=>!mediaSelect(row,type,owner)).concat(rebased.data.mediaLibrary.filter(row=>row.kind==='media-tombstone'||!deleted.has(row.id)));saveStateToLocalStorage();}catch(error){mediaLibrary=old;throw error;}
+      const baseline=C.snapshot('workshop',{mediaLibrary:publishRows});if(conflictIds.size){baseline.data.mediaLibrary=baseline.data.mediaLibrary.filter(row=>!conflictIds.has(String(row.id))).concat((base?.data.mediaLibrary||[]).filter(row=>conflictIds.has(String(row.id))));localStorage.setItem('oc_cloud_media_conflicts_'+owner+'_'+type,JSON.stringify({createdAt:Date.now(),local,remote:remotePart}));}
+      localStorage.setItem(key,JSON.stringify(baseline));const result={type,conflicts:conflictIds.size,pending:mediaLibrary.filter(row=>row.kind==='cloud-album-image'&&row.localOnly).length};window.dispatchEvent(new CustomEvent('oc-media-synced',{detail:result}));return result;
+    }
+  }
+  window.addEventListener('storage',event=>{if(event.key===SESSION){try{session=JSON.parse(event.newValue||'null');}catch{session=null;}window.dispatchEvent(new Event('oc-cloud-auth-changed'));}});
   async function head(scope){const rows=await request('/rest/v1/oc_sync_heads?scope=eq.'+scope+'&select=revision,payload,updated_at');if(!rows.length)return {revision:0,note:'',payload:C.snapshot(scope,{})};const rawNote=String(rows[0].payload?.note||'').slice(0,16);return {...rows[0],note:rawNote,payload:C.validate(rows[0].payload)};}
   function formatBackupTime(value){
     if(!value)return '尚未建立雲端備份';
@@ -108,16 +140,10 @@
   function render(){
     if(!session){shell(`${manualBackupHtml()}<div class="oc-cloud-login"><div class="oc-cloud-section-heading"><div><small>CLOUD ARCHIVE</small><h3>登入雲端存檔</h3></div><p>登入同一帳號，在不同裝置間同步。</p></div><form data-form="login"><label>雲端帳號 Email<input name="email" type="email" autocomplete="username" required></label><label>雲端帳號密碼<input name="password" type="password" autocomplete="current-password" required></label><button class="btn btn-primary">登入</button></form><p class="oc-cloud-info">首次使用：先執行 <a href="supabase/setup.sql" target="_blank" rel="noopener">資料表設定 SQL</a>，再到 Supabase → Authentication → Users 建立使用者。</p></div>`);return;}
 
-    shell(`${manualBackupHtml()}<section class="oc-cloud-online"><div class="oc-cloud-account"><div><small>CLOUD ARCHIVE</small><p class="oc-cloud-info">${e(session.user.email)}</p></div>${button('logout','登出')}</div><div id="cloud-backup-times">${backupTimesHtml()}</div><div class="oc-cloud-sync-options"><div class="oc-cloud-tools oc-cloud-scopes"><strong>同步內容</strong>${Object.entries(scopeNames).map(([key,name])=>`<label><input type="checkbox" data-scope="${key}" ${selected.has(key)?'checked':''}>${name}</label>`).join('')}</div><label class="oc-cloud-note">這次上傳註釋 <span><input data-upload-note maxlength="16" value="${e(uploadNote)}" placeholder="例如：調整人物關係"><small><b data-note-count>${[...uploadNote].length}</b>/16</small></span></label></div><div class="oc-cloud-main-actions">${button('upload','↑ 上傳到雲端') }${button('download','↓ 合併雲端資料')}${button('restore','↙ 從雲端完整復原')}</div><p class="oc-cloud-info">註釋只會在上傳時寫入勾選的存檔區域，留空會沿用各區域原有註釋。上傳／下載會合併兩端資料；完整復原則直接採用雲端版本。</p><div id="cloud-diff"></div></section>`);
-    if(preview){
-      const rows=preview.items.flatMap(item=>item.changes.filter(d=>d.conflict).map(d=>({...d,scope:item.scope}))),automatic=preview.items.reduce((n,p)=>n+p.changes.filter(d=>!d.conflict).length,0);
-      const modifiedRows=rows.filter(d=>d.local&&d.remote);
-      const addedRows=rows.filter(d=>!d.local||!d.remote);
-      const renderArticle=(d,i)=>{const nested=d.kind==='characterRelationship'||d.kind==='perspectiveTarget',title=d.kind==='characterRelationship'?`人物稱呼／看法 · ${d.sourceName} → ${d.targetName}`:d.kind==='perspectiveTarget'?`視角對象 · ${d.targetName}`:`${labels[d.group]} · ${d.local?.name||d.remote?.name||d.local?.title||d.remote?.title||d.id}`;return `<article class="oc-cloud-row"><div><strong>${e(scopeNames[d.scope])} / ${e(title)}</strong><span>${e(d.status)}</span></div><label>處理方式<select data-choice="${i}" data-scope-key="${d.scope}" data-change-key="${e(d.key)}"><option value="local" ${d.choice==='local'?'selected':''}>保留本機${d.local?'':'（刪除）'}</option><option value="remote" ${d.choice==='remote'?'selected':''}>採用雲端${d.remote?'':'（刪除）'}</option>${d.local&&d.remote&&!nested&&!C.mapFields.has(d.group)?'<option value="copy">保留兩份</option>':''}</select></label><details><summary>展開比較內容</summary><div class="oc-cloud-compare"><div>本機<pre>${e(d.local?JSON.stringify(d.local,null,2):'已刪除／不存在')}</pre></div><div>雲端<pre>${e(d.remote?JSON.stringify(d.remote,null,2):'已刪除／不存在')}</pre></div></div></details></article>`;};
-
-      modal.querySelector('#cloud-diff').innerHTML=`<div class="oc-cloud-sticky-actions"><div><h3 style="margin:0">有 ${rows.length} 項內容需要你決定</h3><small>修改 ${modifiedRows.length} 筆 · 新增/刪除 ${addedRows.length} 筆</small></div><div class="oc-cloud-confirm" style="position:static;padding:0;border:none">${button('confirm','確認並繼續'+(preview.direction==='upload'?'上傳':'下載'))}${button('cancel','取消')}</div></div><p>其餘 ${automatic} 項更新會自動合併。${preview.reason?e(preview.reason):''}</p>${modifiedRows.length?`<details class="oc-cloud-group"><summary><strong>修改項（${modifiedRows.length} 筆）</strong><span>點擊展開比較</span></summary><div class="oc-cloud-group-body">${modifiedRows.map((d,i)=>renderArticle(d,i)).join('')}</div></details>`:''}${addedRows.length?`<details class="oc-cloud-group"><summary><strong>新增項／刪除項（${addedRows.length} 筆）</strong><span>點擊展開比較</span></summary><div class="oc-cloud-group-body">${addedRows.map((d,i)=>renderArticle(d,i+modifiedRows.length)).join('')}</div></details>`:''}<div class="oc-cloud-confirm">${button('confirm','確認並繼續'+(preview.direction==='upload'?'上傳':'下載'))}${button('cancel','取消')}</div>`;
-    }
+    shell(`${manualBackupHtml()}<section class="oc-cloud-online"><div class="oc-cloud-account"><div><small>CLOUD ARCHIVE</small><p class="oc-cloud-info">${e(session.user.email)}</p></div>${button('logout','登出')}</div><div id="cloud-backup-times">${backupTimesHtml()}</div><div class="oc-cloud-sync-options"><div class="oc-cloud-tools oc-cloud-scopes"><strong>同步內容</strong>${Object.entries(scopeNames).map(([key,name])=>`<label><input type="checkbox" data-scope="${key}" ${selected.has(key)?'checked':''}>${name}</label>`).join('')}</div><label class="oc-cloud-note">這次上傳註釋 <span><input data-upload-note maxlength="16" value="${e(uploadNote)}" placeholder="例如：調整人物關係"><small><b data-note-count>${[...uploadNote].length}</b>/16</small></span></label></div><div class="oc-cloud-main-actions">${button('upload','↑ 上傳到雲端') }${button('download','↓ 合併雲端資料')}${button('restore','↙ 從雲端完整復原')}${button('recovery-list','下載同步前副本')}</div><p class="oc-cloud-info">註釋只會在上傳時寫入勾選的存檔區域，留空會沿用各區域原有註釋。上傳／下載會合併兩端資料；完整復原則直接採用雲端版本。</p><div id="cloud-diff"></div></section>`);
+    if(preview)CloudSaveReview.mount(modal.querySelector('#cloud-diff'),preview,C);
   }
+
   async function start(direction){
     if(!selected.size)throw new Error('請至少選擇一個同步區域。');
     preview=null;render();message('正在檢查雲端資料…');
@@ -127,47 +153,36 @@
       if(direction==='download'&&remote.revision===0){items.push({scope,local,remote:remote.payload,revision:0,changes:[],skip:true});continue;}
       const changes=C.plan(local,remote.payload,base,direction);
       if(direction==='upload')changes.forEach(change=>{
-        if(change.kind==='characterRelationship'||change.kind==='perspectiveTarget')return;
+        if(change.kind)return;
         if(change.local||!change.remote)return;
         change.conflict=true;
         change.choice='remote';
         change.status='本機缺少、雲端仍存在（請確認是否真的刪除）';
       });
-      if(direction==='download'&&scope==='workshop')changes.forEach(change=>{
-        if(change.group!=='books'&&change.group!=='documents')return;
-        change.conflict=true;
-        change.choice=change.remote?'remote':'local';
-        change.status=change.local&&change.remote?'章節／書籍內容不同':change.remote?'雲端有新增資料':'雲端缺少此筆資料';
-      });
       items.push({scope,local,remote:remote.payload,revision:remote.revision,note:remote.note||'',changes});
     }
     preview={items,direction};
-    if(items.some(p=>p.changes.some(d=>d.conflict))){render();message('已暫停同步，請選擇衝突項目的處理方式。');return;}
-    await commit();
+    render();message('請先檢視同步預覽；確認後才會修改存檔。');
   }
+  let downloadableRecovery=new Map();
+  async function showRecoveryCopies(){const rows=await new Promise((resolve,reject)=>{const req=indexedDB.open('oc-cloud-recovery',1);req.onupgradeneeded=()=>req.result.createObjectStore('snapshots',{keyPath:'id'});req.onerror=()=>reject(req.error);req.onsuccess=()=>{const db=req.result,tx=db.transaction('snapshots','readonly'),read=tx.objectStore('snapshots').getAll();read.onsuccess=()=>resolve(read.result);tx.oncomplete=()=>db.close();read.onerror=()=>reject(read.error);};});const choices=rows.filter(row=>row.owner===accountId()&&['workshop','forum'].includes(row.scope)).sort((a,b)=>b.createdAt-a.createdAt);downloadableRecovery=new Map(choices.map(row=>[row.id,row]));modal.querySelector('#cloud-diff').innerHTML='<h3>同步前的本機副本</h3><p>選擇時間下載，可用「自動辨識並讀取」還原。副本保留在這台裝置，每個區域最多 20 份，不包含媒體檔案。</p>'+choices.map(row=>'<p><button type="button" class="btn btn-outline" data-cloud="recovery-download" data-recovery-id="'+e(row.id)+'">'+e(scopeNames[row.scope])+' · '+e(new Date(row.createdAt).toLocaleString())+'</button></p>').join('');if(!choices.length)message('這台裝置尚無人物工坊／論壇的同步前副本。');}
+  function downloadRecoveryCopy(id){const row=downloadableRecovery.get(id);if(!row||row.owner!==accountId())throw new Error('找不到此帳號的復原副本。');const value=row.scope==='workshop'?{format:'oc-workshop-backup',version:1,...C.source(row.payload)}:row.payload;const url=window.URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='同步前副本-'+row.scope+'-'+new Date(row.createdAt).toISOString().replace(/[:.]/g,'-')+'.json';link.click();setTimeout(()=>window.URL.revokeObjectURL(url),1000);message('同步前副本已下載。');}
   async function restore(){
     if(!selected.size)throw new Error('請至少選擇一個復原區域。');
-    if(!confirm('確定以雲端存檔完整復原勾選區域？目前本機內容會先保留在這次同步的安全復原記憶中，再由雲端版本取代。'))return;
-    const rows=[];
-    message('正在讀取並驗證雲端存檔…');
-    for(const scope of selected){const local=snapshot(scope),remote=await head(scope);cloudHeads[scope]=remote;if(remote.revision)rows.push({scope,local,remote:remote.payload});}
-    if(!rows.length)throw new Error('勾選區域尚無雲端存檔，未更動本機。');
-    for(const row of rows)rememberRecovery(row.scope,row.local);
-    const applied=[];
-    try{
-      for(const row of rows){apply(row.remote);cacheBaseline(row.scope,row.remote);applied.push(row);}
-    }catch(err){for(const row of applied.reverse())try{apply(row.local);}catch{}throw new Error('復原未完成，本機已盡可能回復原狀：'+err.message);}
-    render();message(rows.map(row=>scopeNames[row.scope]).join('、')+'已從雲端完整復原。');
+    const items=[];message('正在讀取雲端完整復原預覽…');
+    for(const scope of selected){const local=snapshot(scope),remote=await head(scope);if(!remote.revision)continue;const changes=C.compare(local,remote.payload);for(const change of changes){change.choice='remote';change.conflict=change.local!==undefined;change.status='完整復原：預設採用雲端，確認前可改為保留本機';}items.push({scope,local,remote:remote.payload,revision:remote.revision,note:remote.note,changes});}
+    if(!items.length)throw new Error('勾選區域尚無雲端存檔，未更動本機。');
+    preview={items,direction:'restore'};render();message('完整復原預設採用雲端版本，請查看覆蓋與清空項目；确认前不會改動本機。');
   }
   async function commit(){
     if(!preview)throw new Error('請先選擇上傳或下載。');
-    const pending=preview,decisions=Object.fromEntries(pending.items.map(p=>[p.scope,{}]));
+    await mediaSyncTail.catch(()=>{});const pending=preview,decisions=Object.fromEntries(pending.items.map(p=>[p.scope,{...(p.decisions||{})}]));
     modal.querySelectorAll('[data-choice]').forEach(el=>decisions[el.dataset.scopeKey][el.dataset.changeKey]=el.value);
     // Compute and validate all results before modifying either save area.
     const results=[];
-    for(const p of pending.items){if(p.skip)continue;try{results.push({...p,merged:C.merge(p.local,p.remote,p.changes,decisions[p.scope])});}catch(err){p.changes.forEach(d=>d.conflict=true);pending.reason=err.message;render();message('相關資料需要一起保留或刪除，請調整選擇。');return;}}
+    for(const p of pending.items){if(p.skip)continue;try{results.push({...p,merged:pending.direction==='restore'&&p.changes.every(d=>(decisions[p.scope][d.key]||d.choice)==='remote')?p.remote:C.merge(p.local,p.remote,p.changes,decisions[p.scope])});}catch(err){p.changes.forEach(d=>d.conflict=true);pending.reason=err.message;render();message('相關資料需要一起保留或刪除，請調整選擇。');return;}}
     for(const p of results){const latest=await head(p.scope);if(latest.revision!==p.revision)throw new Error(scopeNames[p.scope]+'的雲端版本已更新，請重新點選上傳或下載。');}
-    for(const p of results){if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+'的本機資料已改變，請重新點選上傳或下載。');rememberRecovery(p.scope,p.local);}
+    for(const p of results){if(!C.equal(snapshot(p.scope),p.local))throw new Error(scopeNames[p.scope]+'的本機資料已改變，請重新點選上傳或下載。');await rememberRecovery(p.scope,p.local);}
     const done=[];
     try{
       for(const p of results){
@@ -186,15 +201,15 @@
       }
     }catch(err){preview=null;render();throw new Error((done.length?'已完成：'+done.join('、')+'。其餘未完成。':'')+err.message);}
     const skipped=pending.items.filter(p=>p.skip).map(p=>scopeNames[p.scope]);
-    preview=null;if(pending.direction==='upload')uploadNote='';render();message((done.length?done.join('、')+'已'+(pending.direction==='upload'?'上傳':'下載')+'完成。':'')+(skipped.length?skipped.join('、')+'尚無雲端存檔，本機資料保持原狀。':''));
+    preview=null;if(pending.direction==='upload')uploadNote='';render();message((done.length?done.join('、')+'已'+(pending.direction==='upload'?'上傳':pending.direction==='restore'?'復原':'下載')+'完成。':'')+(skipped.length?skipped.join('、')+'尚無雲端存檔，本機資料保持原狀。':''));
   }
   async function run(fn){if(working)return;working=true;modal.setAttribute('aria-busy','true');try{await fn();}catch(err){message(err.name==='AbortError'?'連線逾時，請重新刷新比對再試。':err.message);}finally{working=false;modal.removeAttribute('aria-busy');}}
   function close(){if(working)return;modal.hidden=true;preview=null;document.body.style.overflow=modal.dataset.previousOverflow||'';window.OCCloud.returnFocus?.focus();}
-  window.OCCloud={isOpen:()=>!!modal&&!modal.hidden,open(){
-    if(working)return;selected=new Set(['workshop']);preview=null;
+  window.OCCloud={accessToken,accountId,syncMedia,scheduleMediaSync,isOpen:()=>!!modal&&!modal.hidden,open(){
+    if(working)return;try{session=JSON.parse(localStorage.getItem(SESSION)||'null');}catch{session=null;}if(!session?.user?.id||!session?.access_token)session=null;selected=new Set(['workshop']);preview=null;
     if(!modal){modal=document.createElement('div');modal.className='oc-cloud-overlay';modal.hidden=true;document.body.append(modal);
       modal.addEventListener('submit',event=>{event.preventDefault();run(async()=>{const form=event.target,fields=new FormData(form);const result=await request('/auth/v1/token?grant_type=password',{email:fields.get('email'),password:fields.get('password')},false);form.reset();keepSession(result);render();await refreshBackupTimes();message('登入成功，已讀取雲端備份時間。');});});
-      modal.addEventListener('click',event=>{const action=event.target.closest('[data-cloud]')?.dataset.cloud;if(!action||working)return;if(action==='close')return close();if(action==='export-complete'){exportDataJson();message('完整備份已下載到裝置。');return;}if(action==='export-workshop'){exportWorkshopDataJson();message('人設卡工坊備份已下載到裝置。');return;}if(action==='export-forum'){try{exportForumDataJson();message('論壇備份已下載到裝置。');}catch(err){message(err.message);}return;}if(action==='import-auto'){modal.querySelector('[data-cloud-file]')?.click();return;}run(async()=>{if(action==='upload'||action==='download')return start(action);if(action==='restore')return restore();if(action==='confirm')return commit();if(action==='cancel'){preview=null;render();return;}if(action==='logout'){try{await request('/auth/v1/logout',{});}finally{localStorage.removeItem(SESSION);session=null;preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;render();}}});});
+      modal.addEventListener('click',event=>{const action=event.target.closest('[data-cloud]')?.dataset.cloud;if(!action||working)return;if(action==='close')return close();if(action==='export-complete'){exportDataJson();message('完整備份已下載到裝置。');return;}if(action==='export-workshop'){exportWorkshopDataJson();message('人設卡工坊備份已下載到裝置。');return;}if(action==='export-forum'){try{exportForumDataJson();message('論壇備份已下載到裝置。');}catch(err){message(err.message);}return;}if(action==='import-auto'){modal.querySelector('[data-cloud-file]')?.click();return;}run(async()=>{if(action==='upload'||action==='download')return start(action);if(action==='restore')return restore();if(action==='recovery-list'){preview=null;return showRecoveryCopies();}if(action==='recovery-download')return downloadRecoveryCopy(event.target.closest('[data-recovery-id]')?.dataset.recoveryId);if(action==='confirm')return commit();if(action==='cancel'){preview=null;render();return;}if(action==='logout'){try{await request('/auth/v1/logout',{});}finally{localStorage.removeItem(SESSION);session=null;preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;render();}}});});
       modal.addEventListener('change',event=>{if(event.target.matches('[data-scope]')&&!working){const key=event.target.dataset.scope;event.target.checked?selected.add(key):selected.delete(key);preview=null;render();}});
       modal.addEventListener('change',event=>{if(!event.target.matches('[data-cloud-file]'))return;const input=event.target,file=input.files?.[0];run(async()=>{try{const result=await importBackupFileAutomatically(file);if(result?.pendingReview){modal.hidden=true;document.body.style.overflow=modal.dataset.previousOverflow||'';return;}if(result&&!result.cancelled){render();message(`已自動辨識並讀取「${result.label}」備份。`);}}finally{input.value='';}});});
       modal.addEventListener('input',event=>{if(!event.target.matches('[data-upload-note]'))return;uploadNote=[...event.target.value].slice(0,16).join('');if(event.target.value!==uploadNote)event.target.value=uploadNote;const count=modal.querySelector('[data-note-count]');if(count)count.textContent=[...uploadNote].length;});
