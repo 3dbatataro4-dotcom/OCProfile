@@ -44,13 +44,15 @@
   <link rel="stylesheet" href="forum.css?v=21.52">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
   <link rel="stylesheet" href="cloud-sync.css?v=26.1">
-  <link rel="stylesheet" href="features.css?v=31.3">
+  <link rel="stylesheet" href="features.css?v=31.6">
   <link rel="stylesheet" href="features-timeline.css?v=1.4">
   <link rel="stylesheet" href="timeline-books.css?v=1.2">
   <link rel="stylesheet" href="timeline-design.css?v=1.1">
   <link rel="stylesheet" href="character-archive.css?v=1.2">
   <link rel="stylesheet" href="interrogation.css?v=4.4">
   <link rel="stylesheet" href="reading-motion.css?v=1.0">
+  <link rel="stylesheet" href="timeline-sort.css?v=1.0">
+  <link rel="stylesheet" href="draft-workspace.css?v=1.0">
 </head>
 <body>
 
@@ -183,13 +185,13 @@
     <section id="tab-hidden" class="tab-content">
       <div class="section-banner">
         <div>
-          <h2><i class="fa-solid fa-user-clock"></i> 草稿 / 隱藏角色管理板塊</h2>
-          <p>尚未填寫完成的角色在此集中管理。隱藏的角色不會出現在人物關係與 Paro 選單中。</p>
+          <h2><i class="fa-solid fa-user-clock"></i> 草稿工作區</h2>
+          <p>人物與 CP 草稿集中整理；移回正式卡庫後，才會出現在各系統與應用中。</p>
         </div>
       </div>
-      <div class="character-grid" id="hiddenCharacterGrid">
-        <!-- Rendered by app.js -->
-      </div>
+      <div class="draft-tabs" role="tablist" aria-label="草稿類型"><button id="draftCharactersTab" type="button" role="tab" aria-controls="draftCharactersPanel" aria-selected="true" data-draft-tab="characters" onclick="switchDraftTab('characters')"><i class="fa-solid fa-user-pen"></i> 人物 <span id="draftCharacterCount">0</span></button><button id="draftCpsTab" type="button" role="tab" aria-controls="draftCpsPanel" aria-selected="false" data-draft-tab="cps" onclick="switchDraftTab('cps')"><i class="fa-solid fa-heart"></i> CP <span id="draftCpCount">0</span></button></div>
+      <div id="draftCharactersPanel" role="tabpanel" aria-labelledby="draftCharactersTab"><div class="character-grid" id="hiddenCharacterGrid"></div></div>
+      <div id="draftCpsPanel" role="tabpanel" aria-labelledby="draftCpsTab" hidden><div class="draft-cp-tools"><button type="button" class="btn btn-primary" onclick="openCpModal()"><i class="fa-solid fa-plus"></i> 新建 CP 草稿</button></div><div class="character-grid" id="hiddenCpGrid"></div></div>
     </section>
 
     <!-- TAB 3: 人物關係與稱呼板塊 -->
@@ -398,7 +400,7 @@
 
     <section id="tab-timelines" class="tab-content">
       <div class="section-banner"><div><h2><i class="fa-solid fa-timeline"></i> 主線時間線</h2><p>一條主線串起多個世界觀；同一時間或群組的事件會並列顯示。</p></div><button class="btn btn-primary" onclick="OCFeatures.newTimeline()"><i class="fa-solid fa-plus"></i> 新建主線</button></div>
-<div class="timeline-toolbar"><select class="themed-select" id="timelineSelect" aria-label="選擇時間線" onchange="OCFeatures.selectTimeline(this.value)"></select><button class="btn btn-outline" onclick="OCFeatures.renameTimeline()">主線與世界觀設定</button><button class="btn btn-outline" id="timelineMakeMainButton" onclick="OCFeatures.setMainTimeline()">設為主時間線</button><button class="btn btn-outline" id="timelineLinksButton" onclick="OCFeatures.openTimelineLinks()" disabled>關聯時間線</button><button class="btn btn-danger" onclick="OCFeatures.deleteTimeline()">刪除主線</button><button class="btn btn-primary" onclick="OCFeatures.openEvent()">新增事件</button><label class="timeline-person-filter">關聯人物 <input type="search" autocomplete="off" name="oc_filter_timelineCharSearch" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" id="timelineCharSearch" class="filter-search-input" placeholder="搜尋人物" oninput="document.getElementById('timelineCharFilter').value='';OCFeatures.renderTimeline()"><select class="themed-select" id="timelineCharFilter" onchange="OCFeatures.renderTimeline()"><option value="">全部人物</option></select></label><button class="btn btn-outline" onclick="OCFeatures.openTimelineExportPreview()">預覽／導出文字</button><button class="btn btn-outline" onclick="OCFeatures.exportTimelineHtml()">導出視覺時間線</button></div>
+<div class="timeline-toolbar"><select class="themed-select" id="timelineSelect" aria-label="選擇時間線" onchange="OCFeatures.selectTimeline(this.value)"></select><button class="btn btn-outline" onclick="OCFeatures.renameTimeline()">主線與世界觀設定</button><button class="btn btn-outline" id="timelineMakeMainButton" onclick="OCFeatures.setMainTimeline()">設為主時間線</button><button class="btn btn-outline" id="timelineLinksButton" onclick="OCFeatures.openTimelineLinks()" disabled>關聯時間線</button><button class="btn btn-outline" id="timelineSortButton" onclick="OCFeatures.openTimelineSort()"><i class="fa-solid fa-arrow-down-wide-short"></i> 編輯節點順序</button><button class="btn btn-danger" onclick="OCFeatures.deleteTimeline()">刪除主線</button><button class="btn btn-primary" onclick="OCFeatures.openEvent()">新增事件</button><label class="timeline-person-filter">關聯人物 <input type="search" autocomplete="off" name="oc_filter_timelineCharSearch" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" id="timelineCharSearch" class="filter-search-input" placeholder="搜尋人物" oninput="document.getElementById('timelineCharFilter').value='';OCFeatures.renderTimeline()"><select class="themed-select" id="timelineCharFilter" onchange="OCFeatures.renderTimeline()"><option value="">全部人物</option></select></label><button class="btn btn-outline" onclick="OCFeatures.openTimelineExportPreview()">預覽／導出文字</button><button class="btn btn-outline" onclick="OCFeatures.exportTimelineHtml()">導出視覺時間線</button></div>
       <div id="timelineCanvas" class="timeline-canvas"></div>
     </section>
 
@@ -908,7 +910,7 @@
         <button class="close-btn" onclick="closeModal('cpModal')">&times;</button>
       </div>
       <div class="modal-body">
-        <input type="hidden" id="cpId">
+        <input type="hidden" id="cpId"><label class="draft-status-option"><input type="checkbox" id="cpIsHidden"> 存放於草稿區 <small>草稿不會供應用使用，可隨時移回正式卡庫。</small></label>
         <div class="form-group">
           <label>關係卡名稱 *</label>
           <input type="text" id="cpName" placeholder="如：角色 A × 角色 B／某某一家人">
@@ -1734,30 +1736,32 @@
   <!-- Scripts -->
   <script src="data.js"></script>
   <script src="reader-viewport.js?v=1.0"></script>
-  <script src="save-preference.js?v=1.0"></script>
-  <script src="app.js?v=31.8"></script>
-  <script src="tierlist.js?v=2.3"></script>
+  <script src="save-order.js?v=1.0"></script>
+  <script src="save-preference.js?v=1.1"></script>
+  <script src="app.js?v=32.0"></script>
+  <script src="record-policy.js?v=1.0"></script>
+  <script src="tierlist.js?v=32.0"></script>
   <script src="character-archive.js?v=1.4"></script>
   <script src="vn-script.js?v=1.4"></script>
-  <script src="vn-polish.js?v=1.0"></script>
-  <script src="interrogation.js?v=4.4"></script>
+  <script src="vn-polish.js?v=32.0"></script>
+  <script src="interrogation.js?v=32.0"></script>
   <script src="app-drawer.js?v=2.9"></script>
-  <script src="lottery.js?v=1.4"></script>
-  <script src="hogwarts-dorm.js?v=2.0"></script>
-  <script src="paro-layouts.js?v=1.8"></script>
-  <script src="scoreboard.js?v=1.1"></script>
-  <script src="music.js?v=2.0"></script>
-  <script src="features.js?v=31.4"></script>
+  <script src="lottery.js?v=32.0"></script>
+  <script src="hogwarts-dorm.js?v=32.0"></script>
+  <script src="paro-layouts.js?v=32.0"></script>
+  <script src="scoreboard.js?v=32.0"></script>
+  <script src="music.js?v=32.0"></script>
+  <script src="features.js?v=32.0"></script>
   <script src="vn-assets.js?v=26.1"></script>
-  <script src="vn-page.js?v=1.5"></script>
+  <script src="vn-page.js?v=32.0"></script>
   <script src="vn-layout.js?v=1.0"></script>
-  <script src="vn-library.js?v=1.0"></script>
+  <script src="vn-library.js?v=32.0"></script>
   <script src="forum-chat-core.js?v=21.52"></script>
   <script src="forum-core.js?v=21.52"></script>
   <script src="forum-chat.js?v=21.52"></script>
-  <script src="forum.js?v=21.52"></script>
-  <script src="cloud-sync-core.js?v=24.0"></script>
-  <script src="cloud-review.js?v=1.1"></script>
+  <script src="forum.js?v=32.0"></script>
+  <script src="cloud-sync-core.js?v=25.0"></script>
+  <script src="cloud-review.js?v=1.2"></script>
   <script src="cloud-sync.js?v=26.0"></script>
   <div class="modal-backdrop" id="timelineLinksModal"><div class="modal-box modal-sm timeline-links-modal"><div class="modal-header"><div><small>MAIN TIMELINE</small><h3>關聯其他時間線</h3></div><button class="close-btn" onclick="closeModal('timelineLinksModal',true)" aria-label="關閉">×</button></div><div class="modal-body"><p class="form-help">可以整條納入，或只挑選想顯示的事件。內容會即時引用來源資料，不會複製；編輯關聯事件會回到來源時間線。</p><label class="form-group"><span>來源時間線</span><select id="timelineLinkSourceSelect" class="themed-select" onchange="OCFeatures.renderTimelineLinkChoices(true)"></select></label><div id="timelineLinkChoices" class="timeline-link-choices"></div><div class="timeline-link-actions"><button type="button" class="btn btn-outline" onclick="OCFeatures.addTimelineLink('events')"><i class="fa-solid fa-list-check"></i> 關聯勾選事件</button><button type="button" class="btn btn-primary" onclick="OCFeatures.addTimelineLink('all')"><i class="fa-solid fa-layer-group"></i> 關聯整條時間線</button></div><section class="timeline-links-current"><h4>目前的關聯</h4><div id="timelineLinksList"></div></section></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('timelineLinksModal',true)">完成</button></div></div></div>
 </body>
