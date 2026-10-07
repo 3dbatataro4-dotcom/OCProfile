@@ -14,8 +14,8 @@
   const defaults=['S','A','B','C','D'].map((name,index)=>[name,palette[index][1]]);
   const quadrantDefaults=()=>({left:'左側',right:'右側',top:'上方',bottom:'下方',palette:1,points:[]});
   let editing=false,picker=null,pickerSet=new Set(),pickerSearch='',pickerFaction='',drag=null,nativeDragId='',nativeSourceTier='',dropPreview=null,textPreview=null,textPreviewReturnFocus=null,pngDialog=null,pickedId='',suppressTileClickUntil=0;
-  const roster=()=>characters.filter(char=>!char.isHidden);
-  const char=id=>characters.find(row=>String(row.id)===String(id));
+  const roster=()=>OCRecordPolicy.characters().filter(char=>!char.isHidden);
+  const char=id=>OCRecordPolicy.characters().find(row=>String(row.id)===String(id));
   const rank=()=>rankings.find(row=>String(row.id)===String(currentRankingSubjectId))||rankings[0];
   const tier=(list,id)=>list.tiers.find(row=>row.id===id);
   const save=()=>saveStateToLocalStorage();
