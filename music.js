@@ -7,7 +7,7 @@
   let dbPromise,items=[],view='home',query='',personFilter='',videoProjectFilter='',activeTrackId='',activePlaylistId='',queue=[],queueIndex=-1,audio=null,appOpen=false,themeMode='auto',loopMode=0,showLyrics=true,playerLyricsMode=false,objectUrls=new Map(),remoteUrls=new Map(),remotePending=new Map(),searchDebounce=0,pendingLyricReads=Promise.resolve();
   const characterRows=()=>typeof characters!=='undefined'&&Array.isArray(characters)?characters:(Array.isArray(window.characters)?window.characters:[]);
   const chars=()=>characterRows().filter(row=>row?.id&&row.name&&!row.isHidden);
-  const allChars=()=>characterRows().filter(row=>row?.id&&row.name);
+  const allChars=()=>OCRecordPolicy.characters().filter(row=>row?.id&&row.name);
   const charactersLabel=ids=>(ids||[]).map(id=>allChars().find(char=>String(char.id)===String(id))?.name).filter(Boolean).join('、');
   const displayArtist=track=>{const linked=charactersLabel(track?.artistIds),extra=track?.artistExtraText||'';return [linked,extra].filter(Boolean).join('、')||track?.artistText||'';};
   function db(){if(dbPromise)return dbPromise;dbPromise=new Promise((resolve,reject)=>{const request=indexedDB.open(DB_NAME,DB_VERSION);request.onupgradeneeded=()=>{const database=request.result;if(!database.objectStoreNames.contains(STORE))database.createObjectStore(STORE,{keyPath:'id'});};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error||new Error('無法開啟本機音樂資料庫。'));});return dbPromise;}
