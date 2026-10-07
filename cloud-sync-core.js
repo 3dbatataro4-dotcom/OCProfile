@@ -42,6 +42,7 @@
   function relationRows(character,names){const rows=new Map();for(const row of character?.relationships||[])if(row?.targetName||row?.targetId)rows.set(relationKey(row,names),row);return rows;}
   function characterCore(row){if(!row)return row;const value=clone(row);delete value.relationships;return value;}
   function mergeFields(left,right,before){const merged={},conflicts=[];for(const field of new Set([...Object.keys(before||{}),...Object.keys(left||{}),...Object.keys(right||{})])){const l=left?.[field],r=right?.[field],b=before?.[field];if(equal(l,r)){if(l!==undefined)merged[field]=clone(l);}else if(equal(l,b)){if(r!==undefined)merged[field]=clone(r);}else if(equal(r,b)){if(l!==undefined)merged[field]=clone(l);}else conflicts.push(field);}return {merged,conflicts};}
+  const Order=root.SaveOrder||(typeof require==='function'?require('./save-order.js'):null);
   const Preference=root.SavePreference||(typeof require==='function'?require('./save-preference.js'):null);
   const blank=value=>value===undefined||value===null||value===''||Array.isArray(value)&&value.length===0||value&&typeof value==='object'&&Object.keys(value).length===0;
   const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
@@ -50,8 +51,11 @@
     const changes=[],recordName=left.name||right.name||left.title||right.title||id;
     function visit(l,r,b,path){
       if(equal(l,r))return;
-      if(!['visualNovelPage','cues'].includes(path.at(-1))&&object(l)&&object(r)&&(b===undefined||object(b))){for(const key of new Set([...Object.keys(l),...Object.keys(r),...Object.keys(b||{})]))if(key!=='id')visit(l[key],r[key],b?.[key],[...path,key]);return;}
-      if(keyed(l)&&keyed(r)&&(b===undefined||keyed(b))){const lm=new Map(l.map(row=>[String(row.id),row])),rm=new Map(r.map(row=>[String(row.id),row])),bm=new Map((b||[]).map(row=>[String(row.id),row]));for(const key of new Set([...lm.keys(),...rm.keys(),...bm.keys()]))visit(lm.get(key),rm.get(key),bm.get(key),[...path,{id:key}]);return;}
+      if(!['visualNovelPage','cues'].includes(path.at(-1))&&object(l)&&object(r)&&(b===undefined||object(b))){for(const key of new Set([...Object.keys(l),...Object.keys(r),...Object.keys(b||{})]))if(key!=='id'&&!(key==='order'&&path.includes('events')))visit(l[key],r[key],b?.[key],[...path,key]);return;}
+      if(path.at(-1)!=='mainTimelineOrder'&&keyed(l)&&keyed(r)&&(b===undefined||keyed(b))){
+        const key=path.at(-1),lo=Order.ids(l,key),ro=Order.ids(r,key),bo=b?Order.ids(b,key):undefined;
+        if(!equal(lo,ro))changes.push({key:group+':'+id+':order:'+encodeURIComponent(JSON.stringify(path)),kind:'recordOrder',group,id,path,recordName,local:lo,remote:ro,base:bo,choice:Order.choice(lo,ro,bo),conflict:!!bo&&Order.changed(lo,bo)&&Order.changed(ro,bo),status:'整組排列順序'});
+        const lm=new Map(l.map(row=>[String(row.id),row])),rm=new Map(r.map(row=>[String(row.id),row])),bm=new Map((b||[]).map(row=>[String(row.id),row]));for(const key of new Set([...lm.keys(),...rm.keys(),...bm.keys()]))visit(lm.get(key),rm.get(key),bm.get(key),[...path,{id:key}]);return;}
       const removal=b!==undefined&&(l===undefined||r===undefined),unknown=!hasBase||b===undefined;
       const conflict=removal||(!unknown&&!equal(l,b)&&!equal(r,b))||(unknown&&!blank(l)&&!blank(r));
       const choice=conflict?(l===undefined?'remote':'local'):unknown?(blank(l)?'remote':'local'):equal(l,b)?'remote':'local';
@@ -60,7 +64,7 @@
     }
     visit(left,right,before,[]);return changes;
   }
-  function applyField(row,path,value){let target=row;for(let i=0;i<path.length-1;i++){const part=path[i],next=path[i+1];if(typeof part==='object'){let found=target.find(item=>String(item.id)===part.id);if(!found){found={id:part.id};target.push(found);}target=found;}else{if(!target[part]||typeof target[part]!=='object')target[part]=typeof next==='object'?[]:{};target=target[part];}}const last=path.at(-1);if(typeof last==='object'){const index=target.findIndex(item=>String(item.id)===last.id);if(index>=0)target.splice(index,1);if(value!==undefined)target.push(clone(value));}else if(value===undefined)delete target[last];else target[last]=clone(value);}
+  function applyField(row,path,value){let target=row;for(let i=0;i<path.length-1;i++){const part=path[i],next=path[i+1];if(typeof part==='object'){let found=target.find(item=>String(item.id)===part.id);if(!found){found={id:part.id};target.push(found);}target=found;}else{if(!target[part]||typeof target[part]!=='object')target[part]=typeof next==='object'?[]:{};target=target[part];}}const last=path.at(-1);if(typeof last==='object'){const index=target.findIndex(item=>String(item.id)===last.id);if(index>=0){if(value===undefined)target.splice(index,1);else target[index]=clone(value);}else if(value!==undefined)target.push(clone(value));}else if(value===undefined)delete target[last];else target[last]=clone(value);}
   function relationshipChanges(left,right,before,characterId,names){const l=relationRows(left,names),r=relationRows(right,names),b=relationRows(before,names),changes=[],fieldNames={callName:'稱呼',opinion:'看法',isMainline:'主線／番外',targetName:'對象名稱'};for(const targetKey of new Set([...l.keys(),...r.keys(),...b.keys()])){const local=l.get(targetKey),remote=r.get(targetKey),base=b.get(targetKey);if(equal(local,remote))continue;const merged=local&&remote?mergeFields(local,remote,base):null;const conflict=!!base&&(!local||!remote)||!!merged?.conflicts.length;const targetName=local?.targetName||remote?.targetName||base?.targetName||targetKey;changes.push({key:`characters:${characterId}:relationship:${encodeURIComponent(targetKey)}`,kind:'characterRelationship',group:'characters',id:characterId,characterId,targetKey,targetName,sourceName:left?.name||right?.name||before?.name||characterId,local,remote,base,merged:merged&&!merged.conflicts.length?merged.merged:null,conflict,status:conflict?(!local||!remote?'稱呼／看法的刪除需要確認':`同一對象的 ${merged.conflicts.map(field=>fieldNames[field]||field).join('、')} 同時被修改`):'不同對象或欄位自動合併',choice:conflict?(local?'local':'remote'):'merged'});}return changes;}
   function perspectiveChanges(left,right,before,characterId){const rows=value=>new Map((Array.isArray(value?.value)?value.value:[]).map(name=>[nameKey(name),name])),l=rows(left),r=rows(right),b=rows(before),changes=[];for(const targetKey of new Set([...l.keys(),...r.keys(),...b.keys()])){const local=l.get(targetKey),remote=r.get(targetKey),base=b.get(targetKey);if(local&&remote)continue;const conflict=!!base&&(!local||!remote);changes.push({key:`perspectiveTargets:${characterId}:${encodeURIComponent(targetKey)}`,kind:'perspectiveTarget',group:'perspectiveTargets',id:characterId,targetKey,targetName:local||remote||base,local,remote,base,conflict,status:conflict?'是否刪除此對象的視角項目':'新增視角對象',choice:local?'local':'remote'});}return changes;}
   function compare(local,remote,base=null){
@@ -69,6 +73,7 @@
     for(const group of collections[local.scope]){
       const l=new Map(local.data[group].map(r=>[String(r.id),r])),r=new Map(remote.data[group].map(r=>[String(r.id),r])),b=new Map((base?.data[group]||[]).map(r=>[String(r.id),r]));
       const names=group==='characters'?characterNames(local,remote,base):null;
+      let collectionOrderChange=null;if(local.scope==='workshop'&&['documents','books','timelines'].includes(group)){const lo=[...l.keys()],ro=[...r.keys()],bo=base?[...b.keys()]:undefined;if(!equal(lo,ro))collectionOrderChange={key:group+':collection-order',kind:'collectionOrder',group,id:'__collection_order__',recordName:({documents:'文章',books:'書籍',timelines:'時間線'})[group]+'排列順序',local:lo,remote:ro,base:bo,choice:Order.choice(lo,ro,bo),conflict:!!bo&&Order.changed(lo,bo)&&Order.changed(ro,bo),status:'完整清單的排列順序'};}
       for(const id of new Set([...l.keys(),...r.keys(),...b.keys()])){
         const left=l.get(id),right=r.get(id),before=b.get(id);if(equal(left,right))continue;
         if(group==='characters'&&left&&right){const lc=characterCore(left),rc=characterCore(right),bc=characterCore(before);if(!equal(lc,rc))result.push(...fieldChanges(group,id,lc,rc,bc,!!base));result.push(...relationshipChanges(left,right,before,id,names));continue;}
@@ -78,6 +83,7 @@
         const status=!left?(before?'本機已刪除':'雲端新增'):!right?(before?'雲端已刪除':'本機新增'):conflict?'雙方都有修改':'內容不同';
         result.push({key:group+':'+id,group,id,local:left,remote:right,base:before,conflict,status,choice:!right?'local':!left&&before?'local':!left?'remote':base&&equal(left,before)?'remote':'local'});
       }
+      if(collectionOrderChange)result.push(collectionOrderChange);
     }
     return result;
   }
@@ -85,13 +91,15 @@
     const changes=compare(local,remote,base);
     for(const d of changes){
       if(base&&d.base!==undefined&&!d.kind&&(d.local===undefined||d.remote===undefined))d.conflict=true;
+      if(['collectionOrder','recordOrder'].includes(d.kind)){d.choice=Order.choice(d.local,d.remote,d.base);d.recommendation='排列順序整組採用'+(d.choice==='local'?'本機':'雲端')+'，保留另一端新增項目';d.reviewRequired=true;continue;}
       if(d.kind==='recordField'){
         const key=d.path.at(-1);d.choice=Preference.choose(d.local,d.remote,typeof key==='string'?key:'','remote');
         if(d.path[0]==='visualNovelPage'){const l=local.data[d.group].find(row=>String(row.id)===d.id),r=remote.data[d.group].find(row=>String(row.id)===d.id);if(l?.visualNovel?.scriptText!==r?.visualNovel?.scriptText)d.choice=Preference.choose(l?.visualNovel?.scriptText,r?.visualNovel?.scriptText);}
-        if(Array.isArray(d.local)&&Array.isArray(d.remote)){d.merged=Preference.merge(d.local,d.remote);d.choice='merged';}
+        if(Array.isArray(d.local)&&Array.isArray(d.remote)){if(d.path.at(-1)==='mainTimelineOrder'){d.orderSource=Order.choice(Order.ids(d.local),Order.ids(d.remote),d.base?Order.ids(d.base):undefined);d.merged=Order.mergeRows(d.local,d.remote,d.base);}else d.merged=Preference.merge(d.local,d.remote);d.choice='merged';}
       }else if(d.kind==='characterRelationship'&&d.local&&d.remote){d.merged=Preference.merge(d.local,d.remote);d.choice='merged';}
       else d.choice=Preference.choose(d.local,d.remote);
       d.recommendation=d.choice==='merged'?'保留兩端新增內容，文字採用較完整版本':d.choice==='local'?'本機內容較多／雲端缺少，建議保留本機':'雲端內容較多或相同，建議採用雲端';
+      if(d.orderSource)d.recommendation='主線順序整組採用'+(d.orderSource==='local'?'本機':'雲端')+'，保留另一端新增節點';
       d.reviewRequired=d.conflict||d.choice==='local'&&!Preference.empty(d.local)||d.local===undefined||d.remote===undefined||Preference.amount(d.local)!==Preference.amount(d.remote);
     }
     return changes;
@@ -102,13 +110,18 @@
     for(const change of changes){const choice=decisions[change.key]||change.choice;if(choice==='local')continue;
       if(change.kind)continue;
       const rows=out.data[change.group],index=rows.findIndex(r=>String(r.id)===change.id);
-      if(choice==='remote'&&index>=0)rows.splice(index,1);
-      if(change.remote){const row=clone(change.remote);if(choice==='copy')row.id=maps[change.group].get(change.id)||row.id;rows.push(row);adopted.push([change.group,row]);}
+      
+      if(choice==='remote'&&change.remote===undefined&&index>=0)rows.splice(index,1);
+      if(change.remote){const row=clone(change.remote);if(choice==='copy')row.id=maps[change.group].get(change.id)||row.id;if(choice==='remote'&&index>=0)rows[index]=row;else rows.push(row);adopted.push([change.group,row]);}
     }
     for(const change of changes.filter(change=>change.kind==='recordField')){const row=out.data[change.group].find(row=>String(row.id)===change.id);if(!row)continue;const choice=decisions[change.key]||change.choice;applyField(row,change.path,choice==='merged'?change.merged:choice==='remote'?change.remote:change.local);}
     for(const change of changes.filter(change=>change.kind==='characterCore')){const choice=decisions[change.key]||change.choice;if(choice==='local')continue;const index=out.data.characters.findIndex(row=>String(row.id)===change.id),current=out.data.characters[index];if(index>=0&&current){const relationships=current.relationships;out.data.characters[index]={...clone(change.remote),...(relationships!==undefined?{relationships}:{})};}}
     for(const change of changes.filter(change=>change.kind==='characterRelationship')){const choice=decisions[change.key]||change.choice,selected=choice==='merged'?change.merged:choice==='remote'?change.remote:change.local;const character=out.data.characters.find(row=>String(row.id)===change.characterId);if(!character)continue;const names=characterNames(local,remote,null),rows=character.relationships||[];character.relationships=rows.filter(row=>relationKey(row,names)!==change.targetKey);if(selected)character.relationships.push(clone(selected));}
     for(const change of changes.filter(change=>change.kind==='perspectiveTarget')){const choice=decisions[change.key]||change.choice,selected=choice==='remote'?change.remote:change.local;let row=out.data.perspectiveTargets.find(item=>String(item.id)===change.id);if(!row){row={id:change.id,value:[]};out.data.perspectiveTargets.push(row);}row.value=(Array.isArray(row.value)?row.value:[]).filter(name=>nameKey(name)!==change.targetKey);if(selected)row.value.push(selected);}
+    for(const change of changes.filter(d=>['collectionOrder','recordOrder'].includes(d.kind))){const chosen=decisions[change.key]||change.choice,preferred=chosen==='local'?change.local:change.remote,other=chosen==='local'?change.remote:change.local;
+      if(change.kind==='collectionOrder')out.data[change.group]=Order.reorder(out.data[change.group],preferred,other);
+      else{const row=out.data[change.group].find(row=>String(row.id)===change.id);if(!row)continue;let array=row;for(const part of change.path)array=typeof part==='object'?array?.find(item=>String(item.id)===part.id):array?.[part];if(!Array.isArray(array))continue;const ordered=Order.reorder(array,preferred,other);array.splice(0,array.length,...ordered);if(change.path.at(-1)==='events')array.forEach((event,index)=>event.order=index+1);}
+    }
     const remap=(group,id)=>maps[group]?.get(String(id))??id;
     const identity=id=>maps.accounts?.get(String(id))??maps.users?.get(String(id))??id;
     function rewrite(value,key=''){
@@ -141,7 +154,7 @@
   }
   function delta(remote,next,note=''){
     remote=validate(remote);next=validate(next);if(remote.scope!==next.scope)throw new Error('增量同步區域不相符。');const changes=[],orders={};
-    for(const group of collections[next.scope]){const before=new Map(remote.data[group].map(row=>[String(row.id),row])),after=new Map(next.data[group].map(row=>[String(row.id),row])),start=changes.length;for(const id of new Set([...before.keys(),...after.keys()])){const value=after.get(id);if(!equal(before.get(id),value))changes.push({group,id,value:value===undefined?null:scrub(clone(value))});}if(changes.length>start)orders[group]=next.data[group].map(row=>String(row.id));}
+    for(const group of collections[next.scope]){const before=new Map(remote.data[group].map(row=>[String(row.id),row])),after=new Map(next.data[group].map(row=>[String(row.id),row])),start=changes.length;for(const id of new Set([...before.keys(),...after.keys()])){const value=after.get(id);if(!equal(before.get(id),value))changes.push({group,id,value:value===undefined?null:scrub(clone(value))});}if(changes.length>start||!equal(remote.data[group].map(row=>String(row.id)),next.data[group].map(row=>String(row.id))))orders[group]=next.data[group].map(row=>String(row.id));}
     return {format:'oc-cloud-delta',version:1,scope:next.scope,note:postgresSafeText(String(note||'')).slice(0,16),changes,orders};
   }
   const api={collections,mapFields,scrub,stable,equal,postgresSafeText,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge,delta};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
