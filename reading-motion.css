@@ -1,0 +1,22 @@
+/* Shared quiet transitions for document readers, book editors and timeline reading rooms. */
+:is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal){opacity:0;transition:opacity .2s ease,display .2s;transition-behavior:allow-discrete;animation:none}
+:is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal).active{opacity:1;animation:none}
+:is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal)>:is(.modal-box,.doc-reader-shell,.timeline-books-shell,.timeline-book-picker-shell){opacity:0;transform:translateY(12px);transition:opacity .2s ease,transform .24s cubic-bezier(.2,.75,.25,1)}
+:is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal).active>:is(.modal-box,.doc-reader-shell,.timeline-books-shell,.timeline-book-picker-shell){opacity:1;transform:translateY(0)}
+:is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal):not(.active){pointer-events:none}
+@starting-style{
+  :is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal).active{opacity:0}
+  :is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal).active>:is(.modal-box,.doc-reader-shell,.timeline-books-shell,.timeline-book-picker-shell){opacity:0;transform:translateY(12px)}
+}
+.timeline-primary-search{align-items:center;gap:10px}
+.timeline-search-field{display:flex;align-items:center;gap:10px;flex:1;min-width:160px;padding:0 13px;border:1px solid color-mix(in srgb,var(--accent-gold) 25%,var(--border-color));border-radius:13px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent-gold) 5%,var(--bg-card)),var(--bg-card));box-shadow:inset 0 1px 0 #ffffff16;transition:border-color .18s,box-shadow .18s}
+.timeline-search-field svg{width:17px;height:17px;flex:none;fill:none;stroke:var(--accent-gold);stroke-width:1.8;stroke-linecap:round}
+.timeline-search-field input{width:100%;min-width:0;border:0!important;box-shadow:none!important;outline:0;background:transparent!important;padding:12px 0;color:var(--text-main);font:inherit;font-size:13px}
+.timeline-search-field:focus-within{border-color:var(--accent-gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent-gold) 16%,transparent)}
+.timeline-primary-search label{padding:9px 11px;border:1px solid var(--border-color);border-radius:11px;background:var(--bg-secondary);font-size:12px;color:var(--text-muted)}
+.timeline-primary-search label:has(input:checked){color:var(--accent-gold);border-color:var(--accent-gold)}
+.timeline-primary-search input[type=checkbox]{accent-color:var(--accent-gold)}
+#timelinePrimaryCharacter{border-radius:12px;padding:11px 12px;border:1px solid var(--border-color);background:var(--bg-card);color:var(--text-main);font:inherit;font-size:13px}
+.choice-search,#timelineCharSearch,#timelineEventReadingSearch{border:1px solid color-mix(in srgb,var(--accent-gold) 25%,var(--border-color));border-radius:12px;color:var(--text-main);padding:11px 13px 11px 38px;background-color:var(--bg-card);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23b88746' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='m16 16 5 5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px center;transition:border-color .18s,box-shadow .18s}
+.choice-search:focus,#timelineCharSearch:focus,#timelineEventReadingSearch:focus{outline:0;border-color:var(--accent-gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent-gold) 16%,transparent)}
+@media(prefers-reduced-motion:reduce){:is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal),:is(#bookModal,#documentModal,#documentReaderModal,#timelineBooksModal,#timelineBookPickerModal)>:is(.modal-box,.doc-reader-shell,.timeline-books-shell,.timeline-book-picker-shell){transition:none;animation:none;transform:none}}
