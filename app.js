@@ -450,7 +450,7 @@ function renderAllViews() {
 
 function updateBadges() {
   const activeCount = characters.filter(c => !c.isHidden).length;
-  const hiddenCount = characters.filter(c => c.isHidden).length;
+  const hiddenCount = characters.filter(c => c.isHidden).length + cps.filter(c => c.isHidden).length;
   document.getElementById("activeCharBadge").innerText = activeCount;
   document.getElementById("hiddenCharBadge").innerText = hiddenCount;
 }
@@ -513,6 +513,7 @@ function renderCharacterCards() {
   hiddenGrid.innerHTML = hiddenChars.length ? hiddenChars.map(c => createCharacterCardHtml(c, true, expandedCharacterCards.has(c.id))).join('') : 
     `<div class="empty-state"><p>目前沒有草稿或隱藏的角色。</p></div>`;
 
+  renderDraftCps();
   updateCharacterDetailsToggle();
   updateBadges();
 }
@@ -590,7 +591,7 @@ function createCharacterCardHtml(char, isHidden = false, expanded = false) {
       <div class="char-card-footer">
         <div class="char-card-actions">
           <button class="btn btn-xs btn-outline" onclick="toggleHideCharacter('${char.id}')">
-            <i class="fa-solid ${char.isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i> ${char.isHidden ? '取消隱藏' : '隱藏'}
+            <i class="fa-solid ${char.isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i> ${char.isHidden ? '移回正式卡庫' : '移至草稿區'}
           </button>
         </div>
         <div class="char-card-actions">
@@ -670,6 +671,7 @@ function normalizeCpRecord(cp) {
   if (Array.isArray(cp.members)) {
     return {
       id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      isHidden: !!cp.isHidden,
       name: cp.name || "未命名關係",
       type: cp.type === "other" ? "other" : "cp",
       relationType: cp.relationType || "",
@@ -695,6 +697,7 @@ function normalizeCpRecord(cp) {
   if (cp.r18Notes && !sections.some(s => s.title === "關係狀況補充")) sections.push({ title: "關係狀況補充", content: cp.r18Notes });
   return {
     id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      isHidden: !!cp.isHidden,
     name: cp.name || "未命名關係",
     type: cp.type === "other" ? "other" : "cp",
     relationType: cp.relationType || "",
@@ -759,7 +762,7 @@ function renderCpModule() {
   const grid = document.getElementById("cpGrid");
   if (!grid) return;
   const typeFilter = document.getElementById('cpTypeFilter')?.value || 'all';
-  const visibleCps = cps.filter(cp => typeFilter === 'all' || (typeFilter === 'cp' ? cp.type !== 'other' : cp.type === 'other'));
+  const visibleCps = cps.filter(cp => !cp.isHidden).filter(cp => typeFilter === 'all' || (typeFilter === 'cp' ? cp.type !== 'other' : cp.type === 'other'));
   const count = document.getElementById('cpVisibleCount');
   if (count) count.textContent = String(visibleCps.length);
 
@@ -773,9 +776,13 @@ function renderCpModule() {
     return;
   }
 
-  grid.innerHTML = visibleCps.map(rawCp => {
+  grid.innerHTML = visibleCps.map(cp => createCpCardHtml(cp)).join('');
+  updateCpDetailsToggle();
+}
+
+function createCpCardHtml(rawCp, draft = false) {
     const cp = normalizeCpRecord(rawCp);
-    const memberChars = (cp.members || []).map(member => characters.find(c => c.id === member.charId)).filter(Boolean);
+    const memberChars = (cp.members || []).map(member => (draft ? characters : OCRecordPolicy.characters()).find(c => c.id === member.charId)).filter(Boolean);
     const gradientColors = resolveCpGradientColors(cp, memberChars);
     const gradientCss = cpGradientCss(gradientColors);
     const avatarsHtml = memberChars.map(c => `
@@ -788,7 +795,7 @@ function renderCpModule() {
     }).join(' ');
 
     const memberDetailsHtml = (cp.members || []).map(member => {
-      const char = characters.find(c => c.id === member.charId);
+      const char = (draft ? characters : OCRecordPolicy.characters()).find(c => c.id === member.charId);
       if (!char) return '';
       return `<div class="cp-member-card"><strong>${escapeHtml(char.name)}</strong>${cp.type !== 'other' && member.r18 ? `<div><small>R18／互動狀況：</small><span style="white-space:pre-line;">${escapeHtml(member.r18)}</span></div>` : ''}${member.thoughts ? `<div><small>對關係／其他成員的看法：</small><span style="white-space:pre-line;">${escapeHtml(member.thoughts)}</span></div>` : ''}</div>`;
     }).join('');
@@ -816,12 +823,23 @@ function renderCpModule() {
           <div class="cp-sections">${sectionsHtml}</div>
         </div>
         ${window.OCFeatures?.cpGalleryPreviewHtml?.(cp) || ''}
-        <div class="cp-card-footer"><button class="btn btn-xs btn-outline" onclick="openCpModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯關係</button></div>
+        <div class="cp-card-footer"><button class="btn btn-xs btn-outline" onclick="toggleHideCp('${cp.id}')"><i class="fa-solid ${cp.isHidden?'fa-eye':'fa-eye-slash'}"></i> ${cp.isHidden?'移回正式卡庫':'移至草稿區'}</button><button class="btn btn-xs btn-outline" onclick="openCpModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯關係</button></div>
       </div>
     `;
-  }).join('');
-  updateCpDetailsToggle();
 }
+
+function renderDraftCps() {
+  const grid=document.getElementById('hiddenCpGrid');if(!grid)return;
+  const rows=cps.filter(cp=>cp.isHidden);
+  grid.innerHTML=rows.length?rows.map(cp=>createCpCardHtml(cp,true)).join(''):'<div class="empty-state"><p>目前沒有 CP 草稿。</p></div>';
+  const chars=document.getElementById('draftCharacterCount'),count=document.getElementById('draftCpCount');
+  if(chars)chars.textContent=characters.filter(c=>c.isHidden).length;if(count)count.textContent=rows.length;
+}
+function switchDraftTab(kind) {
+  document.querySelectorAll('[data-draft-tab]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.draftTab===kind)));
+  document.getElementById('draftCharactersPanel').hidden=kind!=='characters';document.getElementById('draftCpsPanel').hidden=kind!=='cps';
+}
+function toggleHideCp(id) {const cp=cps.find(row=>row.id===id);if(!cp)return;cp.isHidden=!cp.isHidden;saveStateToLocalStorage();renderAllViews();}
 
 function openCpModal(cpId = null) {
   const modal = document.getElementById("cpModal");
@@ -838,6 +856,7 @@ function openCpModal(cpId = null) {
     document.getElementById("cpModalTitle").innerText = `編輯 CP：${cp.name}`;
     document.getElementById("cpId").value = cp.id;
     document.getElementById("cpName").value = cp.name;
+    document.getElementById("cpIsHidden").checked = !!cp.isHidden;
     document.getElementById("cpType").value = cp.type || "cp";
     document.getElementById("cpRelationType").value = cp.relationType || "";
     document.getElementById("cpUseCustomGradient").checked = !!cp.gradientColors?.length;
@@ -855,6 +874,7 @@ function openCpModal(cpId = null) {
     document.getElementById("cpModalTitle").innerText = "新建 CP 組合";
     document.getElementById("cpId").value = "";
     document.getElementById("cpName").value = "";
+    document.getElementById("cpIsHidden").checked = document.getElementById("tab-hidden").classList.contains("active");
     document.getElementById("cpType").value = "cp";
     document.getElementById("cpRelationType").value = "";
     document.getElementById("cpUseCustomGradient").checked = false;
@@ -862,7 +882,7 @@ function openCpModal(cpId = null) {
 
     cbContainer.innerHTML = activeChars.map(c => `
       <label class="checkbox-pill">
-        <input type="checkbox" value="${c.id}" ${ (activeChars.slice(0, 2).map(x=>x.id)).includes(c.id) ? 'checked' : '' } onchange="renderCpMemberInputs(); updateCpGradientEditor()">
+        <input type="checkbox" value="${c.id}" ${ !document.getElementById('cpIsHidden').checked && (activeChars.slice(0, 2).map(x=>x.id)).includes(c.id) ? 'checked' : '' } onchange="renderCpMemberInputs(); updateCpGradientEditor()">
         <span>${c.name}</span>
       </label>
     `).join('');
@@ -994,7 +1014,9 @@ function saveCpForm() {
     ...(type === "cp" ? { r18: (row.querySelector(".cp-member-r18")?.value || "").trim() } : {}),
     thoughts: row.querySelector(".cp-member-thoughts").value.trim()
   }));
-  if (members.length < 2) { alert("關係卡請至少選擇兩位人物！"); return; }
+  const dormant=(cps.find(cp=>cp.id===id)?.members||[]).filter(member=>!OCRecordPolicy.character(member.charId));
+  members.push(...dormant);
+  if (members.length < 2 && !document.getElementById("cpIsHidden").checked) { alert("正式關係卡請至少選擇兩位人物；也可以先存放於草稿區。"); return; }
 
   const secRows = document.querySelectorAll("#cpCustomSectionsContainer .cp-sec-row");
   const customSections = Array.from(secRows).map(row => ({
@@ -1005,6 +1027,7 @@ function saveCpForm() {
 
   const cpData = {
     id: id || `cp_${Date.now()}`,
+    isHidden: document.getElementById("cpIsHidden").checked,
     name,
     type,
     relationType,
@@ -1021,7 +1044,7 @@ function saveCpForm() {
   }
 
   saveStateToLocalStorage();
-  renderCpModule();
+  renderAllViews();
   closeModal("cpModal");
 }
 
@@ -1031,7 +1054,7 @@ function deleteCp(cpId) {
   cps = cps.filter(c => c.id !== cpId);
   expandedCpCards.delete(cpId);
   saveStateToLocalStorage();
-  renderCpModule();
+  renderAllViews();
   return true;
 }
 
@@ -1731,7 +1754,7 @@ function relationshipForTarget(subject,target) {
 }
 
 function openRelationshipForTarget(sourceId,targetId) {
-  const subject=characters.find(row=>String(row.id)===String(sourceId)),target=characters.find(row=>String(row.id)===String(targetId));
+  const subject=OCRecordPolicy.character(sourceId),target=OCRecordPolicy.character(targetId);
   if(!subject||!target)return;
   const rel=relationshipForTarget(subject,target)||{};
   openRelationshipModal(subject.id,target.name,rel.callName||'',rel.opinion||'',rel.isMainline!==false);
@@ -1763,7 +1786,7 @@ function renderCallNameMatrix() {
     if(!perspectiveTargets[subject.id].length)perspectiveTargets[subject.id]=characters.filter(char=>!char.isHidden&&char.id!==subject.id).slice(0,5).map(char=>char.name);
   }
   const names=perspectiveTargets[subject.id];
-  const allTargets=characters.filter(char=>char.id!==subject.id&&(!char.isHidden||char.isAiPlaceholder)&&names.some(name=>sameCharacterName(name,char.name)));
+  const allTargets=characters.filter(char=>char.id!==subject.id&&!char.isHidden&&names.some(name=>sameCharacterName(name,char.name)));
   const targets=allTargets;
   if(count)count.textContent=`${targets.length} 位對象`;
   const actions=target=>`<div class="rel-card-actions"><button type="button" class="btn btn-xs btn-outline" data-rel-edit="${escapeHtml(target.id)}" data-rel-source="${escapeHtml(subject.id)}"><i class="fa-solid fa-pen"></i> 編輯</button><button type="button" class="btn btn-xs btn-outline rel-remove" data-rel-remove="${escapeHtml(target.id)}" data-rel-source="${escapeHtml(subject.id)}" aria-label="移除 ${escapeHtml(target.name)}"><i class="fa-solid fa-user-minus"></i></button></div>`;
@@ -2650,6 +2673,7 @@ function saveParoForm() {
   const checkedMembers = Array.from(document.querySelectorAll("#paroCharCheckboxes input:checked")).map(cb => cb.value);
 
   const existingParo = id ? paros.find(p => p.id === id) : null;
+  checkedMembers.push(...(existingParo?.members||[]).filter(id=>!OCRecordPolicy.character(id)));
   const paroData = {
     ...(existingParo || {}),
     id: id || `paro_${Date.now()}`,
@@ -2717,7 +2741,7 @@ function renderFactionMemberPicker() {
   const key = categorySelect.value;
   if (!factionMemberDraft.has(key)) factionMemberDraft.set(key, new Set());
   const query = (document.getElementById('factionMemberSearch')?.value || '').trim().toLocaleLowerCase();
-  const members = characters.filter(char => !query || [char.name,char.englishName,...(Array.isArray(char.aliases)?char.aliases:[])].some(value => String(value||'').toLocaleLowerCase().includes(query)));
+  const members = OCRecordPolicy.characters().filter(char => !query || [char.name,char.englishName,...(Array.isArray(char.aliases)?char.aliases:[])].some(value => String(value||'').toLocaleLowerCase().includes(query)));
   list.innerHTML = `<div class="faction-member-picker-summary">${factionMemberDraft.get(key).size} 位人物已加入此分類</div>${members.length ? members.map(char => `<label class="faction-member-choice"><input type="checkbox" data-faction-member-id="${escapeHtml(char.id)}" ${factionMemberDraft.get(key).has(String(char.id))?'checked':''} onchange="toggleFactionMember(this)"><img src="${escapeHtml(char.avatar || 'https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png')}" alt=""><span>${escapeHtml(char.name || '未命名人物')}</span>${char.isHidden?'<small>隱藏</small>':''}</label>`).join('') : '<p class="faction-member-empty">沒有符合的人物</p>'}`;
 }
 
@@ -3062,7 +3086,7 @@ function renderDocumentsModule() {
   const filterFn = (doc) => {
     if (doc.hideFromDocuments) return false;
     const matchSearch = !searchKeyword || doc.title.toLowerCase().includes(searchKeyword) || (doc.content && doc.content.toLowerCase().includes(searchKeyword));
-    const matchChar = selectedCharId ? (doc.charIds || []).includes(selectedCharId) : !typedChar || (doc.charIds || []).some(id=>String(characters.find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
+    const matchChar = selectedCharId ? (doc.charIds || []).includes(selectedCharId) : !typedChar || (doc.charIds || []).some(id=>String(OCRecordPolicy.characters().find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
     const matchFaction = !selectedFactionId || (doc.factionIds || []).includes(selectedFactionId);
     const matchTag = !selectedTag || (doc.tags || []).includes(selectedTag);
     return matchSearch && matchChar && matchFaction && matchTag;
@@ -3077,7 +3101,7 @@ function renderDocumentsModule() {
     if (book.hideFromDocuments) return false;
     if (!filtersActive) return true;
     const bookSearch = !searchKeyword || `${book.title || ''} ${book.description || ''}`.toLowerCase().includes(searchKeyword);
-    const bookChar = selectedCharId ? (book.charIds || []).includes(selectedCharId) : !typedChar || (book.charIds || []).some(id=>String(characters.find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
+    const bookChar = selectedCharId ? (book.charIds || []).includes(selectedCharId) : !typedChar || (book.charIds || []).some(id=>String(OCRecordPolicy.characters().find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
     const bookFaction = !selectedFactionId || (book.factionIds || []).includes(selectedFactionId);
     const bookTag = !selectedTag || (book.tags || []).includes(selectedTag);
     return (bookSearch && bookChar && bookFaction && bookTag) || filteredDocs.some(doc => doc.bookId === book.id);
@@ -3092,7 +3116,7 @@ function renderDocumentsModule() {
     const bookDocs = (bookDirectMatch ? documents.filter(d => !d.hideFromDocuments) : filteredDocs).filter(d => d.bookId === book.id).sort(sortByTitle);
     const bookCharacterCount = documents.filter(d => d.bookId === book.id).reduce((total, doc) => total + countDocumentBodyCharacters(doc), 0);
     const isCollapsed = !!collapsedBooks[book.id];
-    const memberChars = (book.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
+    const memberChars = (book.charIds || []).map(id => OCRecordPolicy.characters().find(c => c.id === id)).filter(Boolean);
     const memberFactions = (book.factionIds || []).map(id => factions.find(f => f.id === id)).filter(Boolean);
     const bookIconColor = book.iconColor || 'var(--accent-gold)';
     const bookTagsHtml = (book.tags || []).map(tag => `<span class="tag-pill">${tag}</span>`).join(' ');
@@ -3149,7 +3173,7 @@ function renderDocumentsModule() {
 }
 
 function renderSingleDocItemHtml(doc) {
-  const docChars = (doc.charIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean);
+  const docChars = (doc.charIds || []).map(id => OCRecordPolicy.characters().find(c => c.id === id)).filter(Boolean);
   const docFactions = (doc.factionIds || []).map(id => factions.find(f => f.id === id)).filter(Boolean);
   const tagsHtml = (doc.tags || []).map(t => `<span class="tag-pill">${t}</span>`).join(' ');
 
@@ -3235,6 +3259,7 @@ function saveBookForm() {
   if (!title) { alert("請輸入書籍標題！"); return; }
 
   const checkedCharIds = Array.from(document.querySelectorAll("#bookCharCheckboxes input:checked")).map(cb => cb.value);
+  checkedCharIds.push(...(books.find(row=>row.id===id)?.charIds||[]).filter(id=>!OCRecordPolicy.character(id)));
   const checkedFactionIds = Array.from(document.querySelectorAll("#bookFactionCheckboxes input:checked")).map(cb => cb.value);
 
   const bookData = {
@@ -3341,7 +3366,7 @@ function openDocumentReader(docId) {
   if (!doc) return;
   currentReadingDocId = doc.id;
   const book = books.find(item => item.id === doc.bookId);
-  const docChars = (doc.charIds || []).map(id => characters.find(c => c.id === id)?.name).filter(Boolean);
+  const docChars = (doc.charIds || []).map(id => OCRecordPolicy.characters().find(c => c.id === id)?.name).filter(Boolean);
   const docFactions = (doc.factionIds || []).map(id => factions.find(f => f.id === id)?.name).filter(Boolean);
   document.getElementById("docReaderTitle").textContent = doc.title;
   document.getElementById("docReaderMeta").textContent = [book?.title, docChars.length ? `角色：${docChars.join('、')}` : "", docFactions.length ? `世界觀：${docFactions.join('、')}` : "", (doc.tags || []).length ? `標籤：${doc.tags.join('、')}` : ""].filter(Boolean).join(" ｜ ");
@@ -3389,6 +3414,7 @@ function saveDocumentForm() {
   if (!title) { alert("請輸入文檔標題！"); return; }
 
   const checkedCharIds = Array.from(document.querySelectorAll("#docCharCheckboxes input:checked")).map(cb => cb.value);
+  checkedCharIds.push(...(documents.find(row=>row.id===id)?.charIds||[]).filter(id=>!OCRecordPolicy.character(id)));
   const checkedFactionIds = Array.from(document.querySelectorAll("#docFactionCheckboxes input:checked")).map(cb => cb.value);
 
   const docData = {
@@ -3489,7 +3515,7 @@ const DEFAULT_VN_AVATAR = "https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%
 
 function getDefaultVisualNovelSettings(doc) {
   const book = books.find(item => item.id === doc?.bookId);
-  const firstCharacter = (doc?.charIds || []).map(id => characters.find(char => char.id === id)).find(Boolean);
+  const firstCharacter = (doc?.charIds || []).map(id => OCRecordPolicy.characters().find(char => char.id === id)).find(Boolean);
   return {
     primaryColor: firstCharacter?.themeColor?.primary || book?.iconColor || "#d97706",
     secondaryColor: firstCharacter?.themeColor?.secondary || "#7c3aed",
@@ -3591,12 +3617,12 @@ function openVisualNovelCharacterProfiles(){
   const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value);if(!doc)return;document.getElementById('vnCharacterProfilesModal')?.remove();const profiles=doc.visualNovel?.characterProfiles||[];
   const modal=document.createElement('div');modal.id='vnCharacterProfilesModal';modal.className='modal-backdrop active vn-character-profiles-backdrop';modal.innerHTML=`<div class="modal-box modal-md" onclick="event.stopPropagation()"><div class="modal-header"><h3>人物頭像／名稱自定義</h3><button class="close-btn" onclick="document.getElementById('vnCharacterProfilesModal').remove()">×</button></div><div class="modal-body"><div id="vnCharacterProfileRows"></div><div class="vn-profile-add-row"><select id="vnProfileCharacterPicker"></select><button class="btn btn-outline" onclick="addVisualNovelCharacterProfile()"><i class="fa-solid fa-plus"></i> 加入本文角色</button></div><label class="form-group">整體補充指示<textarea id="vnCharacterProfileNotes" rows="4" placeholder="例如：本文採某角色第一人稱；『我』對應某角色。">${escapeHtml(doc.visualNovel?.characterProfileNotes||'')}</textarea></label></div><div class="modal-footer"><button class="btn btn-outline" onclick="document.getElementById('vnCharacterProfilesModal').remove()">取消</button><button class="btn btn-primary" onclick="saveVisualNovelCharacterProfiles()">保存設定</button></div></div>`;document.body.appendChild(modal);renderVisualNovelCharacterProfiles(profiles);
 }
-function renderVisualNovelCharacterProfiles(profiles){const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value),rows=document.getElementById('vnCharacterProfileRows');rows.dataset.profiles=JSON.stringify(profiles);rows.innerHTML=profiles.map((profile,index)=>{const char=characters.find(item=>item.id===profile.charId);return `<div class="vn-character-profile-row"><img src="${escapeHtml(profile.avatar||char?.avatar||DEFAULT_VN_AVATAR)}" onclick="chooseVisualNovelProfileAvatar(${index})" title="點擊從預設頭像選擇"><div><strong>${escapeHtml(char?.name||'角色')}</strong><input data-key="displayName" data-index="${index}" value="${escapeHtml(profile.displayName||char?.name||'')}" placeholder="小說中的顯示名稱"><input data-key="avatar" data-index="${index}" value="${escapeHtml(profile.avatar||char?.avatar||'')}" placeholder="顯示頭像網址"><input data-key="aliases" data-index="${index}" value="${escapeHtml(profile.aliases||'')}" placeholder="別名／稱呼，以逗號分隔"></div><button class="btn btn-xs btn-danger" onclick="removeVisualNovelCharacterProfile(${index})">×</button></div>`}).join('')||'<p class="empty-state">尚未加入角色。請從下方選單加入。</p>';const picker=document.getElementById('vnProfileCharacterPicker');if(picker){const available=getDocumentPossibleCharacters(doc).filter(char=>!profiles.some(item=>item.charId===char.id));picker.innerHTML=available.map(char=>`<option value="${char.id}">${escapeHtml(char.name)}</option>`).join('');picker.disabled=!available.length;}}
+function renderVisualNovelCharacterProfiles(profiles){const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value),rows=document.getElementById('vnCharacterProfileRows');rows.dataset.profiles=JSON.stringify(profiles);rows.innerHTML=profiles.map((profile,index)=>{if(!OCRecordPolicy.character(profile.charId))return '';const char=OCRecordPolicy.characters().find(item=>item.id===profile.charId);return `<div class="vn-character-profile-row"><img src="${escapeHtml(profile.avatar||char?.avatar||DEFAULT_VN_AVATAR)}" onclick="chooseVisualNovelProfileAvatar(${index})" title="點擊從預設頭像選擇"><div><strong>${escapeHtml(char?.name||'角色')}</strong><input data-key="displayName" data-index="${index}" value="${escapeHtml(profile.displayName||char?.name||'')}" placeholder="小說中的顯示名稱"><input data-key="avatar" data-index="${index}" value="${escapeHtml(profile.avatar||char?.avatar||'')}" placeholder="顯示頭像網址"><input data-key="aliases" data-index="${index}" value="${escapeHtml(profile.aliases||'')}" placeholder="別名／稱呼，以逗號分隔"></div><button class="btn btn-xs btn-danger" onclick="removeVisualNovelCharacterProfile(${index})">×</button></div>`}).join('')||'<p class="empty-state">尚未加入角色。請從下方選單加入。</p>';const picker=document.getElementById('vnProfileCharacterPicker');if(picker){const available=getDocumentPossibleCharacters(doc).filter(char=>!profiles.some(item=>item.charId===char.id));picker.innerHTML=available.map(char=>`<option value="${char.id}">${escapeHtml(char.name)}</option>`).join('');picker.disabled=!available.length;}}
 function chooseVisualNovelProfileAvatar(index){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]'),choices=[...PRESET_AVATARS,...customPresetAvatars];document.getElementById('vnProfileAvatarPickerModal')?.remove();const modal=document.createElement('div');modal.id='vnProfileAvatarPickerModal';modal.className='modal-backdrop active vn-character-profiles-backdrop';modal.innerHTML=`<div class="modal-box modal-md" onclick="event.stopPropagation()"><div class="modal-header"><h3>選擇顯示頭像</h3><button class="close-btn" onclick="this.closest('.modal-backdrop').remove()">×</button></div><div class="modal-body"><div class="avatar-gallery-grid">${choices.map(item=>`<button class="avatar-thumb-item" onclick="applyVisualNovelProfileAvatar(${index},'${String(item.url).replace(/'/g,"&#39;")}')"><img src="${item.url}" alt="${escapeHtml(item.name)}"></button>`).join('')}</div></div></div>`;document.body.appendChild(modal);}
 function applyVisualNovelProfileAvatar(index,url){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]');profiles[index].avatar=url;document.getElementById('vnProfileAvatarPickerModal')?.remove();renderVisualNovelCharacterProfiles(profiles);}
-function addVisualNovelCharacterProfile(){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]'),char=characters.find(item=>item.id===document.getElementById('vnProfileCharacterPicker').value);if(char&&!profiles.some(item=>item.charId===char.id)){profiles.push({charId:char.id,displayName:char.name,avatar:char.avatar,aliases:''});renderVisualNovelCharacterProfiles(profiles);}}
+function addVisualNovelCharacterProfile(){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]'),char=OCRecordPolicy.characters().find(item=>item.id===document.getElementById('vnProfileCharacterPicker').value);if(char&&!profiles.some(item=>item.charId===char.id)){profiles.push({charId:char.id,displayName:char.name,avatar:char.avatar,aliases:''});renderVisualNovelCharacterProfiles(profiles);}}
 function removeVisualNovelCharacterProfile(index){const profiles=JSON.parse(document.getElementById('vnCharacterProfileRows').dataset.profiles||'[]');profiles.splice(index,1);renderVisualNovelCharacterProfiles(profiles);}
-function saveVisualNovelCharacterProfiles(){const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value),rows=document.getElementById('vnCharacterProfileRows'),profiles=JSON.parse(rows.dataset.profiles||'[]');rows.querySelectorAll('input[data-index]').forEach(input=>profiles[Number(input.dataset.index)][input.dataset.key]=input.value.trim());const notes=document.getElementById('vnCharacterProfileNotes').value.trim();doc.visualNovel=doc.visualNovel||{};doc.visualNovel.characterProfiles=profiles;doc.visualNovel.characterProfileNotes=notes;document.getElementById('vnAiCustomPrompt').value=[...profiles.flatMap(profile=>{const char=characters.find(item=>item.id===profile.charId);return String(profile.aliases||'').split(/[,，/]/).filter(Boolean).map(alias=>`${alias.trim()} = ${char?.name||profile.displayName}`)}),notes].filter(Boolean).join('\n');saveStateToLocalStorage();document.getElementById('vnCharacterProfilesModal').remove();}
+function saveVisualNovelCharacterProfiles(){const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value),rows=document.getElementById('vnCharacterProfileRows'),profiles=JSON.parse(rows.dataset.profiles||'[]');rows.querySelectorAll('input[data-index]').forEach(input=>profiles[Number(input.dataset.index)][input.dataset.key]=input.value.trim());const notes=document.getElementById('vnCharacterProfileNotes').value.trim();doc.visualNovel=doc.visualNovel||{};doc.visualNovel.characterProfiles=profiles;doc.visualNovel.characterProfileNotes=notes;document.getElementById('vnAiCustomPrompt').value=[...profiles.filter(profile=>OCRecordPolicy.character(profile.charId)).flatMap(profile=>{const char=OCRecordPolicy.characters().find(item=>item.id===profile.charId);return String(profile.aliases||'').split(/[,，/]/).filter(Boolean).map(alias=>`${alias.trim()} = ${char?.name||profile.displayName}`)}),notes].filter(Boolean).join('\n');saveStateToLocalStorage();document.getElementById('vnCharacterProfilesModal').remove();}
 
 function openVisualNovelEditorFromDocumentModal() {
   const docId = document.getElementById("docId").value;
@@ -3858,7 +3884,7 @@ function parseVisualNovelSpeakerResponse(content) {
 function getDocumentPossibleCharacters(doc) {
   const book = books.find(item => item.id === doc?.bookId);
   const ids = [...new Set([...(doc?.charIds || []), ...(book?.charIds || [])])];
-  return ids.map(id => characters.find(character => character.id === id)).filter(Boolean);
+  return ids.map(id => OCRecordPolicy.characters().find(character => character.id === id)).filter(Boolean);
 }
 
 function generateVisualNovelLocally() {
@@ -3928,8 +3954,8 @@ function parseVisualNovelSpeakerAliases(customPromptText) {
     if (parts.length >= 2) {
       const p1 = parts[0];
       const p2 = parts[1];
-      const char2 = characters.find(c => normalizedImportName(c.name) === normalizedImportName(p2) || c.name.includes(p2));
-      const char1 = characters.find(c => normalizedImportName(c.name) === normalizedImportName(p1) || c.name.includes(p1));
+      const char2 = OCRecordPolicy.characters().find(c => normalizedImportName(c.name) === normalizedImportName(p2) || c.name.includes(p2));
+      const char1 = OCRecordPolicy.characters().find(c => normalizedImportName(c.name) === normalizedImportName(p1) || c.name.includes(p1));
       if (char2) {
         aliasToChar.set(p1, char2);
         aliasToChar.set(normalizedImportName(p1), char2);
@@ -4150,8 +4176,8 @@ function preloadVisualNovelChapterMedia(doc, events, settings) {
     let character = currentVisualNovelSpeakerAliases?.aliasToChar?.get(rawSpeaker)
       || currentVisualNovelSpeakerAliases?.aliasToChar?.get(normalizedImportName(rawSpeaker));
     if (!character) {
-      const resolved = normalizeVisualNovelSpeaker(rawSpeaker, characters);
-      character = characters.find(item => normalizedImportName(item.name) === normalizedImportName(resolved));
+      const resolved = normalizeVisualNovelSpeaker(rawSpeaker, OCRecordPolicy.characters());
+      character = OCRecordPolicy.characters().find(item => normalizedImportName(item.name) === normalizedImportName(resolved));
     }
     const profile = profiles.find(item => item.charId === character?.id);
     avatarSources.add(profile?.avatar || character?.avatar || DEFAULT_VN_AVATAR);
@@ -4618,8 +4644,8 @@ function executeVisualNovelEvent(event) {
       character = currentVisualNovelSpeakerAliases.aliasToChar.get(normalizedImportName(rawSpeaker));
       displaySpeaker = rawSpeaker;
     } else {
-      const resolvedSpeaker = normalizeVisualNovelSpeaker(rawSpeaker, characters);
-      character = characters.find(item => normalizedImportName(item.name) === normalizedImportName(resolvedSpeaker));
+      const resolvedSpeaker = normalizeVisualNovelSpeaker(rawSpeaker, OCRecordPolicy.characters());
+      character = OCRecordPolicy.characters().find(item => normalizedImportName(item.name) === normalizedImportName(resolvedSpeaker));
       if (character && currentVisualNovelSpeakerAliases?.charToAlias?.has(character.name)) {
         displaySpeaker = currentVisualNovelSpeakerAliases.charToAlias.get(character.name);
       } else if (character && currentVisualNovelSpeakerAliases?.charToAlias?.has(normalizedImportName(character.name))) {
@@ -5323,7 +5349,7 @@ async function generateExportText() {
   }
 
   const selectedCharIds = Array.from(document.querySelectorAll(".export-char-cb:checked")).map(cb => cb.value);
-  const targetChars = characters.filter(c => selectedCharIds.includes(c.id));
+  const targetChars = OCRecordPolicy.characters().filter(c => selectedCharIds.includes(c.id));
   const selectedCharNames = targetChars.map(c => c.name);
 
   if (mode === 'character_archive') {
@@ -5344,7 +5370,7 @@ async function generateExportText() {
 
   if (mode === 'cps_only') {
     text = `# 【CP 關係細節獨立報告】\n生成時間：${new Date().toLocaleString()}\n\n`;
-    cps.forEach(rawCp => {
+    OCRecordPolicy.cps().forEach(rawCp => {
       const cp = normalizeCpRecord(rawCp);
       text += `## ${cp.type === 'other' ? (cp.relationType || '其他關係') : 'CP'}: ${cp.name}\n`;
       (cp.members || []).forEach(member => {
@@ -5445,7 +5471,7 @@ async function generateExportText() {
     if (incCp) {
       text += `\n===================================\n`;
       text += `## 【CP 關係細節 (僅所選角色相關)】\n\n`;
-      cps.forEach(rawCp => {
+      OCRecordPolicy.cps().forEach(rawCp => {
         const cp = normalizeCpRecord(rawCp);
         const hasSelectedChar = (cp.members || []).some(member => selectedCharIds.includes(member.charId));
         if (hasSelectedChar) {
@@ -5827,13 +5853,15 @@ function prepareAdvancedImport(data, fileName) {
         const { visualNovel, visualNovelPage, bookId, charIds = [], factionIds = [], ...article } = item;
         return { ...article, book:currentBookName(bookId), characters:charIds.map(id => characters.find(char => String(char.id) === String(id))?.name || id).sort(), factions:factionIds.map(id => factions.find(faction => String(faction.id) === String(id))?.name || id).sort() };
       } },
+    { type:"timeline", incoming:Array.isArray(data.timelines)?data.timelines:[],current:timelines,getIncoming:item=>item.name,getCurrent:item=>item.name },
     { type:"vnTemplate", incoming:Array.isArray(data.visualNovelTemplates) ? data.visualNovelTemplates : [], current:visualNovelTemplates, getIncoming:item => item.name, getCurrent:item => item.name }
   ];
 
   collections.forEach(({ type, incoming, current, getIncoming, getCurrent, compareIncoming = item => item, compareCurrent = item => item }) => {
     incoming.forEach((record, importedIndex) => {
       const recordName = normalizedImportName(getIncoming(record));
-      const currentIndex = recordName ? current.findIndex(item => normalizedImportName(getCurrent(item)) === recordName) : -1;
+      const idMatch=current.findIndex(item=>record.id!=null&&String(item.id)===String(record.id));
+      const currentIndex = idMatch>=0?idMatch:recordName ? current.findIndex(item => normalizedImportName(getCurrent(item)) === recordName) : -1;
       if (currentIndex >= 0 && importRecordsDiffer(compareCurrent(current[currentIndex]), compareIncoming(record))) {
         pendingImportConflicts.push({
           key: `${type}_${importedIndex}`, type, name: record.name || record.title || record.subject || "（未命名）",
@@ -5861,7 +5889,8 @@ function prepareAdvancedImport(data, fileName) {
 
 function renderAdvancedImportConflicts(fileName, importedCharacters, importedFactions) {
   document.getElementById('advancedImportSummary').textContent=fileName+'：缺少的項目會加入；同名項目逐欄預選資訊較完整的版本，可再手動調整。';
-  const groups={character:'characters',faction:'factions',paro:'paros',ranking:'rankings',cp:'cps',book:'books',document:'documents',visualNovel:'documents',vnTemplate:'visualNovelTemplates'};
+  const groups={character:'characters',faction:'factions',paro:'paros',ranking:'rankings',cp:'cps',book:'books',document:'documents',visualNovel:'documents',vnTemplate:'visualNovelTemplates',timeline:'timelines'};
+  let orderPicker=document.getElementById('advancedImportOrderPreference');if(!orderPicker){const label=document.createElement('label');label.className='import-order-preference';label.innerHTML='書籍、文章與時間線清單的排列順序<select id="advancedImportOrderPreference"><option value="remote">採用讀檔排列，保留本機新增項目</option><option value="local">保留本機排列，加入讀檔新增項目</option></select>';document.getElementById('advancedImportSummary').after(label);orderPicker=label.querySelector('select');}orderPicker.value='remote';
   const left={},right={};
   for(const conflict of pendingImportConflicts){
     conflict.reviewGroup=groups[conflict.type];
@@ -5908,7 +5937,8 @@ function mergeImportedNamedRecords(current, incoming, type, idMap, transform = v
   (Array.isArray(incoming) ? incoming : []).forEach((raw, importedIndex) => {
     const record = transform(raw);
     const identity = normalizedImportName(identityFn(record));
-    const sameIndex = identity ? result.findIndex(item => normalizedImportName(identityFn(item)) === identity) : -1;
+    const idIndex=result.findIndex(item=>raw.id!=null&&String(item.id)===String(raw.id));
+    const sameIndex = idIndex>=0?idIndex:identity ? result.findIndex(item => normalizedImportName(identityFn(item)) === identity) : -1;
     const oldId = raw.id;
     if (sameIndex >= 0) {
       const conflict = pendingImportConflicts.find(item => item.type === type && item.importedIndex === importedIndex);
@@ -5932,7 +5962,8 @@ function applyAdvancedImport() {
   const data = pendingAdvancedImport;
   const preview=pendingImportReview?.items[0];
   if(preview)pendingImportResults=CloudSyncCore.merge(preview.local,preview.remote,preview.changes,preview.decisions);
-  const charIdMap = new Map(), factionIdMap = new Map(), paroIdMap = new Map(), bookIdMap = new Map();
+  const charIdMap = new Map(), factionIdMap = new Map(), paroIdMap = new Map(), bookIdMap = new Map(),documentIdMap=new Map(),timelineIdMap=new Map();
+  const previousOrders={books:books.map(row=>String(row.id)),documents:documents.map(row=>String(row.id)),timelines:timelines.map(row=>String(row.id))};
 
   characters = mergeImportedNamedRecords(characters, data.characters, "character", charIdMap);
   factions = mergeImportedNamedRecords(factions, data.factions, "faction", factionIdMap);
@@ -5965,16 +5996,18 @@ function applyAdvancedImport() {
   cps = mergeImportedNamedRecords(cps, normalizeCpCollection(data.cps || data.couples || []), "cp", new Map(), record => ({
     ...record, members: (record.members || []).map(member => ({ ...member, charId: charIdMap.get(String(member.charId)) ?? member.charId }))
   }));
-  documents = mergeImportedNamedRecords(documents, data.documents, "document", new Map(), record => ({
+  documents = mergeImportedNamedRecords(documents, data.documents, "document", documentIdMap, record => ({
     ...record,
     bookId: bookIdMap.get(String(record.bookId)) ?? record.bookId,
     charIds: remapImportIds(record.charIds, charIdMap),
     factionIds: remapImportIds(record.factionIds, factionIdMap)
   }), record => `${record.title}@@${record.bookId || "standalone"}`);
-  if(Array.isArray(data.timelines)){
-    const known=new Set(timelines.map(item=>String(item.id)));
-    data.timelines.forEach(raw=>{if(!raw?.id||known.has(String(raw.id)))return;timelines.push({...raw,factionId:factionIdMap.get(String(raw.factionId))??raw.factionId,events:(raw.events||[]).map(event=>({...event,charIds:remapImportIds(event.charIds,charIdMap)}))});known.add(String(raw.id));});
-  }
+  timelines=mergeImportedNamedRecords(timelines,data.timelines,'timeline',timelineIdMap,record=>({...record,factionId:factionIdMap.get(String(record.factionId))??record.factionId,events:(record.events||[]).map(event=>({...event,charIds:remapImportIds(event.charIds,charIdMap),primaryCharId:charIdMap.get(String(event.primaryCharId))??event.primaryCharId}))}));
+  for(const timeline of timelines){for(const link of timeline.linkedTimelines||[])link.timelineId=timelineIdMap.get(String(link.timelineId))??link.timelineId;for(const item of timeline.mainTimelineOrder||[])if(item.timelineId)item.timelineId=timelineIdMap.get(String(item.timelineId))??item.timelineId;}
+  const incomingOrder=(rows,map)=>(Array.isArray(rows)?rows:[]).map(row=>String(map.get(String(row.id))??row.id));
+  const useLocalOrder=document.getElementById('advancedImportOrderPreference')?.value==='local';
+  const arrange=(rows,group,map)=>{const incoming=incomingOrder(data[group],map),local=previousOrders[group];return SaveOrder.reorder(rows,useLocalOrder?local:incoming,useLocalOrder?incoming:local);};
+  books=arrange(books,'books',bookIdMap);documents=arrange(documents,'documents',documentIdMap);timelines=arrange(timelines,'timelines',timelineIdMap);
   if(Array.isArray(data.mediaLibrary)){
     const known=new Set(mediaLibrary.map(item=>String(item.id)));
     data.mediaLibrary.forEach(raw=>{if(!raw?.id||known.has(String(raw.id)))return;mediaLibrary.push({...raw,charIds:remapImportIds(raw.charIds,charIdMap)});known.add(String(raw.id));});
