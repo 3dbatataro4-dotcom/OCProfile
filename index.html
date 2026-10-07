@@ -43,12 +43,14 @@
   <link rel="stylesheet" href="vn-library.css?v=1.0">
   <link rel="stylesheet" href="forum.css?v=21.52">
   <link rel="stylesheet" href="forum-chat.css?v=19.1">
-  <link rel="stylesheet" href="cloud-sync.css?v=21.52">
-  <link rel="stylesheet" href="features.css?v=31.0">
+  <link rel="stylesheet" href="cloud-sync.css?v=26.1">
+  <link rel="stylesheet" href="features.css?v=31.3">
   <link rel="stylesheet" href="features-timeline.css?v=1.4">
   <link rel="stylesheet" href="timeline-books.css?v=1.2">
-  <link rel="stylesheet" href="character-archive.css?v=1.1">
+  <link rel="stylesheet" href="timeline-design.css?v=1.1">
+  <link rel="stylesheet" href="character-archive.css?v=1.2">
   <link rel="stylesheet" href="interrogation.css?v=4.4">
+  <link rel="stylesheet" href="reading-motion.css?v=1.0">
 </head>
 <body>
 
@@ -1725,16 +1727,17 @@
     <nav class="album-bottom-nav" aria-label="相簿導覽"><button type="button" id="cloudAlbumPhotosTab" onclick="OCFeatures.showAlbumHome('photos')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="8" r="1.5"/><path d="m4 17 6-6 4 4 3-3 4 5"/></svg><span>照片</span></button><button type="button" id="cloudAlbumAlbumsTab" onclick="OCFeatures.showAlbumHome('albums')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="6" width="16" height="15" rx="3"/><path d="M17 3H6a3 3 0 0 0-3 3v11M9 16l3-4 5 5"/></svg><span>相簿</span></button><span class="album-nav-note">每個片刻，都值得收藏。</span></nav>
     <div class="album-sheet-backdrop" id="cloudAlbumSheet" hidden><section class="album-sheet" role="dialog" aria-modal="true" aria-labelledby="cloudAlbumSheetTitle"><div class="album-sheet-handle"></div><h3 id="cloudAlbumSheetTitle">新增相簿</h3><p>給這份收藏一個喜歡的名字。</p><label for="cloudAlbumName">相簿名稱</label><input id="cloudAlbumName" maxlength="100" placeholder="例如：旅途、靈感、喜歡的畫面" onkeydown="if(event.key==='Enter'){event.preventDefault();OCFeatures.submitAlbumSheet();}"><div class="album-sheet-actions"><button type="button" class="album-text-button" onclick="OCFeatures.closeAlbumSheet()">取消</button><button type="button" class="album-primary-action" onclick="OCFeatures.submitAlbumSheet()" id="cloudAlbumSheetSubmit">建立相簿</button></div><p class="album-status" id="cloudAlbumSheetStatus" role="status"></p></section></div>
   </div></div>
-  <div class="modal-backdrop media-viewer" id="mediaViewerModal"><div class="media-viewer-bar"><span id="mediaViewerCaption"></span><div><button onclick="OCFeatures.downloadViewedImage()" title="下載圖片"><i class="fa-solid fa-download"></i> 下載</button><button onclick="OCFeatures.closeImageViewer()" title="關閉圖片">×</button></div></div><div class="media-viewer-stage" id="mediaViewerStage"><img id="mediaViewerImage" alt="圖片瀏覽"></div><div class="media-viewer-controls"><button id="mediaViewerPrev" onclick="OCFeatures.stepImage(-1)" aria-label="上一張圖片">‹</button><span id="mediaViewerPosition" aria-live="polite"></span><button id="mediaViewerNext" onclick="OCFeatures.stepImage(1)" aria-label="下一張圖片">›</button><button onclick="OCFeatures.zoomImage(-1)" aria-label="縮小">−</button><span id="mediaViewerZoom">100%</span><button onclick="OCFeatures.zoomImage(1)" aria-label="放大">＋</button><button onclick="OCFeatures.resetImageZoom()">還原</button></div></div>
+  <div class="modal-backdrop media-viewer" id="mediaViewerModal"><div class="media-viewer-bar"><span id="mediaViewerCaption"></span><div><button id="mediaViewerDelete" hidden onclick="OCFeatures.deleteViewedAlbumImage()" title="刪除照片" aria-label="刪除照片">刪除</button><button onclick="OCFeatures.downloadViewedImage()" title="下載圖片"><i class="fa-solid fa-download"></i> 下載</button><button onclick="OCFeatures.closeImageViewer()" title="關閉圖片">×</button></div></div><div class="media-viewer-stage" id="mediaViewerStage"><img id="mediaViewerImage" alt="圖片瀏覽"></div><div class="media-viewer-controls"><button id="mediaViewerPrev" onclick="OCFeatures.stepImage(-1)" aria-label="上一張圖片">‹</button><span id="mediaViewerPosition" aria-live="polite"></span><button id="mediaViewerNext" onclick="OCFeatures.stepImage(1)" aria-label="下一張圖片">›</button><button onclick="OCFeatures.zoomImage(-1)" aria-label="縮小">−</button><span id="mediaViewerZoom">100%</span><button onclick="OCFeatures.zoomImage(1)" aria-label="放大">＋</button><button onclick="OCFeatures.resetImageZoom()">還原</button></div></div>
 <div class="modal-backdrop vn-asset-backdrop" id="vnAssetModal"><div class="modal-box modal-lg vn-asset-shell"><div class="modal-header"><div><small>VISUAL NOVEL LIBRARY</small><h3 id="vnAssetTitle">選擇素材</h3></div><button class="close-btn" onclick="OCVnAssets.close()">×</button></div><div class="modal-body"><div class="vn-asset-tabs"><button id="vnAssetTabLibrary" onclick="OCVnAssets.showTab('library')">素材庫</button><button id="vnAssetTabUrl" onclick="OCVnAssets.showTab('url')">輸入網址</button><button id="vnAssetTabUpload" onclick="OCVnAssets.showTab('upload')">本機上傳</button></div><section id="vnAssetLibraryPane"><div class="vn-asset-filters"><input type="search" autocomplete="off" name="oc_filter_vnAssetSearch" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" id="vnAssetSearch" placeholder="搜尋標題或標籤" oninput="OCVnAssets.render()"><select id="vnAssetTagFilter" onchange="OCVnAssets.render()"><option value="">所有標籤</option></select></div><div id="vnAssetGrid" class="vn-asset-grid"></div><p class="form-help">長按素材可預覽，點一下即可插入劇本。</p></section><section id="vnAssetUrlPane" hidden><div class="form-group"><label>素材網址</label><input id="vnAssetUrl" type="url" placeholder="https://..." oninput="OCVnAssets.urlChanged()"></div><div class="vn-asset-url-preview" id="vnAssetUrlPreview"></div><label class="vn-asset-save-toggle"><input type="checkbox" id="vnAssetSaveUrl" onchange="OCVnAssets.toggleSaveFields()"> 同時存入素材庫</label><div id="vnAssetUrlMeta" hidden><div class="form-group"><label>素材標題</label><input id="vnAssetUrlTitle" maxlength="100"></div><div class="form-group"><label>獨立標籤（逗號分隔）</label><input id="vnAssetUrlTags" placeholder="例如：學校場景、夜晚"></div></div><button class="btn btn-primary" onclick="OCVnAssets.insertUrl()">插入劇本</button></section><section id="vnAssetUploadPane" hidden><div class="vn-asset-drop"><i class="fa-solid fa-cloud-arrow-up"></i><strong>選擇本機素材</strong><small>先存於本機；雲端備份時會同步至 R2</small><input type="file" id="vnAssetFile" onchange="OCVnAssets.fileChanged()"></div><label class="vn-asset-save-toggle"><input type="checkbox" id="vnAssetRememberFile" onchange="OCVnAssets.toggleFileFields()"> 同時加入素材庫</label><div id="vnAssetFileMeta" hidden><div class="form-group"><label>標題</label><input id="vnAssetFileTitle" maxlength="100"></div><div class="form-group"><label>獨立標籤（逗號分隔）</label><input id="vnAssetFileTags" placeholder="例如：緊張、腳步聲"></div></div><p id="vnAssetStatus" role="status"></p><button class="btn btn-primary" onclick="OCVnAssets.saveFile()">上傳並插入劇本</button><div id="vnAssetInlineFiles" class="vn-inline-files"></div></section></div></div></div>
   <div class="modal-backdrop" id="vnAssetPreviewModal"><div class="modal-box modal-sm vn-asset-preview-shell"><div class="modal-header"><h3 id="vnAssetPreviewTitle">素材預覽</h3><button class="close-btn" onclick="OCVnAssets.closePreview()">×</button></div><div class="modal-body" id="vnAssetPreviewBody"></div><div class="modal-footer"><button class="btn btn-outline" onclick="OCVnAssets.closePreview()">返回</button><button class="btn btn-primary" onclick="OCVnAssets.insertPreviewed()">插入劇本</button></div></div></div>
 
   <!-- Scripts -->
   <script src="data.js"></script>
   <script src="reader-viewport.js?v=1.0"></script>
-  <script src="app.js?v=31.7"></script>
+  <script src="save-preference.js?v=1.0"></script>
+  <script src="app.js?v=31.8"></script>
   <script src="tierlist.js?v=2.3"></script>
-  <script src="character-archive.js?v=1.3"></script>
+  <script src="character-archive.js?v=1.4"></script>
   <script src="vn-script.js?v=1.4"></script>
   <script src="vn-polish.js?v=1.0"></script>
   <script src="interrogation.js?v=4.4"></script>
@@ -1743,8 +1746,8 @@
   <script src="hogwarts-dorm.js?v=2.0"></script>
   <script src="paro-layouts.js?v=1.8"></script>
   <script src="scoreboard.js?v=1.1"></script>
-  <script src="music.js?v=1.9"></script>
-  <script src="features.js?v=31.0"></script>
+  <script src="music.js?v=2.0"></script>
+  <script src="features.js?v=31.4"></script>
   <script src="vn-assets.js?v=26.1"></script>
   <script src="vn-page.js?v=1.5"></script>
   <script src="vn-layout.js?v=1.0"></script>
@@ -1753,8 +1756,9 @@
   <script src="forum-core.js?v=21.52"></script>
   <script src="forum-chat.js?v=21.52"></script>
   <script src="forum.js?v=21.52"></script>
-  <script src="cloud-sync-core.js?v=22.0"></script>
-  <script src="cloud-sync.js?v=24.2"></script>
+  <script src="cloud-sync-core.js?v=24.0"></script>
+  <script src="cloud-review.js?v=1.1"></script>
+  <script src="cloud-sync.js?v=26.0"></script>
   <div class="modal-backdrop" id="timelineLinksModal"><div class="modal-box modal-sm timeline-links-modal"><div class="modal-header"><div><small>MAIN TIMELINE</small><h3>關聯其他時間線</h3></div><button class="close-btn" onclick="closeModal('timelineLinksModal',true)" aria-label="關閉">×</button></div><div class="modal-body"><p class="form-help">可以整條納入，或只挑選想顯示的事件。內容會即時引用來源資料，不會複製；編輯關聯事件會回到來源時間線。</p><label class="form-group"><span>來源時間線</span><select id="timelineLinkSourceSelect" class="themed-select" onchange="OCFeatures.renderTimelineLinkChoices(true)"></select></label><div id="timelineLinkChoices" class="timeline-link-choices"></div><div class="timeline-link-actions"><button type="button" class="btn btn-outline" onclick="OCFeatures.addTimelineLink('events')"><i class="fa-solid fa-list-check"></i> 關聯勾選事件</button><button type="button" class="btn btn-primary" onclick="OCFeatures.addTimelineLink('all')"><i class="fa-solid fa-layer-group"></i> 關聯整條時間線</button></div><section class="timeline-links-current"><h4>目前的關聯</h4><div id="timelineLinksList"></div></section></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('timelineLinksModal',true)">完成</button></div></div></div>
 </body>
 </html>
