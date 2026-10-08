@@ -23,7 +23,7 @@
   const equal=(a,b)=>stable(a)===stable(b);
   function snapshot(scope,source){
     if(!collections[scope])throw new Error('未知同步區域。');
-    const data={};for(const k of collections[scope])data[k]=mapFields.has(k)?Object.entries(source[k]||{}).map(([id,value])=>({id,value:scrub(value)})):scrub(clone(source[k]||[]));
+    const data={};for(const k of collections[scope])data[k]=scope==='workshop'&&k==='timelines'?scrub(Order.timelines(source[k]||[])):mapFields.has(k)?Object.entries(source[k]||{}).map(([id,value])=>({id,value:scrub(value)})):scrub(clone(source[k]||[]));
     return validate({format:'oc-cloud-save',version:1,scope,data});
   }
   function validate(payload){
@@ -48,7 +48,7 @@
   const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
   const keyed=value=>Array.isArray(value)&&value.every(row=>object(row)&&row.id!==undefined)&&new Set(value.map(row=>String(row.id))).size===value.length;
   function fieldChanges(group,id,left,right,before,hasBase){
-    const changes=[],recordName=left.name||right.name||left.title||right.title||id;
+    const changes=[],recordName=left.name||right.name||left.title||right.title||left.subject||right.subject||id;
     function visit(l,r,b,path){
       if(equal(l,r))return;
       if(!['visualNovelPage','cues'].includes(path.at(-1))&&object(l)&&object(r)&&(b===undefined||object(b))){for(const key of new Set([...Object.keys(l),...Object.keys(r),...Object.keys(b||{})]))if(key!=='id'&&!(key==='order'&&path.includes('events')))visit(l[key],r[key],b?.[key],[...path,key]);return;}
@@ -73,7 +73,7 @@
     for(const group of collections[local.scope]){
       const l=new Map(local.data[group].map(r=>[String(r.id),r])),r=new Map(remote.data[group].map(r=>[String(r.id),r])),b=new Map((base?.data[group]||[]).map(r=>[String(r.id),r]));
       const names=group==='characters'?characterNames(local,remote,base):null;
-      let collectionOrderChange=null;if(local.scope==='workshop'&&['documents','books','timelines'].includes(group)){const lo=[...l.keys()],ro=[...r.keys()],bo=base?[...b.keys()]:undefined;if(!equal(lo,ro))collectionOrderChange={key:group+':collection-order',kind:'collectionOrder',group,id:'__collection_order__',recordName:({documents:'文章',books:'書籍',timelines:'時間線'})[group]+'排列順序',local:lo,remote:ro,base:bo,choice:Order.choice(lo,ro,bo),conflict:!!bo&&Order.changed(lo,bo)&&Order.changed(ro,bo),status:'完整清單的排列順序'};}
+      let collectionOrderChange=null;if(local.scope==='workshop'&&['documents','books','timelines','rankings'].includes(group)){const lo=[...l.keys()],ro=[...r.keys()],bo=base?[...b.keys()]:undefined;if(!equal(lo,ro))collectionOrderChange={key:group+':collection-order',kind:'collectionOrder',group,id:'__collection_order__',recordName:({documents:'文章',books:'書籍',timelines:'時間線',rankings:'排名'})[group]+'排列順序',local:lo,remote:ro,base:bo,choice:Order.choice(lo,ro,bo),conflict:!!bo&&Order.changed(lo,bo)&&Order.changed(ro,bo),status:'完整清單的排列順序'};}
       for(const id of new Set([...l.keys(),...r.keys(),...b.keys()])){
         const left=l.get(id),right=r.get(id),before=b.get(id);if(equal(left,right))continue;
         if(group==='characters'&&left&&right){const lc=characterCore(left),rc=characterCore(right),bc=characterCore(before);if(!equal(lc,rc))result.push(...fieldChanges(group,id,lc,rc,bc,!!base));result.push(...relationshipChanges(left,right,before,id,names));continue;}
@@ -133,6 +133,8 @@
       if(key==='forumRoles'&&value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([id,role])=>[remap('boards',id),role]));
       if(key==='likedBy'&&Array.isArray(value))return value.map(identity);
       if(key==='folderIds'&&Array.isArray(value))return value.map(id=>remap('favoriteFolders',id));
+      if(key==='linkedBookIds'&&Array.isArray(value))return value.map(id=>remap('books',id));
+      if(key==='linkedDocumentIds'&&Array.isArray(value))return value.map(id=>remap('documents',id));
       if(key==='charIds'||key==='factionIds')return value.map(id=>remap(key==='charIds'?'characters':'factions',id));
       if(key==='paroValues'&&value)return Object.fromEntries(Object.entries(value).map(([id,v])=>[remap(local.scope==='forum'?'worlds':'paros',id),v]));
       if(Array.isArray(value))return value.map(v=>key==='members'&&typeof v==='string'?remap('characters',v):rewrite(v));
