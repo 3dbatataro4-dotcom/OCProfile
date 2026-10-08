@@ -131,7 +131,7 @@ begin
   end if;
 
   allowed_groups := case when p_scope = 'workshop' then
-    array['characters','paros','factions','rankings','cps','books','documents','visualNovelTemplates','visualNovelPreferences','collapsedBooks','perspectiveTargets']
+    array['characters','paros','factions','rankings','cps','books','documents','timelines','mediaLibrary','visualNovelTemplates','visualNovelPreferences','collapsedBooks','perspectiveTargets']
   else
     array['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']
   end;
@@ -148,7 +148,7 @@ begin
     if group_name is null or not (group_name = any(allowed_groups)) or coalesce(item_id, '') = '' then raise exception 'INVALID_DELTA_ITEM'; end if;
     rows := coalesce(next_payload #> array['data', group_name], '[]'::jsonb);
     if jsonb_typeof(rows) <> 'array' then raise exception 'INVALID_DELTA_GROUP'; end if;
-    select coalesce(jsonb_agg(value), '[]'::jsonb) into rows from jsonb_array_elements(rows) where value->>'id' <> item_id;
+    select coalesce(jsonb_agg(value order by ordinal), '[]'::jsonb) into rows from jsonb_array_elements(rows) with ordinality as existing(value, ordinal) where value->>'id' <> item_id;
     if item ? 'value' and jsonb_typeof(item->'value') <> 'null' then
       if jsonb_typeof(item->'value') <> 'object' or item->'value'->>'id' <> item_id then raise exception 'INVALID_DELTA_VALUE'; end if;
       rows := rows || jsonb_build_array(item->'value');
