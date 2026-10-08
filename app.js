@@ -279,6 +279,7 @@ function loadStateFromLocalStorage() {
 }
 
 function saveStateToLocalStorage() {
+  timelines=SaveOrder.timelines(timelines);
   const safePut=window.ocSafeSetLocalStorage||((key,value)=>localStorage.setItem(key,value));
   const put=(key,value)=>safePut(key,typeof value==='string'?value:JSON.stringify(value));
   put("oc_theme", currentTheme);
@@ -446,6 +447,7 @@ function renderAllViews() {
   renderDocumentsModule();
   renderExportCharList();
   window.OCFeatures?.renderAll?.();
+  if(window.OCCpLibrary?.activeCp?.())window.OCCpLibrary.render();
 }
 
 function updateBadges() {
@@ -670,6 +672,7 @@ function normalizeCpRecord(cp) {
   // 2026-08-31 舊版 couples 格式：保留每位成員各自的定位、R18 與感想。
   if (Array.isArray(cp.members)) {
     return {
+      ...cp,
       id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       isHidden: !!cp.isHidden,
       name: cp.name || "未命名關係",
@@ -696,6 +699,7 @@ function normalizeCpRecord(cp) {
   if (cp.relationshipThoughts && !sections.some(s => s.title === "關係總體感想")) sections.push({ title: "關係總體感想", content: cp.relationshipThoughts });
   if (cp.r18Notes && !sections.some(s => s.title === "關係狀況補充")) sections.push({ title: "關係狀況補充", content: cp.r18Notes });
   return {
+    ...cp,
     id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       isHidden: !!cp.isHidden,
     name: cp.name || "未命名關係",
@@ -812,6 +816,7 @@ function createCpCardHtml(rawCp, draft = false) {
         <div class="cp-theme-cover" aria-hidden="true"></div>
         <div class="cp-card-hero">
           <div class="cp-avatars-row">${avatarsHtml}</div>
+          <button type="button" class="char-card-archive-button cp-card-library-button" onclick="OCCpLibrary.open('${cp.id}')" aria-label="閱讀${escapeHtml(cp.name)}的 CP 文庫" title="CP 文庫"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5c3-1.4 5.7-1.2 8 .2v15c-2.3-1.4-5-1.6-8-.2V5.5Zm10 .2c2.3-1.4 5-1.6 8-.2v15c-3-1.4-5.7-1.2-8 .2v-15Z"/></svg></button>
           <button type="button" class="cp-card-details-toggle" onclick="toggleCpCard(this)" aria-expanded="${expandedCpCards.has(cp.id)}" aria-label="${expandedCpCards.has(cp.id)?'收起':'展開'} CP 詳情" title="${expandedCpCards.has(cp.id)?'收起':'展開'}完整關係"><i class="fa-solid fa-chevron-down"></i></button>
         </div>
         <div class="cp-card-content">
@@ -1026,6 +1031,7 @@ function saveCpForm() {
   })).filter(s => s.title);
 
   const cpData = {
+    ...(cps.find(cp=>cp.id===id)||{}),
     id: id || `cp_${Date.now()}`,
     isHidden: document.getElementById("cpIsHidden").checked,
     name,
@@ -5317,7 +5323,7 @@ function renderExportCharList() {
 
   const rankContainer = document.getElementById("exportRankingList");
   if (rankContainer) {
-    rankContainer.innerHTML = rankings.filter(r => r.mode !== 'quadrant').map(r => `
+    rankContainer.innerHTML = rankings.filter(r => r.textExportEnabled !== false && r.mode !== 'quadrant').map(r => `
       <label class="checkbox-label">
         <input type="checkbox" class="export-rank-cb" value="${r.id}" checked>
         <span>${r.subject}</span>
@@ -5358,7 +5364,7 @@ async function generateExportText() {
   }
 
   const selectedRankIds = Array.from(document.querySelectorAll(".export-rank-cb:checked")).map(cb => cb.value);
-  const targetRankings = rankings.filter(r => r.mode !== 'quadrant' && selectedRankIds.includes(r.id));
+  const targetRankings = rankings.filter(r => r.textExportEnabled !== false && r.mode !== 'quadrant' && selectedRankIds.includes(r.id));
 
   const selectedParoIds = Array.from(document.querySelectorAll(".export-paro-cb:checked")).map(cb => cb.value);
   const targetParos = paros.filter(p => selectedParoIds.includes(p.id));
@@ -5580,7 +5586,7 @@ function downloadExportPdf() {
 
 // ========== 12. 線上快照同步 ==========
 function openCloudSyncModal() {
-  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, timelines, mediaLibrary, visualNovelTemplates, customPresetAvatars, collapsedBooks, exportedAt: new Date().toISOString() };
+  const exportData = { characters, paros, factions, rankings, cps, couples: cps, books, documents, timelines:SaveOrder.timelines(timelines), mediaLibrary, visualNovelTemplates, customPresetAvatars, collapsedBooks, exportedAt: new Date().toISOString() };
   const jsonStr = JSON.stringify(exportData);
   const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
   document.getElementById("cloudSyncStringArea").value = encoded;
@@ -5635,7 +5641,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
+  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines:SaveOrder.timelines(timelines),mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -5645,7 +5651,7 @@ function exportDataJson() {
 }
 
 function exportWorkshopDataJson() {
-  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines,mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
+  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines:SaveOrder.timelines(timelines),mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'}));
   a.download = `人設卡工坊-${new Date().toISOString().slice(0,10)}.json`;
@@ -5854,6 +5860,7 @@ function prepareAdvancedImport(data, fileName) {
         return { ...article, book:currentBookName(bookId), characters:charIds.map(id => characters.find(char => String(char.id) === String(id))?.name || id).sort(), factions:factionIds.map(id => factions.find(faction => String(faction.id) === String(id))?.name || id).sort() };
       } },
     { type:"timeline", incoming:Array.isArray(data.timelines)?data.timelines:[],current:timelines,getIncoming:item=>item.name,getCurrent:item=>item.name },
+    { type:"media", incoming:Array.isArray(data.mediaLibrary)?data.mediaLibrary:[],current:mediaLibrary,getIncoming:item=>item.id,getCurrent:item=>item.id },
     { type:"vnTemplate", incoming:Array.isArray(data.visualNovelTemplates) ? data.visualNovelTemplates : [], current:visualNovelTemplates, getIncoming:item => item.name, getCurrent:item => item.name }
   ];
 
@@ -5861,7 +5868,8 @@ function prepareAdvancedImport(data, fileName) {
     incoming.forEach((record, importedIndex) => {
       const recordName = normalizedImportName(getIncoming(record));
       const idMatch=current.findIndex(item=>record.id!=null&&String(item.id)===String(record.id));
-      const currentIndex = idMatch>=0?idMatch:recordName ? current.findIndex(item => normalizedImportName(getCurrent(item)) === recordName) : -1;
+      const stableOnly=['ranking','timeline','media'].includes(type)&&record.id!=null;
+      const currentIndex = idMatch>=0?idMatch:!stableOnly&&recordName ? current.findIndex(item => normalizedImportName(getCurrent(item)) === recordName) : -1;
       if (currentIndex >= 0 && importRecordsDiffer(compareCurrent(current[currentIndex]), compareIncoming(record))) {
         pendingImportConflicts.push({
           key: `${type}_${importedIndex}`, type, name: record.name || record.title || record.subject || "（未命名）",
@@ -5889,7 +5897,7 @@ function prepareAdvancedImport(data, fileName) {
 
 function renderAdvancedImportConflicts(fileName, importedCharacters, importedFactions) {
   document.getElementById('advancedImportSummary').textContent=fileName+'：缺少的項目會加入；同名項目逐欄預選資訊較完整的版本，可再手動調整。';
-  const groups={character:'characters',faction:'factions',paro:'paros',ranking:'rankings',cp:'cps',book:'books',document:'documents',visualNovel:'documents',vnTemplate:'visualNovelTemplates',timeline:'timelines'};
+  const groups={character:'characters',faction:'factions',paro:'paros',ranking:'rankings',cp:'cps',book:'books',document:'documents',visualNovel:'documents',vnTemplate:'visualNovelTemplates',timeline:'timelines',media:'mediaLibrary'};
   let orderPicker=document.getElementById('advancedImportOrderPreference');if(!orderPicker){const label=document.createElement('label');label.className='import-order-preference';label.innerHTML='書籍、文章與時間線清單的排列順序<select id="advancedImportOrderPreference"><option value="remote">採用讀檔排列，保留本機新增項目</option><option value="local">保留本機排列，加入讀檔新增項目</option></select>';document.getElementById('advancedImportSummary').after(label);orderPicker=label.querySelector('select');}orderPicker.value='remote';
   const left={},right={};
   for(const conflict of pendingImportConflicts){
@@ -5938,7 +5946,8 @@ function mergeImportedNamedRecords(current, incoming, type, idMap, transform = v
     const record = transform(raw);
     const identity = normalizedImportName(identityFn(record));
     const idIndex=result.findIndex(item=>raw.id!=null&&String(item.id)===String(raw.id));
-    const sameIndex = idIndex>=0?idIndex:identity ? result.findIndex(item => normalizedImportName(identityFn(item)) === identity) : -1;
+    const stableOnly=['ranking','timeline','media'].includes(type)&&raw.id!=null;
+    const sameIndex = idIndex>=0?idIndex:!stableOnly&&identity ? result.findIndex(item => normalizedImportName(identityFn(item)) === identity) : -1;
     const oldId = raw.id;
     if (sameIndex >= 0) {
       const conflict = pendingImportConflicts.find(item => item.type === type && item.importedIndex === importedIndex);
@@ -6008,10 +6017,8 @@ function applyAdvancedImport() {
   const useLocalOrder=document.getElementById('advancedImportOrderPreference')?.value==='local';
   const arrange=(rows,group,map)=>{const incoming=incomingOrder(data[group],map),local=previousOrders[group];return SaveOrder.reorder(rows,useLocalOrder?local:incoming,useLocalOrder?incoming:local);};
   books=arrange(books,'books',bookIdMap);documents=arrange(documents,'documents',documentIdMap);timelines=arrange(timelines,'timelines',timelineIdMap);
-  if(Array.isArray(data.mediaLibrary)){
-    const known=new Set(mediaLibrary.map(item=>String(item.id)));
-    data.mediaLibrary.forEach(raw=>{if(!raw?.id||known.has(String(raw.id)))return;mediaLibrary.push({...raw,charIds:remapImportIds(raw.charIds,charIdMap)});known.add(String(raw.id));});
-  }
+  mediaLibrary=mergeImportedNamedRecords(mediaLibrary,data.mediaLibrary,'media',new Map(),row=>({...row,...(row.charIds?{charIds:remapImportIds(row.charIds,charIdMap)}:{})}));
+  for(const cp of cps){if(!cp.library)continue;cp.library.linkedBookIds=remapImportIds(cp.library.linkedBookIds,bookIdMap);for(const book of cp.library.books||[]){book.linkedDocumentIds=remapImportIds(book.linkedDocumentIds,documentIdMap);for(const doc of book.documents||[])doc.charIds=remapImportIds(doc.charIds,charIdMap);}}
   normalizeVisualNovelDocuments();
   (Array.isArray(data.documents) ? data.documents : []).forEach((raw, importedIndex) => {
     const mappedBookId = bookIdMap.get(String(raw.bookId)) ?? raw.bookId;
