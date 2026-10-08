@@ -1,0 +1,5 @@
+.has-gallery-masonry{display:block!important;columns:auto!important;position:relative;overflow-x:hidden!important;touch-action:pan-y}.gallery-masonry-canvas{position:relative;min-width:0;width:100%;transition:height .2s ease}.gallery-masonry-canvas>button,.gallery-masonry-canvas>.media-tile{position:absolute!important;display:block;margin:0!important;height:auto!important;min-height:0!important;max-height:none;box-sizing:border-box;overflow:hidden;transition:top .24s ease,left .24s ease,box-shadow .2s}.gallery-masonry-canvas img{display:block;width:100%;height:auto!important;object-fit:contain}@media(prefers-reduced-motion:reduce){.gallery-masonry-canvas,.gallery-masonry-canvas>button,.gallery-masonry-canvas>.media-tile{transition:none}}
+
+.gallery-masonry-canvas img{min-height:0}
+
+.cp-card.is-gallery .cp-gallery-preview{max-height:none;opacity:1;visibility:visible;pointer-events:auto;padding:1rem}
