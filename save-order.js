@@ -9,5 +9,6 @@ function reorder(rows,preferred,other=[]){const map=new Map(rows.map(row=>[ident
 function changed(sequence,base){const shared=new Set(sequence.filter(id=>base.includes(id)));return !equal(sequence.filter(id=>shared.has(id)),base.filter(id=>shared.has(id)));}
 function choice(local,remote,base){if(base&&!changed(remote,base)&&changed(local,base))return 'local';return 'remote';}
 function mergeRows(local,remote,base){const lm=new Map(local.map(row=>[identity(row),row])),rm=new Map(remote.map(row=>[identity(row),row])),bm=new Map((base||[]).map(row=>[identity(row),row]));const preferred=choice(ids(local),ids(remote),base?ids(base):undefined)==='local'?local:remote,other=preferred===local?remote:local;const rows=[...new Set([...lm.keys(),...rm.keys()])].map(id=>{const l=lm.get(id),r=rm.get(id),b=bm.get(id);return r===undefined?l:l===undefined?r:b&&equal(r,b)&&!equal(l,b)?l:r;});return reorder(rows,ids(preferred),ids(other));}
-const api={identity,events,ids,reconcile,reorder,choice,changed,mergeRows};root.SaveOrder=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+function timelines(rows){return (Array.isArray(rows)?rows:[]).map(t=>({...t,events:events(t.events||[]).map((event,index)=>t.isMainTimeline?{...event}:{...event,order:index+1})}));}
+const api={identity,events,ids,reconcile,reorder,choice,changed,mergeRows,timelines};root.SaveOrder=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
