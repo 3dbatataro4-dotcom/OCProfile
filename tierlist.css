@@ -112,3 +112,5 @@
 .tl-quadrant{--tl-point-size:74px;--tl-point-inset:calc(var(--tl-point-size)/2 + 3px)}
 .tl-quadrant .tl-person{width:var(--tl-point-size);height:var(--tl-point-size)}
 @media(max-width:700px){.tl-quadrant{--tl-point-size:clamp(32px,9vw,40px)}.tl-quadrant .tl-person:before{content:'';position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%);border-radius:50%}.tl-quadrant-mode .tl-pin .tl-person{width:44px;height:44px}.tl-quadrant-mode .tl-pin-grid{gap:.4rem}}
+
+.tl-export-toggle{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;background:var(--bg-secondary);border:1px solid var(--border-color);padding:.8rem 1rem;border-radius:14px;margin:0 0 1rem;font-weight:600}.tl-export-toggle small{font-weight:400;color:var(--text-muted)}
