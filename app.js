@@ -251,6 +251,7 @@ function loadStateFromLocalStorage() {
   normalizeVisualNovelDocuments();
   try { timelines = JSON.parse(localStorage.getItem('oc_timelines') || '[]'); if (!Array.isArray(timelines)) timelines = []; } catch { timelines = []; }
   try { mediaLibrary = JSON.parse(localStorage.getItem('oc_media_library') || '[]'); if (!Array.isArray(mediaLibrary)) mediaLibrary = []; } catch { mediaLibrary = []; }
+  mediaLibrary = mediaLibrary.filter(row=>row?.id!=='__oc_sync_preferences__');
 
   const savedCollapsed = localStorage.getItem("oc_collapsed_books");
   if (savedCollapsed) { try { collapsedBooks = JSON.parse(savedCollapsed); } catch (e) {} }
@@ -291,6 +292,7 @@ function saveStateToLocalStorage() {
   put("oc_books", books);
   put("oc_documents", documents);
   put('oc_timelines', timelines);
+  mediaLibrary = mediaLibrary.filter(row=>row?.id!=='__oc_sync_preferences__');
   put('oc_media_library', mediaLibrary);
   put("oc_collapsed_books", collapsedBooks);
   put("oc_visual_novel_templates", visualNovelTemplates);
@@ -668,10 +670,11 @@ function deleteCharacter(charId) {
 
 // ========== 4.5. CP 關係細節模組 ==========
 function normalizeCpRecord(cp) {
+  const finalize = value => RecordIdentity.normalizeWorkshop({cps:[value],characters:[]}).cps[0];
   if (!cp || typeof cp !== "object") return null;
   // 2026-08-31 舊版 couples 格式：保留每位成員各自的定位、R18 與感想。
   if (Array.isArray(cp.members)) {
-    return {
+    return finalize({
       ...cp,
       id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       isHidden: !!cp.isHidden,
@@ -686,11 +689,12 @@ function normalizeCpRecord(cp) {
         thoughts: member.thoughts || member.opinion || ""
       })).filter(member => member.charId),
       sections: (cp.sections || cp.customSections || []).map(section => ({
+        ...section,
         id: section.id || `cpsec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         title: section.title || "",
         content: section.content || ""
       }))
-    };
+    });
   }
 
   // 現行扁平 cps 格式：轉回逐人成員格式，原本的全體欄位轉成自訂詞條避免遺失。
@@ -698,7 +702,7 @@ function normalizeCpRecord(cp) {
   const sections = [...(cp.customSections || cp.sections || [])];
   if (cp.relationshipThoughts && !sections.some(s => s.title === "關係總體感想")) sections.push({ title: "關係總體感想", content: cp.relationshipThoughts });
   if (cp.r18Notes && !sections.some(s => s.title === "關係狀況補充")) sections.push({ title: "關係狀況補充", content: cp.r18Notes });
-  return {
+  return finalize({
     ...cp,
     id: cp.id || `cp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       isHidden: !!cp.isHidden,
@@ -710,8 +714,8 @@ function normalizeCpRecord(cp) {
       const pos = positions.find(item => item.charId === charId);
       return { charId, position: pos?.role || pos?.position || "", r18: "", thoughts: "" };
     }),
-    sections: sections.map(section => ({ id: section.id || `cpsec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: section.title || "", content: section.content || "" }))
-  };
+    sections: sections.map(section => ({ ...section, id: section.id || `cpsec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: section.title || "", content: section.content || "" }))
+  });
 }
 
 function normalizeCpCollection(records) {
@@ -823,9 +827,9 @@ function createCpCardHtml(rawCp, draft = false) {
           <div class="cp-card-title-row">
             <div><small class="cp-card-kicker">${cp.type === 'other' ? 'RELATIONSHIP ARCHIVE' : 'COUPLE ARCHIVE'}</small><h3>${escapeHtml(cp.name)} <span class="cp-type-badge">${cp.type === 'other' ? escapeHtml(cp.relationType || '其他關係') : 'CP'}</span></h3></div>
           </div>
-          <div class="cp-position-list">${positionsHtml}</div>
+          <div class="cp-card-details-scroll" tabindex="0" aria-label="CP 關係與詞條，可上下捲動"><div class="cp-position-list">${positionsHtml}</div>
           <div class="cp-member-details">${memberDetailsHtml}</div>
-          <div class="cp-sections">${sectionsHtml}</div>
+          <div class="cp-sections">${sectionsHtml}</div></div>
         </div>
         ${window.OCFeatures?.cpGalleryPreviewHtml?.(cp) || ''}
         <div class="cp-card-footer"><button class="btn btn-xs btn-outline" onclick="toggleHideCp('${cp.id}')"><i class="fa-solid ${cp.isHidden?'fa-eye':'fa-eye-slash'}"></i> ${cp.isHidden?'移回正式卡庫':'移至草稿區'}</button><button class="btn btn-xs btn-outline" onclick="openCpModal('${cp.id}')"><i class="fa-solid fa-pen"></i> 編輯關係</button></div>
@@ -874,7 +878,7 @@ function openCpModal(cpId = null) {
       </label>
     `).join('');
 
-    (cp.sections || []).forEach(sec => addCpSectionRow(sec.title, sec.content));
+    (cp.sections || []).forEach(sec => addCpSectionRow(sec.title, sec.content, sec.stableKey || sec.id));
   } else {
     document.getElementById("cpModalTitle").innerText = "新建 CP 組合";
     document.getElementById("cpId").value = "";
@@ -990,17 +994,27 @@ function moveCpMemberEditor(button, direction) {
   row.classList.remove('cp-member-just-moved');void row.offsetWidth;row.classList.add('cp-member-just-moved');
 }
 
-function addCpSectionRow(title = "", content = "") {
+function moveEditorRow(button, direction) {
+  const row=button.closest('.cp-sec-row,.char-custom-field-row'); if(!row)return;
+  const other=direction<0?row.previousElementSibling:row.nextElementSibling;if(!other)return;
+  if(direction<0)row.parentElement.insertBefore(row,other);else row.parentElement.insertBefore(other,row);
+  row.classList.remove('oc-editor-row-moved');void row.offsetWidth;row.classList.add('oc-editor-row-moved');
+  row.querySelector('input')?.focus({preventScroll:true});
+}
+function editorOrderControls() {return '<span class="oc-editor-order"><button type="button" onclick="moveEditorRow(this,-1)" aria-label="將詞條上移" title="上移">↑</button><button type="button" onclick="moveEditorRow(this,1)" aria-label="將詞條下移" title="下移">↓</button></span>'; }
+
+function addCpSectionRow(title = "", content = "", stableKey = "") {
   const container = document.getElementById("cpCustomSectionsContainer");
   const row = document.createElement("div");
   row.className = "cp-sec-row";
+  row.dataset.stableKey = stableKey;
   row.style.cssText = "background:var(--bg-secondary); padding:0.6rem; border-radius:6px; margin-bottom:0.5rem; display:flex; flex-direction:column; gap:0.3rem;";
   row.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center;">
-      <input type="text" class="cp-sec-title" placeholder="詞條標題 (如: 相遇情況 / 約會模式)" value="${title}" style="font-weight:600; flex:1;">
-      <button type="button" class="btn btn-xs btn-danger ml-2" onclick="this.parentElement.parentElement.remove()">&times;</button>
+      <input type="text" class="cp-sec-title" placeholder="詞條標題 (如: 相遇情況 / 約會模式)" value="${escapeHtml(title)}" style="font-weight:600; flex:1;">
+      ${editorOrderControls()}<button type="button" class="btn btn-xs btn-danger ml-2" onclick="this.parentElement.parentElement.remove()" aria-label="刪除詞條">&times;</button>
     </div>
-    <textarea class="cp-sec-content" rows="2" placeholder="詳細內文與情節描繪...">${content}</textarea>
+    <textarea class="cp-sec-content" rows="2" placeholder="詳細內文與情節描繪...">${escapeHtml(content)}</textarea>
   `;
   container.appendChild(row);
 }
@@ -1025,7 +1039,8 @@ function saveCpForm() {
 
   const secRows = document.querySelectorAll("#cpCustomSectionsContainer .cp-sec-row");
   const customSections = Array.from(secRows).map(row => ({
-    id: `cpsec_${Date.now()}_${Math.random().toString(36).substr(2,4)}`,
+    id: row.dataset.stableKey || `cpsec_${Date.now()}_${Math.random().toString(36).substr(2,4)}`,
+    stableKey: row.dataset.stableKey || undefined,
     title: row.querySelector(".cp-sec-title").value.trim(),
     content: row.querySelector(".cp-sec-content").value.trim()
   })).filter(s => s.title);
@@ -1041,6 +1056,7 @@ function saveCpForm() {
     members,
     sections: customSections
   };
+  cpData.sections = RecordIdentity.cpSections(cpData);
 
   if (id) {
     const idx = cps.findIndex(c => c.id === id);
@@ -1070,12 +1086,13 @@ function deleteCpFromEditor() {
 }
 
 // ========== 5. 角色編輯 Modal ==========
-function addCharCustomFieldRow(type = 'single', name = '', value = '') {
+function addCharCustomFieldRow(type = 'single', name = '', value = '', stableKey = '') {
   const container = document.getElementById("charCustomFieldsContainer");
   if (!container) return;
   const row = document.createElement("div");
   row.className = "char-custom-field-row";
   row.dataset.fieldType = type;
+  row.dataset.stableKey = stableKey;
   if (type === 'paragraph') {
     row.style.flexDirection = "column";
     row.style.alignItems = "stretch";
@@ -1086,7 +1103,7 @@ function addCharCustomFieldRow(type = 'single', name = '', value = '') {
     row.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <input type="text" class="char-custom-field-name" placeholder="大段敘述標題 (如：家庭背景/經歷補充)" value="${escapeHtml(name)}">
-        <button type="button" class="btn btn-xs btn-outline-danger" onclick="this.parentElement.parentElement.remove()" title="刪除欄位"><i class="fa-solid fa-trash"></i> 刪除敘述</button>
+        ${editorOrderControls()}<button type="button" class="btn btn-xs btn-outline-danger" onclick="this.parentElement.parentElement.remove()" title="刪除欄位"><i class="fa-solid fa-trash"></i> 刪除敘述</button>
       </div>
       <textarea class="char-custom-field-val" rows="3" placeholder="請輸入長文章內容敘述..." style="margin-top:0.4rem;">${escapeHtml(value)}</textarea>
     `;
@@ -1110,7 +1127,7 @@ function collectCharCustomFields() {
     const name = row.querySelector(".char-custom-field-name")?.value.trim();
     const value = row.querySelector(".char-custom-field-val")?.value.trim();
     if (name && value) {
-      fields.push({ type, name, value });
+      fields.push({ type, name, value, ...(row.dataset.stableKey ? { id: row.dataset.stableKey, stableKey: row.dataset.stableKey } : {}) });
     }
   });
   return fields;
@@ -1155,7 +1172,7 @@ function openCharacterModal(charId = null) {
     document.getElementById("charColorMode").value = theme.mode;
 
     if (Array.isArray(char.customFields)) {
-      char.customFields.forEach(f => addCharCustomFieldRow(f.type || 'single', f.name, f.value));
+      char.customFields.forEach(f => addCharCustomFieldRow(f.type || 'single', f.name, f.value, f.stableKey || f.id));
     }
   }
 
@@ -1592,6 +1609,8 @@ function saveCharacterForm() {
       mode: document.getElementById("charColorMode").value
     }
   };
+
+  charData.customFields = RecordIdentity.customFields(charData);
 
   if (id) {
     const existingIndex = characters.findIndex(c => c.id === id);
@@ -5614,7 +5633,7 @@ function applyCloudSyncString() {
     if (data.books) books = data.books;
     if (data.documents) documents = data.documents;
     if (Array.isArray(data.timelines)) timelines = data.timelines;
-    if (Array.isArray(data.mediaLibrary)) mediaLibrary = data.mediaLibrary;
+    if (Array.isArray(data.mediaLibrary)) mediaLibrary = data.mediaLibrary.filter(row=>row?.id!=='__oc_sync_preferences__');
     if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
     if (Array.isArray(data.customPresetAvatars)) customPresetAvatars = data.customPresetAvatars;
     if (data.collapsedBooks) collapsedBooks = data.collapsedBooks;
@@ -5641,7 +5660,7 @@ function hideMobileCardSubmenu() {
 
 // 通用輔助
 function exportDataJson() {
-  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines:SaveOrder.timelines(timelines),mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
+  const exportData = {format:'oc-workshop-complete-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines:SaveOrder.timelines(timelines),mediaLibrary:mediaLibrary.filter(row=>row?.id!=='__oc_sync_preferences__'),visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings,forum:window.OCForum?.exportState?.()||null};
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -5651,7 +5670,7 @@ function exportDataJson() {
 }
 
 function exportWorkshopDataJson() {
-  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines:SaveOrder.timelines(timelines),mediaLibrary,visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
+  const exportData = {format:'oc-workshop-backup',version:1,exportedAt:new Date().toISOString(),characters,paros,factions,rankings,cps,couples:cps,books,documents,timelines:SaveOrder.timelines(timelines),mediaLibrary:mediaLibrary.filter(row=>row?.id!=='__oc_sync_preferences__'),visualNovelTemplates,visualNovelTopDown,customPresetAvatars,collapsedBooks,perspectiveTargets,currentTheme,currentRelViewMode,deepseekSettings};
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'}));
   a.download = `人設卡工坊-${new Date().toISOString().slice(0,10)}.json`;
@@ -5688,7 +5707,7 @@ function applyWorkshopBackupData(data) {
   if (data.books) books = data.books;
   if (data.documents) documents = data.documents;
   if (Array.isArray(data.timelines)) timelines = data.timelines;
-  if (Array.isArray(data.mediaLibrary)) mediaLibrary = data.mediaLibrary;
+  if (Array.isArray(data.mediaLibrary)) mediaLibrary = data.mediaLibrary.filter(row=>row?.id!=='__oc_sync_preferences__');
   normalizeVisualNovelDocuments();
   if (data.visualNovelTemplates) visualNovelTemplates = data.visualNovelTemplates;
   if (typeof data.visualNovelTopDown === 'boolean') visualNovelTopDown = data.visualNovelTopDown;
