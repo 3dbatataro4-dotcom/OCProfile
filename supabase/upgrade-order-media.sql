@@ -75,6 +75,9 @@ begin
     next_payload := jsonb_set(next_payload, array['data', group_name], ordered_rows, true);
   end loop;
 
+  if jsonb_typeof(p_delta->'writer') = 'object' then
+    next_payload := jsonb_set(next_payload, '{writer}', p_delta->'writer', true);
+  end if;
   next_payload := jsonb_set(next_payload, '{note}', to_jsonb(left(coalesce(p_delta->>'note',''),16)), true);
   update public.oc_sync_heads set payload=next_payload,revision=revision+1,updated_at=now()
    where user_id=auth.uid() and scope=p_scope and revision=p_expected_revision returning revision into next_revision;
