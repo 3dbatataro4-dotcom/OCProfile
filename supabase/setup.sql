@@ -11,6 +11,22 @@ create table if not exists public.oc_sync_heads (
   primary key (user_id, scope)
 );
 
+create table if not exists public.oc_sync_history (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  scope text not null check (scope in ('workshop', 'forum')),
+  revision bigint not null check (revision > 0),
+  payload jsonb not null,
+  archived_at timestamptz not null default now(),
+  primary key (user_id, scope, revision)
+);
+
+alter table public.oc_sync_history enable row level security;
+revoke all on table public.oc_sync_history from anon;
+grant select on table public.oc_sync_history to authenticated;
+drop policy if exists "read own sync history" on public.oc_sync_history;
+create policy "read own sync history" on public.oc_sync_history
+  for select to authenticated using ((select auth.uid()) = user_id);
+
 create table if not exists public.oc_sync_upload_chunks (
   user_id uuid not null references auth.users(id) on delete cascade,
   upload_id uuid not null,
@@ -54,6 +70,7 @@ set search_path = ''
 as $$
 declare
   next_revision bigint;
+  previous_payload jsonb;
 begin
   if auth.uid() is null then
     raise exception 'AUTH_REQUIRED';
@@ -75,6 +92,8 @@ begin
     on conflict (user_id, scope) do nothing
     returning revision into next_revision;
   else
+    select payload into previous_payload from public.oc_sync_heads
+     where user_id=auth.uid() and scope=p_scope and revision=p_expected_revision for update;
     update public.oc_sync_heads
        set revision = revision + 1,
            payload = p_payload,
@@ -87,6 +106,12 @@ begin
 
   if next_revision is null then
     raise exception 'SYNC_CONFLICT';
+  end if;
+  if previous_payload is not null then
+    insert into public.oc_sync_history(user_id,scope,revision,payload)
+      values(auth.uid(),p_scope,p_expected_revision,previous_payload) on conflict do nothing;
+    delete from public.oc_sync_history where user_id=auth.uid() and scope=p_scope
+      and revision not in (select revision from public.oc_sync_history where user_id=auth.uid() and scope=p_scope order by revision desc limit 20);
   end if;
   return next_revision;
 end;
@@ -171,10 +196,17 @@ begin
     next_payload := jsonb_set(next_payload, array['data', group_name], ordered_rows, true);
   end loop;
 
+  if jsonb_typeof(p_delta->'writer') = 'object' then
+    next_payload := jsonb_set(next_payload, '{writer}', p_delta->'writer', true);
+  end if;
   next_payload := jsonb_set(next_payload, '{note}', to_jsonb(left(coalesce(p_delta->>'note',''),16)), true);
   update public.oc_sync_heads set payload=next_payload,revision=revision+1,updated_at=now()
    where user_id=auth.uid() and scope=p_scope and revision=p_expected_revision returning revision into next_revision;
   if next_revision is null then raise exception 'SYNC_CONFLICT'; end if;
+  insert into public.oc_sync_history(user_id,scope,revision,payload)
+    values(auth.uid(),p_scope,p_expected_revision,current_payload) on conflict do nothing;
+  delete from public.oc_sync_history where user_id=auth.uid() and scope=p_scope
+    and revision not in (select revision from public.oc_sync_history where user_id=auth.uid() and scope=p_scope order by revision desc limit 20);
   return next_revision;
 end;
 $$;
