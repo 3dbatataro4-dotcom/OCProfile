@@ -2,6 +2,7 @@
   'use strict';
   const collections={workshop:['characters','paros','factions','rankings','cps','books','documents','timelines','mediaLibrary','visualNovelTemplates','visualNovelPreferences','collapsedBooks','perspectiveTargets'],forum:['boards','characters','worlds','factions','relationships','loreEntries','accounts','users','posts','comments','tagCatalog','favoriteFolders','chatContacts','chats','chatMessages']};
   const mapFields=new Set(['visualNovelPreferences','collapsedBooks','perspectiveTargets']);
+  const Identity=root.RecordIdentity||(typeof require==='function'?require('./record-identity.js'):null);
   const banned=new Set(['apikey','apikeys','key','authorization','accesstoken','refreshtoken','password','secret','servicekey','servicerole','profiles','activeprofile','deepseeksettings','generation','session','sessions']);
   const clone=x=>JSON.parse(JSON.stringify(x));
   function postgresSafeText(value){
@@ -32,6 +33,7 @@
     if(payload.scope==='forum'){payload={...payload,data:{...payload.data}};for(const key of ['chatContacts','chats','chatMessages','loreEntries'])if(payload.data[key]===undefined)payload.data[key]=[];}
     if(payload.scope==='forum'&&payload.data.favoriteFolders===undefined)payload={...payload,data:{...payload.data,favoriteFolders:[]}};
     if(payload.scope==='forum'&&payload.data.tagCatalog===undefined)payload={...payload,data:{...payload.data,tagCatalog:[]}};
+    if(payload.scope==='workshop')payload={...payload,data:Identity.normalizeWorkshop({...payload.data,mediaLibrary:(payload.data.mediaLibrary||[]).filter(row=>row?.id!=='__oc_sync_preferences__')})};
     for(const k of collections[payload.scope]){if(!Array.isArray(payload.data[k]))throw new Error('雲端資料缺少 '+k);const ids=new Set();for(const r of payload.data[k]){if(!r||!['string','number'].includes(typeof r.id)||!String(r.id)||ids.has(String(r.id)))throw new Error(k+' 存在重複或無效 ID。');ids.add(String(r.id));}}
     return {format:'oc-cloud-save',version:1,scope:payload.scope,data:Object.fromEntries(collections[payload.scope].map(k=>[k,scrub(payload.data[k])]))};
   }
@@ -112,7 +114,7 @@
       const rows=out.data[change.group],index=rows.findIndex(r=>String(r.id)===change.id);
       
       if(choice==='remote'&&change.remote===undefined&&index>=0)rows.splice(index,1);
-      if(change.remote){const row=clone(change.remote);if(choice==='copy')row.id=maps[change.group].get(change.id)||row.id;if(choice==='remote'&&index>=0)rows[index]=row;else rows.push(row);adopted.push([change.group,row]);}
+      if(change.remote||choice==='merged'&&change.merged){const row=clone(choice==='merged'?change.merged:change.remote);if(choice==='copy')row.id=maps[change.group].get(change.id)||row.id;if((choice==='remote'||choice==='merged')&&index>=0)rows[index]=row;else rows.push(row);adopted.push([change.group,row]);}
     }
     for(const change of changes.filter(change=>change.kind==='recordField')){const row=out.data[change.group].find(row=>String(row.id)===change.id);if(!row)continue;const choice=decisions[change.key]||change.choice;applyField(row,change.path,choice==='merged'?change.merged:choice==='remote'?change.remote:change.local);}
     for(const change of changes.filter(change=>change.kind==='characterCore')){const choice=decisions[change.key]||change.choice;if(choice==='local')continue;const index=out.data.characters.findIndex(row=>String(row.id)===change.id),current=out.data.characters[index];if(index>=0&&current){const relationships=current.relationships;out.data.characters[index]={...clone(change.remote),...(relationships!==undefined?{relationships}:{})};}}
