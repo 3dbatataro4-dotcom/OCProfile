@@ -1,0 +1,51 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const C=require('../cloud-sync-core.js');
+const mock=require('./mock-media-cloud.cjs');
+const snap=characters=>C.snapshot('workshop',{characters});
+(async()=>{
+  const browser=await chromium.launch({channel:'msedge',headless:true});
+  try{
+    const page=await browser.newPage({serviceWorkers:'block',viewport:{width:390,height:844}}),cloud=mock(),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    await cloud.attach(page);
+    await page.goto('http://127.0.0.1:8123',{waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>window.OCCloud&&window.SyncCollaboration);
+    await cloud.login(page);
+    const initial=snap([{id:'a',name:'角色甲',bio:'原本較長的敘述'}]);
+    cloud.set({...initial,writer:{deviceName:'協作者電腦',mode:'collaborate',updatedAt:new Date().toISOString()}});
+    await page.evaluate(()=>{characters=[{id:'a',name:'角色甲',bio:'原本較長的敘述'}];cps=[];paros=[];rankings=[];timelines=[];factions=[];books=[];documents=[];mediaLibrary=[];saveStateToLocalStorage();OCCloud.open();});
+    await page.locator('[data-cloud=begin-download]').click();
+    await page.locator('[data-cloud=wizard-preview]').click();
+    await page.waitForFunction(()=>document.querySelector('.oc-cloud-wizard-review'));
+    await page.locator('.oc-cloud-wizard-finish [data-cloud=confirm]').click();
+    await page.waitForFunction(()=>document.querySelector('.oc-cloud-panel [role=status]').textContent.includes('已下載'));
+    await page.evaluate(()=>{characters.find(row=>row.id==='a').bio='短稿';characters.push({id:'mine',name:'我的新角色'});saveStateToLocalStorage();});
+    const next=snap([{id:'a',name:'角色甲',bio:'原本較長的敘述'},{id:'theirs',name:'協作者新角色'}]);
+    cloud.set({...next,writer:{deviceName:'協作者電腦',mode:'collaborate',updatedAt:new Date().toISOString()}});
+    await page.locator('[data-cloud=begin-upload]').click();
+    assert.ok(await page.locator('[data-cloud=mode][data-mode=collaborate]').getAttribute('class').then(value=>value.includes('is-selected')));
+    await page.locator('[data-device-name]').fill('我的手機');
+    await page.locator('[data-cloud=wizard-preview]').click();
+    await page.waitForFunction(()=>document.querySelector('.oc-cloud-wizard-review'));
+    assert.match(await page.locator('.oc-cloud-last-writers').innerText(),/協作者電腦/);
+    assert.match(await page.locator('.oc-cloud-other-added').innerText(),/協作者新角色/);
+    assert.equal(await page.locator('[data-wizard-record="characters:a"]').isChecked(),true);
+    assert.equal(await page.locator('[data-wizard-record="characters:mine"]').isChecked(),true);
+    await page.locator('.oc-cloud-wizard-finish [data-cloud=confirm]').click();
+    await page.waitForFunction(()=>document.querySelector('.oc-cloud-panel [role=status]').textContent.includes('上傳完成'));
+    assert.equal(cloud.payload.data.characters.find(row=>row.id==='a').bio,'短稿');
+    assert.ok(cloud.payload.data.characters.some(row=>row.id==='mine'));
+    assert.ok(cloud.payload.data.characters.some(row=>row.id==='theirs'));
+    assert.equal(cloud.payload.writer.mode,'collaborate');
+    const sameNameOther=snap([...cloud.payload.data.characters,{id:'same-name-other',name:'同名裝置新增'}]);
+    cloud.set({...sameNameOther,writer:{deviceName:'我的手機',deviceId:'another-browser-id',mode:'collaborate',updatedAt:new Date().toISOString()}});
+    await page.locator('[data-cloud=begin-upload]').click();
+    await page.locator('[data-cloud=wizard-preview]').click();
+    await page.waitForFunction(()=>document.querySelector('.oc-cloud-wizard-review'));
+    assert.match(await page.locator('.oc-cloud-other-update').innerText(),/同名裝置新增/);
+    assert.deepEqual(errors,[]);
+    console.log('PASS: collaborative wizard uploads new and edited local records while preserving another editor’s cloud addition.');
+  }finally{await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1});
+
