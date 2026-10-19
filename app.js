@@ -2449,10 +2449,13 @@ function renderParoList() {
     return;
   }
 
-  if (!currentParoId) currentParoId = paros[0].id;
-  const currentParo = paros.find(p => p.id === currentParoId) || paros[0];
+  // Paros linked to a school event can be hidden here; their data stays intact.
+  const listedParos = paros.filter(p => !p.hideInParoPage);
+  const shownParos = listedParos.length ? listedParos : paros;
+  if (!currentParoId || !shownParos.some(p => p.id === currentParoId)) currentParoId = shownParos[0].id;
+  const currentParo = shownParos.find(p => p.id === currentParoId) || shownParos[0];
 
-  bar.innerHTML = `<div class="paro-subject-toolbar"><button type="button" class="btn btn-xs btn-outline" onclick="toggleParoOrderEditing()" aria-pressed="${paroOrderEditing}"><i class="fa-solid fa-arrow-down-up-across-line"></i> ${paroOrderEditing?'完成排序':'編輯排列順序'}</button></div><div class="paro-subject-list ${paroOrderEditing?'is-editing':''}">`+paros.map((p,index) => `
+  bar.innerHTML = `<div class="paro-subject-toolbar"><button type="button" class="btn btn-xs btn-outline" onclick="toggleParoOrderEditing()" aria-pressed="${paroOrderEditing}"><i class="fa-solid fa-arrow-down-up-across-line"></i> ${paroOrderEditing?'完成排序':'編輯排列順序'}</button></div><div class="paro-subject-list ${paroOrderEditing?'is-editing':''}">`+paros.map((p,index) => p.hideInParoPage ? '' : `
     <div class="paro-subject-item"><button class="btn btn-pill ${p.id === currentParo.id ? 'active' : ''}" onclick="switchParoSubject('${p.id}')">
       <i class="fa-solid fa-wand-magic-sparkles"></i> ${escapeHtml(p.name)}
     </button><span class="paro-order-controls"><button type="button" onclick="moveParoSubject('${p.id}',-1)" aria-label="將 ${escapeHtml(p.name)} 前移" ${index===0?'disabled':''}>↑</button><button type="button" onclick="moveParoSubject('${p.id}',1)" aria-label="將 ${escapeHtml(p.name)} 後移" ${index===paros.length-1?'disabled':''}>↓</button></span></div>
@@ -2994,10 +2997,18 @@ function saveFactionForm() {
   });
   characters.forEach(char => {
     const currentTags = Array.isArray(char.tags) ? char.tags : [];
-    char.tags = currentTags.filter(tag => !managedFactionTags.has(tag));
+    // Keep every tag in its existing slot; a renamed faction tag takes the old one's place, new tags go last.
+    const wanted = [];
     categoryTagNames.forEach((tagName, categoryKey) => {
-      if (factionMemberDraft?.get(categoryKey)?.has(String(char.id)) && !char.tags.includes(tagName)) char.tags.push(tagName);
+      if (factionMemberDraft?.get(categoryKey)?.has(String(char.id)) && !wanted.includes(tagName)) wanted.push(tagName);
     });
+    const pending = wanted.filter(tag => !currentTags.includes(tag)), nextTags = [];
+    for (const tag of currentTags) {
+      if (!managedFactionTags.has(tag) || wanted.includes(tag)) { if (!nextTags.includes(tag)) nextTags.push(tag); }
+      else if (pending.length) nextTags.push(pending.shift());
+    }
+    nextTags.push(...pending);
+    if (JSON.stringify(nextTags) !== JSON.stringify(currentTags)) char.tags = nextTags;
   });
 
   if (id) {
@@ -3054,7 +3065,7 @@ function deleteFaction(factionId) {
 
 // ========== 10.5. 同人文檔與書籍資料庫 ==========
 function countDocumentBodyCharacters(doc) {
-  return String(doc?.content || "").replace(/\s/g, "").length;
+  return String(doc?.content || doc?.visualNovel?.scriptText || "").replace(/\s/g, "").length;
 }
 
 function formatDocumentCharacterCount(count) {
@@ -3110,7 +3121,7 @@ function renderDocumentsModule() {
 
   const filterFn = (doc) => {
     if (doc.hideFromDocuments) return false;
-    const matchSearch = !searchKeyword || doc.title.toLowerCase().includes(searchKeyword) || (doc.content && doc.content.toLowerCase().includes(searchKeyword));
+    const matchSearch = !searchKeyword || doc.title.toLowerCase().includes(searchKeyword) || ((doc.content||doc.visualNovel?.scriptText||'').toLowerCase().includes(searchKeyword));
     const matchChar = selectedCharId ? (doc.charIds || []).includes(selectedCharId) : !typedChar || (doc.charIds || []).some(id=>String(OCRecordPolicy.characters().find(c=>c.id===id)?.name||'').toLocaleLowerCase().includes(typedChar));
     const matchFaction = !selectedFactionId || (doc.factionIds || []).includes(selectedFactionId);
     const matchTag = !selectedTag || (doc.tags || []).includes(selectedTag);
@@ -3170,6 +3181,7 @@ function renderDocumentsModule() {
           </div>
           <div class="book-inline-actions" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
             <button class="btn btn-xs btn-outline" onclick="openBookModal('${book.id}')"><i class="fa-solid fa-pen"></i> 編輯書籍</button>
+            <button class="btn btn-xs btn-outline" onclick="OCVnStudio.openNPC('${book.id}')">書籍 NPC</button>
             <button class="btn btn-xs btn-primary" onclick="openDocumentModal(null, '${book.id}')"><i class="fa-solid fa-plus"></i> 新增章節</button>
             <button class="btn btn-xs btn-danger" onclick="deleteBook('${book.id}')">&times;</button>
           </div>
@@ -3211,7 +3223,7 @@ function renderSingleDocItemHtml(doc) {
         <input type="checkbox" class="doc-summary-cb" value="${doc.id}" style="width:16px; height:16px;">
         <i class="fa-solid fa-file-lines" style="color:var(--accent-coffee); font-size:1.05rem; flex-shrink:0;"></i>
         <div>
-          <strong style="font-size:0.92rem; color:var(--text-main);">${doc.title}</strong>
+          <strong style="font-size:0.92rem; color:var(--text-main);">${doc.title}${doc.format==='visualNovel'?' <small class="vns-type-badge">視覺小說</small>':''}</strong>
           <span class="doc-word-count"><i class="fa-solid fa-font"></i> ${formatDocumentCharacterCount(countDocumentBodyCharacters(doc))}</span>
           <div style="font-size:0.75rem; color:var(--text-muted); margin-top:0.15rem;">
             ${docChars.length ? `角色: ${docChars.map(c => c.name).join(', ')} ` : ''}
@@ -3376,6 +3388,7 @@ function openDocumentModal(docId = null, defaultBookId = "") {
     `).join('');
   }
 
+  window.OCVnStudio?.prepareDocument(documents.find(d=>d.id===docId));
   modal.classList.add("active");
   captureEditorModalSnapshot("documentModal");
 }
@@ -3389,6 +3402,7 @@ function getReaderSequence(doc) {
 function openDocumentReader(docId) {
   const doc = documents.find(item => item.id === docId);
   if (!doc) return;
+  if(doc.format==='visualNovel'){startVisualNovel(doc.id);return;}
   currentReadingDocId = doc.id;
   const book = books.find(item => item.id === doc.bookId);
   const docChars = (doc.charIds || []).map(id => OCRecordPolicy.characters().find(c => c.id === id)?.name).filter(Boolean);
@@ -3455,6 +3469,9 @@ function saveDocumentForm() {
     visualNovel: id ? documents.find(d => d.id === id)?.visualNovel : undefined
   };
 
+  docData.format=document.getElementById('docFormat')?.value||'article';
+  if(docData.format==='visualNovel'){docData.visualNovel={...(docData.visualNovel||{}),scriptText:docData.content,eventIndexVersion:2};docData.content='';if(!docData.visualNovelPage){const parent=books.find(b=>b.id===docData.bookId)?.visualNovelPage;docData.visualNovelPage=parent?.mode&&parent.mode!=='classic'?{inheritBook:true}:{mode:'portrait',layoutTemplateId:'vnl-builtin-tech-portrait',inheritBook:false};}}
+  else if(docData.visualNovel&&documents.find(d=>d.id===id)?.format==='visualNovel')delete docData.visualNovel;
   if (id) {
     const idx = documents.findIndex(d => d.id === id);
     if (idx !== -1) documents[idx] = docData;
@@ -3466,6 +3483,7 @@ function saveDocumentForm() {
   syncGlobalTags();
   renderDocumentsModule();
   closeModal("documentModal", true);
+  return docData.id;
 }
 
 function deleteDocument(docId) {
@@ -3650,10 +3668,8 @@ function removeVisualNovelCharacterProfile(index){const profiles=JSON.parse(docu
 function saveVisualNovelCharacterProfiles(){const doc=documents.find(item=>item.id===document.getElementById('vnDocumentId').value),rows=document.getElementById('vnCharacterProfileRows'),profiles=JSON.parse(rows.dataset.profiles||'[]');rows.querySelectorAll('input[data-index]').forEach(input=>profiles[Number(input.dataset.index)][input.dataset.key]=input.value.trim());const notes=document.getElementById('vnCharacterProfileNotes').value.trim();doc.visualNovel=doc.visualNovel||{};doc.visualNovel.characterProfiles=profiles;doc.visualNovel.characterProfileNotes=notes;document.getElementById('vnAiCustomPrompt').value=[...profiles.filter(profile=>OCRecordPolicy.character(profile.charId)).flatMap(profile=>{const char=OCRecordPolicy.characters().find(item=>item.id===profile.charId);return String(profile.aliases||'').split(/[,，/]/).filter(Boolean).map(alias=>`${alias.trim()} = ${char?.name||profile.displayName}`)}),notes].filter(Boolean).join('\n');saveStateToLocalStorage();document.getElementById('vnCharacterProfilesModal').remove();}
 
 function openVisualNovelEditorFromDocumentModal() {
-  const docId = document.getElementById("docId").value;
-  if (!docId) return;
-  if (!closeModal("documentModal")) return;
-  openVisualNovelEditor(docId);
+  document.getElementById('docFormat')&&(document.getElementById('docFormat').value='visualNovel');
+  const id=saveDocumentForm();if(id)openVisualNovelEditor(id);
 }
 
 function openCurrentVisualNovelEditor() {
@@ -3701,6 +3717,7 @@ function saveVisualNovelScript(preview = false) {
   document.getElementById("vnScriptText").value = scriptText;
   const bookmarkIndex=doc.visualNovel?.bookmarkIndex;
   doc.visualNovel = { ...(doc.visualNovel || {}), version: 1, eventIndexVersion:2, settings: collectVisualNovelSettings(), scriptText, aiCustomPrompt, updatedAt: new Date().toISOString() };
+  if(doc.format==='visualNovel')doc.content='';
   if(bookmarkIndex!=null)doc.visualNovel.bookmarkIndex=Math.min(bookmarkIndex,Math.max(0,parseVisualNovelScript(scriptText).length-1));
   saveStateToLocalStorage(); renderDocumentsModule(); closeModal("visualNovelEditorModal", true);
   if (preview) startVisualNovel(doc.id);
@@ -3909,14 +3926,14 @@ function parseVisualNovelSpeakerResponse(content) {
 function getDocumentPossibleCharacters(doc) {
   const book = books.find(item => item.id === doc?.bookId);
   const ids = [...new Set([...(doc?.charIds || []), ...(book?.charIds || [])])];
-  return ids.map(id => OCRecordPolicy.characters().find(character => character.id === id)).filter(Boolean);
+  return [...ids.map(id => OCRecordPolicy.characters().find(character => character.id === id)).filter(Boolean),...(window.OCVnStudio?.npcs(doc)||[])];
 }
 
 function generateVisualNovelLocally() {
   const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
-  if (!doc?.content?.trim()) { alert("此章沒有正文內容。"); return; }
+  if (!window.OCVnStudio?.prose(doc)?.trim()&&!doc?.content?.trim()) { alert('此章沒有正文內容。'); return; }
   const possibleCharacters = getDocumentPossibleCharacters(doc);
-  const segments = createLosslessVisualNovelSegments(doc.content);
+  const segments = createLosslessVisualNovelSegments(window.OCVnStudio?.prose(doc)||doc.content);
   let script = buildLosslessVisualNovelScript(segments, new Map(), possibleCharacters);
   if (!visualNovelScriptPreservesSegments(script, segments)) {
     alert("完整性檢查失敗，已停止產生腳本以保護原文。"); return;
@@ -3926,7 +3943,7 @@ function generateVisualNovelLocally() {
 
 async function generateVisualNovelWithAi(forceRecalculate = false) {
   const doc = documents.find(item => item.id === document.getElementById("vnDocumentId").value);
-  if (!doc?.content?.trim()) { alert("此章沒有正文內容可供判斷。"); return false; }
+  if (!window.OCVnStudio?.prose(doc)?.trim()&&!doc?.content?.trim()) { alert('此章沒有正文內容可供判斷。'); return false; }
   if (!deepseekSettings.apiKey) { alert("請先在 DeepSeek AI API 設定中填入 API Key。"); return false; }
   if (forceRecalculate && document.getElementById("vnScriptText").value.trim() && !confirm("AI 將重新判斷全文並取代目前編輯框中的腳本，確定繼續嗎？")) return false;
   const customPrompt = document.getElementById("vnAiCustomPrompt")?.value.trim() || "";
@@ -3935,7 +3952,7 @@ async function generateVisualNovelWithAi(forceRecalculate = false) {
   const promptRules=window.OCVnPage?.promptFor?.('speaker',doc)||'';
   const possibleCharacters = getDocumentPossibleCharacters(doc);
   const characterContext = possibleCharacters.map(character => `- ${character.name}：${character.personality || "無性格資料"}；稱呼線索：${(character.relationships || []).map(item => `${item.targetName}=${item.callName}`).join("、")}`).join("\n");
-  const segments = createLosslessVisualNovelSegments(doc.content);
+  const segments = createLosslessVisualNovelSegments(window.OCVnStudio?.prose(doc)||doc.content);
   const batches = createVisualNovelAiBatches(segments);
   const speakerMap = new Map();
   let fallbackBatchCount = 0;
@@ -4002,6 +4019,8 @@ function parseVisualNovelScript(scriptText) {
     const contentLine = line.replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/, "").replace(/^[\u200B-\u200D\u2060\uFEFF]+/, "");
     const trimmedLine = contentLine.trim();
     if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank", sourceLineIndex };
+    const stage=trimmedLine.match(/^@stage\s+(auto|center|solo|duo)\s*$/i);if(stage)return {type:'sys',command:'stage',args:[stage[1].toLowerCase()],sourceLineIndex};
+    const head=trimmedLine.match(/^@head_(on|off)\s*$/i);if(head)return {type:'sys',command:'head',args:[head[1].toLowerCase()],sourceLineIndex};
     const command = trimmedLine.match(/^@(cg|bg|bgm|se)\s+(.+)$/i);
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
@@ -4201,8 +4220,8 @@ function preloadVisualNovelChapterMedia(doc, events, settings) {
     let character = currentVisualNovelSpeakerAliases?.aliasToChar?.get(rawSpeaker)
       || currentVisualNovelSpeakerAliases?.aliasToChar?.get(normalizedImportName(rawSpeaker));
     if (!character) {
-      const resolved = normalizeVisualNovelSpeaker(rawSpeaker, OCRecordPolicy.characters());
-      character = OCRecordPolicy.characters().find(item => normalizedImportName(item.name) === normalizedImportName(resolved));
+      const resolved = normalizeVisualNovelSpeaker(rawSpeaker, window.OCVnStudio?.cast(doc)||OCRecordPolicy.characters());
+      character = (window.OCVnStudio?.cast(doc)||OCRecordPolicy.characters()).find(item => normalizedImportName(item.name) === normalizedImportName(resolved));
     }
     const profile = profiles.find(item => item.charId === character?.id);
     avatarSources.add(profile?.avatar || character?.avatar || DEFAULT_VN_AVATAR);
@@ -5318,7 +5337,7 @@ function copyAiSummaryText() {
 function toggleExportMode(mode) {
   const charGroup = document.getElementById("exportCharSelectGroup");
   if (charGroup) charGroup.style.display = (mode === 'full' || mode === 'cps_only' || mode === 'character_archive') ? 'block' : 'none';
-  const archiveOnly = mode === 'character_archive';
+  const archiveOnly = mode === 'character_archive' || mode === 'paper_school';
   const label = document.getElementById('exportCharSelectLabel');
   if (label) label.textContent = archiveOnly ? '2. 選擇要匯出人物記事的角色：' : '2. 選擇包含角色 (僅導出所選角色相關關係與屬性)：';
   for (const id of ['exportExtrasGroup','exportRankingGroup','exportParoGroup','exportAiGroup']) {
@@ -5379,6 +5398,10 @@ async function generateExportText() {
 
   if (mode === 'character_archive') {
     document.getElementById('exportPreviewArea').value = window.OCCharacterArchive?.exportText(targetChars) || '';
+    return;
+  }
+  if (mode === 'paper_school') {
+    document.getElementById('exportPreviewArea').value = window.OCPaperSchool?.exportText?.() || '';
     return;
   }
 
@@ -6196,6 +6219,7 @@ function setupEventListeners() {
       if(!handled)handled=window.OCLottery?.handleBack?.()||false;
       if(!handled)handled=window.OCMusic?.handleBack?.()||false;
       if(!handled)handled=window.OCScoreboard?.handleBack?.()||false;
+      if(!handled)handled=window.OCPaperSchool?.handleBack?.()||false;
       if(!handled&&active){
         handled=true;
         if(active.id==='visualNovelPlayerModal')closeVisualNovelPlayer();
