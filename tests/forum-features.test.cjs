@@ -571,16 +571,12 @@ test('cloud delta contains only changed rows and explicit deletions', () => {
   assert.deepEqual(delta.orders.characters,['a','added']);
 });
 
-test('cloud upload prefers server-side delta with full snapshot fallback', () => {
-  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
-  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'setup.sql'), 'utf8');
-  assert.match(cloud, /async function pushEfficientSnapshot/);
-  assert.match(cloud, /rpc\/oc_push_delta/);
-  assert.match(cloud, /patchSize<fullSize/);
-  assert.match(cloud, /return pushSnapshot\(scope,revision,next,note\)/);
-  assert.match(sql, /create function public\.oc_push_delta/);
-  assert.match(sql, /for update/);
-  assert.match(sql, /raise exception 'SYNC_CONFLICT'/);
+test('verified batch entries carry versions for changed records while keeping array order', () => {
+  const P=require('../collab-protocol.js');
+  const remote=CloudSyncCore.snapshot('workshop',{documents:[{id:'a',title:'甲'},{id:'b',title:'乙'}]}),next=structuredClone(remote);
+  next.data.documents.reverse();next.data.documents[1].title='修訂甲';
+  const entry=P.entry(remote,next,{revision:7,items:[{group:'documents',id:'a',revision:3},{group:'documents',id:'b',revision:2}]},{mode:'collaborate'});
+  assert.equal(entry.expectedRevision,7);assert.deepEqual(entry.itemVersions,[{group:'documents',id:'a',revision:3}]);assert.deepEqual(entry.payload.data.documents.map(row=>row.id),['b','a']);
 });
 
 test('visual novel system lines and in-player sentence editor are supported', () => {
@@ -638,15 +634,17 @@ test('visual novel preloads only the current chapter audio and character avatars
   assert.match(app, /avatarSources\.forEach\(preloadVisualNovelAvatar\)/);
 });
 
-test('cloud and JSON restore require per-book and per-chapter review', () => {
+test('JSON import requires review while cloud merge protects individual book and chapter fields', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
   const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
   assert.match(html, /id="advancedImportModeToggle"[^>]*checked/);
   assert.match(app, /detected\.kind==='workshop'\|\|detected\.kind==='complete'/);
   assert.match(app, /pendingReview:true/);
-  assert.match(cloud, /change\.group!=='books'&&change\.group!=='documents'/);
-  assert.match(cloud, /change\.choice=change\.remote\?'remote':'local'/);
+  const base=CloudSyncCore.snapshot('workshop',{books:[{id:'book',title:'原標題',description:''}],documents:[{id:'chapter',title:'章節',content:''}]});
+  const local=structuredClone(base),remote=structuredClone(base);local.data.documents[0].content='本機新文章';local.data.books[0].description='本機簡介';remote.data.books[0].title='雲端新標題';
+  const merged=CloudSyncCore.merge(local,remote,CloudSyncCore.plan(local,remote,base,'download'),{});
+  assert.equal(merged.data.documents[0].content,'本機新文章');assert.equal(merged.data.books[0].description,'本機簡介');assert.equal(merged.data.books[0].title,'雲端新標題');
   assert.match(cloud, /本機缺少、雲端仍存在（請確認是否真的刪除）/);
 });
 
@@ -857,12 +855,8 @@ test('視覺小說章末停留並等待再次點擊才進下一章', () => {
   assert.match(styles, /\.vn-feed-chapter-complete/);
 });
 
-test('舊 Supabase 增量函式拒絕新群組時自動改用完整上傳', () => {
-  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud-sync.js'), 'utf8');
-  const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'setup.sql'), 'utf8');
-  assert.match(cloud, /function isUnsupportedDeltaError\(error\)/);
-  assert.match(cloud, /text\.includes\('INVALID_DELTA_ITEM'\)/);
-  assert.match(cloud, /deltaUnsupportedScopes\.add\(scope\)/);
-  assert.match(cloud, /!deltaUnsupportedScopes\.has\(scope\)/);
-  assert.match(sql, /'visualNovelPreferences'/);
+test('server deletion records identify explicit restorations independently of text length', () => {
+  const P=require('../collab-protocol.js');const local=CloudSyncCore.snapshot('workshop',{characters:[{id:'a',name:'甲',bio:'較短的新稿'}]}),remote=CloudSyncCore.snapshot('workshop',{characters:[{id:'a',name:'甲'}]});
+  const meta={items:[{group:'characters',id:'a',revision:4}],tombstones:[{group:'characters',id:'a',path:['bio'],revision:4}]};
+  const changes=CloudSyncCore.compare(local,remote);P.protect(changes,local,meta);assert.equal(changes.find(row=>row.path?.[0]==='bio').choice,'remote');assert.equal(P.restorations(local,meta.tombstones).length,1);assert.equal(P.restorations(remote,meta.tombstones).length,0);
 });
