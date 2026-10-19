@@ -10,3 +10,7 @@
 同步前會自動將被舊版截斷的 Emoji／Unicode 半字元替換成 `�`，避免 PostgreSQL 顯示 `invalid input syntax for type json`。完整 Emoji 與其他文字不受影響，原始論壇 JSON 也不需要手動修改。
 
 同步資料以登入使用者 ID 隔離。瀏覽器內的 Supabase publishable key 是公開用戶端金鑰；資料保護依靠登入權杖、資料列安全性與 RPC 內的使用者檢查。
+
+## 協作協定 v2
+
+已有專案執行 `upgrade-collaboration-v2.sql`，新專案的 `setup.sql` 已包含此升級。既有存檔不搬移；新成員需各自註冊、驗證信箱，由主人在精靈產生邀請碼加入。新版上傳、版本、權限與測試流程見 `../COLLABORATIVE_SYNC_PLAN.md`。每份存檔第一次 v2 提交才切換最低協定；安裝 SQL 後、發布新網站前，原網站仍可上傳。
