@@ -49,10 +49,14 @@
   const blank=value=>value===undefined||value===null||value===''||Array.isArray(value)&&value.length===0||value&&typeof value==='object'&&Object.keys(value).length===0;
   const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
   const keyed=value=>Array.isArray(value)&&value.every(row=>object(row)&&row.id!==undefined)&&new Set(value.map(row=>String(row.id))).size===value.length;
+  // Tag-like lists are memberships, not sequences: a pure reorder is not an edit.
+  const SET_FIELDS=new Set(['tags','charIds','factionIds']);
+  const sameMembers=(l,r)=>Array.isArray(l)&&Array.isArray(r)&&l.length===r.length&&[...l,...r].every(v=>v===null||typeof v!=='object')&&equal([...l].map(String).sort(),[...r].map(String).sort());
   function fieldChanges(group,id,left,right,before,hasBase){
     const changes=[],recordName=left.name||right.name||left.title||right.title||left.subject||right.subject||id;
     function visit(l,r,b,path){
       if(equal(l,r))return;
+      if(SET_FIELDS.has(path.at(-1))&&sameMembers(l,r))return;
       if(!['visualNovelPage','cues'].includes(path.at(-1))&&object(l)&&object(r)&&(b===undefined||object(b))){for(const key of new Set([...Object.keys(l),...Object.keys(r),...Object.keys(b||{})]))if(key!=='id'&&!(key==='order'&&path.includes('events')))visit(l[key],r[key],b?.[key],[...path,key]);return;}
       if(path.at(-1)!=='mainTimelineOrder'&&keyed(l)&&keyed(r)&&(b===undefined||keyed(b))){
         const key=path.at(-1),lo=Order.ids(l,key),ro=Order.ids(r,key),bo=b?Order.ids(b,key):undefined;
@@ -161,5 +165,5 @@
     for(const group of collections[next.scope]){const before=new Map(remote.data[group].map(row=>[String(row.id),row])),after=new Map(next.data[group].map(row=>[String(row.id),row])),start=changes.length;for(const id of new Set([...before.keys(),...after.keys()])){const value=after.get(id);if(!equal(before.get(id),value))changes.push({group,id,value:value===undefined?null:scrub(clone(value))});}if(changes.length>start||!equal(remote.data[group].map(row=>String(row.id)),next.data[group].map(row=>String(row.id))))orders[group]=next.data[group].map(row=>String(row.id));}
     return {format:'oc-cloud-delta',version:1,scope:next.scope,note:postgresSafeText(String(note||'')).slice(0,16),changes,orders};
   }
-  const api={collections,mapFields,scrub,stable,equal,postgresSafeText,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge,delta};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+  const api={sameMembers,SET_FIELDS,collections,mapFields,scrub,stable,equal,postgresSafeText,encodeUtf8Chunks,snapshot,validate,source,compare,plan,merge,delta};root.CloudSyncCore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(globalThis);
