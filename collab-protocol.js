@@ -1,0 +1,11 @@
+/* Shared protocol helpers: stable field paths, item versions and explicit restores. */
+(function(root){'use strict';
+const C=root.CloudSyncCore||(typeof require==='function'?require('./cloud-sync-core.js'):null);
+function at(value,path){for(const part of path||[]){if(value===undefined||value===null)return undefined;value=typeof part==='object'?Array.isArray(value)?value.find(row=>String(row.id)===String(part.id)):undefined:Object.prototype.hasOwnProperty.call(value,part)?value[part]:undefined;}return value;}
+const row=(snapshot,group,id)=>snapshot?.data?.[group]?.find(item=>String(item.id)===String(id));
+const key=t=>JSON.stringify([t.group,String(t.id),t.path||[],Number(t.revision)]);
+function restorations(snapshot,tombstones){return(tombstones||[]).filter(t=>at(row(snapshot,t.group,t.id),t.path)!==undefined);}
+function entry(remote,next,meta,writer,note=''){const versions=new Map((meta.items||[]).map(item=>[JSON.stringify([item.group,String(item.id)]),item.revision]));return{scope:next.scope,expectedRevision:meta.revision,payload:{...next,writer,note},itemVersions:C.collections[next.scope].flatMap(group=>{const before=new Map((meta.wireData?.[group]||meta.payload?.data?.[group]||remote.data[group]||[]).map(item=>[String(item.id),item])),after=new Map(next.data[group].map(item=>[String(item.id),item]));return [...new Set([...before.keys(),...after.keys()])].filter(id=>!C.equal(before.get(id),after.get(id))).map(id=>({group,id,revision:versions.get(JSON.stringify([group,id]))||0}));})};}
+function protect(changes,local,meta){const revived=restorations(local,meta.tombstones);for(const d of changes){d.remoteAudit=(meta.items||[]).find(item=>item.group===d.group&&String(item.id)===String(d.id));const path=d.path||[],matches=revived.filter(t=>t.group===d.group&&String(t.id)===String(d.id)&&(!d.kind||d.kind!=='recordField'||path.slice(0,Math.min(path.length,t.path.length)).every((part,index)=>C.equal(part,t.path[index]))));if(matches.length&&!['recordOrder','collectionOrder'].includes(d.kind)){d.tombstone=true;d.conflict=true;d.choice='remote';d.recommendation='伺服器記錄此項已刪除；預設不還原。若要還原，請改選本機並另外勾選還原確認。';}}return changes;}
+const api={at,row,key,restorations,entry,protect};root.CollabProtocol=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+})(globalThis);
