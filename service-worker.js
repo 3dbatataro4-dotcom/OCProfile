@@ -1,12 +1,13 @@
-const CACHE_NAME = "oc-profile-app-v79-lottery-focus";
+const CACHE_NAME = "oc-profile-app-v86-paper-school";
 const APP_SHELL = ["./", "./index.html", "./style.css", "./app-drawer.css", "./app-drawer-enhancements.css", "./app-drawer.js", "./lottery.css", "./lottery.js", "./hogwarts-dorm.css", "./hogwarts-dorm-refine.css", "./hogwarts-dorm.js", "./paro-layouts.css", "./paro-layouts.js", "./character-archive.css", "./character-archive.js", "./scoreboard.css", "./scoreboard.js", "./music.css", "./music-player-refresh.css", "./music.js", "./features.css", "./features-timeline.css", "./timeline-books.css", "./data.js", "./app.js", "./features.js", "./vn-assets.js", "./vn-page.js", "./vn-page.css", "./vn-page-responsive.css", "./vn-layout.js", "./vn-layout.css", "./vn-library.js", "./vn-library.css", "./forum.css", "./forum-chat.css", "./forum-chat-core.js", "./forum-core.js", "./forum-chat.js", "./forum.js", "./cloud-sync-core.js", "./cloud-sync.js", "./cloud-sync.css", "./manifest.webmanifest", "./app-icon-192.png", "./app-icon-512.png"];
 
-APP_SHELL.push('./sync-upload-policy.js','./sync-collaboration.js','./record-identity.js');
+APP_SHELL.push('./collab-protocol.js','./collab-service.js','./sync-upload-policy.js','./sync-collaboration.js','./record-identity.js');
 APP_SHELL.push('./gallery-masonry.js','./gallery-masonry.css','./cp-library.js','./cp-library.css');
 APP_SHELL.push('./record-policy.js','./draft-workspace.css');
 APP_SHELL.push('./reader-viewport.js','./timeline-design.css','./cloud-review.js','./save-preference.js','./save-order.js','./reading-motion.css','./timeline-sort.css');
 APP_SHELL.push('./interrogation.js','./interrogation.css','./vn-script.js','./vn-polish.js');
-APP_SHELL.push('./tierlist.js','./tierlist.css');
+APP_SHELL.push('./tierlist.js','./tierlist.css','./vn-studio.js','./vn-studio.css');
+APP_SHELL.push('./paper-school.js','./paper-school.css','./paper-school-campus.webp','./paper-school-uniform.webp');
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
