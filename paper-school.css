@@ -1067,3 +1067,32 @@ body.ps-open{overflow:hidden}
 @keyframes ps-ai-spin{to{transform:rotate(360deg)}}
 .ps-main{grid-template-columns:minmax(0,1fr)}.ps-top-title{flex:1 1 auto;min-width:0;margin-right:0}
 @media (max-width:860px){.ps-top [data-act=settings]{display:none}.ps-top .ps-icon-btn{width:34px;height:34px}.ps-top{gap:.35rem}}
+
+/* ================= v1.4 — 紙校圖庫 ================= */
+.ps-lib-size{margin-left:auto;align-self:center;font:500 .7rem var(--ps-mono);color:var(--ps-mute)}
+.ps-lib-health{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin:0 0 1rem;padding:.8rem 1rem;border-radius:14px;border:1px solid var(--ps-glass-line);background:var(--ps-glass);font-size:.84rem}
+.ps-lib-health.is-ok{color:var(--ps-olive)}.ps-lib-health.is-ok .ps-btn{margin-left:auto}
+.ps-lib-health.is-scanning{color:var(--ps-mute)}
+.ps-lib-health.is-bad{align-items:flex-start;border-color:color-mix(in srgb,var(--ps-red) 45%,transparent);background:color-mix(in srgb,var(--ps-red) 8%,var(--ps-glass))}
+.ps-lib-health.is-bad>div{flex:1;min-width:240px}.ps-lib-health.is-bad b{color:var(--ps-red)}.ps-lib-health p{margin:.3rem 0;color:var(--ps-ink-2)}
+.ps-lib-health ul{margin:.4rem 0 0;padding-left:1.1rem;font-size:.78rem}.ps-lib-health li small{color:var(--ps-mute);margin-left:.3rem}
+.ps-lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.8rem}
+.ps-lib-item{position:relative;display:grid;grid-template-rows:auto 1fr;border:1px solid var(--ps-glass-line);border-radius:14px;background:var(--ps-glass);overflow:hidden;box-shadow:var(--ps-shadow);transition:border-color .2s,transform .2s var(--ps-ease);animation:ps-fade-up .4s calc(var(--i)*.02s) var(--ps-ease) both}
+.ps-lib-item.is-selected{border-color:var(--ps-red);box-shadow:0 0 0 3px color-mix(in srgb,var(--ps-red) 25%,transparent)}
+.ps-lib-thumb{position:relative;display:block;aspect-ratio:4/3;padding:0;border:0;background:var(--ps-paper-2);overflow:hidden}
+.ps-lib-thumb img{width:100%;height:100%;object-fit:cover}
+.ps-lib-check{position:absolute;top:8px;left:8px;display:grid;place-items:center;width:24px;height:24px;border:2px solid #fff;border-radius:7px;background:#0005;color:transparent;font-size:.7rem}
+.ps-lib-item.is-selected .ps-lib-check{background:var(--ps-red);color:#fff}
+.ps-lib-flag{position:absolute;top:8px;right:8px;padding:.1rem .45rem;border-radius:6px;background:#d4a24c;color:#fff;font-size:.62rem;font-weight:700}
+.ps-lib-meta{display:grid;gap:.15rem;padding:.55rem .65rem .6rem}
+.ps-lib-meta b{font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ps-lib-meta small{font-size:.66rem;color:var(--ps-mute)}
+.ps-lib-uses{display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.2rem}
+.ps-lib-uses em{padding:.05rem .4rem;border-radius:5px;background:color-mix(in srgb,var(--ps-olive) 12%,transparent);color:var(--ps-olive);font-style:normal;font-size:.62rem}
+.ps-lib-uses em.is-free{background:var(--ps-paper-2);color:var(--ps-mute)}
+.ps-lib-tools{position:absolute;top:6px;right:6px;display:flex;gap:4px;opacity:0;transition:opacity .2s}
+.ps-lib-item:hover .ps-lib-tools,.ps-lib-item:focus-within .ps-lib-tools{opacity:1}
+@media (hover:none){.ps-lib-tools{opacity:1}}
+.ps-lib-tools .ps-icon-btn{width:30px;height:30px;font-size:.72rem;background:#1a1b1ecc;border-color:#ffffff4d;color:#fff}
+.ps-lib-tools .ps-lib-del:hover{background:var(--ps-red)}
+.ps-lib-item.is-unused .ps-lib-thumb img{opacity:.75}
+@media (max-width:860px){.ps-lib-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}.ps-lib-size{width:100%;margin-left:0}}
