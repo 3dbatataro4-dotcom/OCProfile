@@ -3181,7 +3181,6 @@ function renderDocumentsModule() {
           </div>
           <div class="book-inline-actions" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
             <button class="btn btn-xs btn-outline" onclick="openBookModal('${book.id}')"><i class="fa-solid fa-pen"></i> 編輯書籍</button>
-            <button class="btn btn-xs btn-outline" onclick="OCVnStudio.openNPC('${book.id}')">書籍 NPC</button>
             <button class="btn btn-xs btn-primary" onclick="openDocumentModal(null, '${book.id}')"><i class="fa-solid fa-plus"></i> 新增章節</button>
             <button class="btn btn-xs btn-danger" onclick="deleteBook('${book.id}')">&times;</button>
           </div>
@@ -4024,12 +4023,12 @@ function parseVisualNovelScript(scriptText) {
     const command = trimmedLine.match(/^@(cg|bg|bgm|se)\s+(.+)$/i);
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
-    const atSystem=trimmedLine.match(/^@(closer|farther|tremble|stop|position|move|front|jump|flip|scale|hide)\b\s*(.*)$/i);
+    const atSystem=trimmedLine.match(/^@(show|closer|farther|tremble|stop|position|move|front|jump|flip|scale|hide)\b\s*(.*)$/i);
     if(atSystem)return {type:'sys',command:atSystem[1].toLowerCase(),args:(atSystem[2].match(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s:]+/g)||[]).map(token=>{if(token.startsWith('"')){try{return JSON.parse(token);}catch{}}return token.startsWith("'")?token.slice(1,-1):token;}),sourceLineIndex};
     const systemCommand=trimmedLine.match(/^sys\(([^()]*)\)$/i);
     if(systemCommand){
       const parts=systemCommand[1].split(':').map(part=>part.trim()),name=parts.shift()?.toLowerCase();
-      if(['closer','farther','tremble','stop','position','move','front','jump','flip','scale','hide'].includes(name))return {type:'sys',command:name,args:parts,sourceLineIndex};
+      if(['show','closer','farther','tremble','stop','position','move','front','jump','flip','scale','hide'].includes(name))return {type:'sys',command:name,args:parts,sourceLineIndex};
     }
     const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
     if (!separator) return { type:"dialogue", speaker:"旁白", text:decodeVisualNovelInlineLineBreaks(contentLine), sourceLineIndex };
