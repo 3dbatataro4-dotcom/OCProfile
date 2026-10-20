@@ -4019,17 +4019,17 @@ function parseVisualNovelScript(scriptText) {
     const contentLine = line.replace(/^[\s\u200B-\u200D\u2060\uFEFF]*↳\s?/, "").replace(/^[\u200B-\u200D\u2060\uFEFF]+/, "");
     const trimmedLine = contentLine.trim();
     if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank", sourceLineIndex };
-    const stage=trimmedLine.match(/^@stage\s+(auto|center|solo|duo)\s*$/i);if(stage)return {type:'sys',command:'stage',args:[stage[1].toLowerCase()],sourceLineIndex};
+    const stage=trimmedLine.match(/^@stage\s+(auto|center|solo|duo|trio)\s*$/i);if(stage)return {type:'sys',command:'stage',args:[stage[1].toLowerCase()],sourceLineIndex};
     const head=trimmedLine.match(/^@head_(on|off)\s*$/i);if(head)return {type:'sys',command:'head',args:[head[1].toLowerCase()],sourceLineIndex};
     const command = trimmedLine.match(/^@(cg|bg|bgm|se)\s+(.+)$/i);
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
-    const atSystem=trimmedLine.match(/^@(closer|move|front|jump|flip|scale|hide)\b\s*(.*)$/i);
-    if(atSystem)return {type:'sys',command:atSystem[1].toLowerCase(),args:atSystem[2].split(/[\s:]+/).filter(Boolean),sourceLineIndex};
+    const atSystem=trimmedLine.match(/^@(closer|farther|tremble|stop|position|move|front|jump|flip|scale|hide)\b\s*(.*)$/i);
+    if(atSystem)return {type:'sys',command:atSystem[1].toLowerCase(),args:(atSystem[2].match(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s:]+/g)||[]).map(token=>{if(token.startsWith('"')){try{return JSON.parse(token);}catch{}}return token.startsWith("'")?token.slice(1,-1):token;}),sourceLineIndex};
     const systemCommand=trimmedLine.match(/^sys\(([^()]*)\)$/i);
     if(systemCommand){
       const parts=systemCommand[1].split(':').map(part=>part.trim()),name=parts.shift()?.toLowerCase();
-      if(['closer','move','front','jump','flip','scale','hide'].includes(name))return {type:'sys',command:name,args:parts,sourceLineIndex};
+      if(['closer','farther','tremble','stop','position','move','front','jump','flip','scale','hide'].includes(name))return {type:'sys',command:name,args:parts,sourceLineIndex};
     }
     const separator = contentLine.includes("｜") ? "｜" : (contentLine.includes("|") ? "|" : null);
     if (!separator) return { type:"dialogue", speaker:"旁白", text:decodeVisualNovelInlineLineBreaks(contentLine), sourceLineIndex };
