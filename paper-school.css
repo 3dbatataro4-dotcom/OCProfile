@@ -529,8 +529,8 @@ body.ps-open{overflow:hidden}
 .ps-sync-note{margin:0;padding:.55rem .75rem;border-radius:10px;background:color-mix(in srgb,var(--ps-olive) 12%,transparent);font-size:.78rem;color:var(--ps-olive);font-weight:600}
 .ps-pick-tools{display:grid;gap:.6rem}
 .ps-pick-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.4rem;align-content:start}
-.ps-pick{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border:1px solid var(--ps-line-2);border-radius:10px;background:var(--ps-card-2);text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
-.ps-pick input{position:absolute;opacity:0;pointer-events:none}
+.ps-pick{position:relative;display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border:1px solid var(--ps-line-2);border-radius:10px;background:var(--ps-card-2);text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
+.ps-pick input{position:absolute;left:12px;top:50%;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}
 .ps-pick b{display:block;font-size:.84rem}.ps-pick small{display:block;font-size:.68rem;color:var(--ps-mute)}
 .ps-pick:hover{border-color:var(--ps-gold)}
 .ps-pick.is-on,.ps-pick:has(input:checked){border-color:var(--ps-olive);background:color-mix(in srgb,var(--ps-olive) 12%,var(--ps-card))}
@@ -1096,3 +1096,9 @@ body.ps-open{overflow:hidden}
 .ps-lib-tools .ps-lib-del:hover{background:var(--ps-red)}
 .ps-lib-item.is-unused .ps-lib-thumb img{opacity:.75}
 @media (max-width:860px){.ps-lib-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}.ps-lib-size{width:100%;margin-left:0}}
+
+/* Focus stays inside its own picker row, rather than scrolling the clipped sheet. */
+.ps-pick:has(input:focus-visible){outline:2px solid var(--ps-olive);outline-offset:2px}
+
+/* Only the sheet body scrolls; focus must not scroll the full-screen app or sheet. */
+.ps-app{overflow:clip}.ps-sheet{overflow:clip}.ps-sheet-body{overscroll-behavior:contain}
