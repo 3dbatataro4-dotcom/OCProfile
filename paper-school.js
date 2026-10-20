@@ -22,6 +22,7 @@
     {id:'ranking',name:'成績排行',en:'Rankings',icon:'fa-ranking-star'},
     {id:'events',name:'活動中心',en:'Events',icon:'fa-calendar-days'},
     {id:'archive',name:'校園檔案庫',en:'Archive',icon:'fa-box-archive'},
+    {id:'library',name:'紙校圖庫',en:'Library',icon:'fa-photo-film'},
     {id:'export',name:'文字輸出',en:'Export',icon:'fa-file-export'}
   ];
   const TABS=[{id:'home',name:'總覽',icon:'fa-compass'},{id:'campus',name:'校園',icon:'fa-map-location-dot'},{id:'students',name:'人物',icon:'fa-id-card'},{id:'events',name:'活動',icon:'fa-calendar-days'},{id:'more',name:'更多',icon:'fa-grip'}];
@@ -30,7 +31,7 @@
   const CLUB_SPLIT=/[\/／、,，+＋]/;
   const WEEK=['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
-  let route={view:'home',id:''},stack=[],layer=null,seatPick=null,peopleQuery='',peopleGrade='',peopleMode='grid',rankFilter='all',eventFilter='all',archiveCat='',searchText='',fontsLoaded=false,pano=null,editPins=false,activeClass='',activeRank='',seatEdit=false,uniformOpen=false,gyroAsked=false,archiveEdit=false,adminMode=(()=>{try{return localStorage.getItem('oc_paper_school_admin')==='1';}catch{return false;}})();
+  let route={view:'home',id:''},stack=[],layer=null,seatPick=null,peopleQuery='',peopleGrade='',peopleMode='grid',rankFilter='all',eventFilter='all',archiveCat='',searchText='',fontsLoaded=false,pano=null,editPins=false,activeClass='',activeRank='',seatEdit=false,uniformOpen=false,gyroAsked=false,archiveEdit=false,libBroken=null,libScanning=false,libFilter='all',libSelect=new Set(),adminMode=(()=>{try{return localStorage.getItem('oc_paper_school_admin')==='1';}catch{return false;}})();
 
   /* ---------- data ---------- */
   function paro(){const list=allParos();const pinned=list.find(item=>item?.schoolApp?.pinned);return pinned||list.find(item=>item?.schoolApp)||list.find(item=>/紙/.test(item?.name||''))||list.find(item=>/校園|school/i.test(item?.name||''))||null;}
@@ -62,7 +63,8 @@
     if(!a.colors||typeof a.colors!=='object'){a.colors={studentBg:'theme',teacherBg:'theme',teacher:'#b8935a',grades:{}};dirty=true;}if(!a.colors.grades||typeof a.colors.grades!=='object')a.colors.grades={};
     for(const ev of a.events)if(normalizeEvent(ev))dirty=true;
     if(!a.archiveTimeline||typeof a.archiveTimeline!=='object'){a.archiveTimeline={enabled:false,nodes:[]};dirty=true;}if(!Array.isArray(a.archiveTimeline.nodes))a.archiveTimeline.nodes=[];
-    for(const key of ['profiles','classMeta'])if(!a[key]||typeof a[key]!=='object'){a[key]={};dirty=true;}
+    if(a.profiles&&typeof a.profiles==='object'){a.dossiers={...a.profiles,...(a.dossiers||{})};delete a.profiles;dirty=true;}
+    for(const key of ['dossiers','classMeta'])if(!a[key]||typeof a[key]!=='object'){a[key]={};dirty=true;}
     if(!a.rankings||typeof a.rankings!=='object'){const grade=rankList().find(r=>/成績/.test(r.subject||''));a.rankings={ids:grade?[grade.id]:rankList().slice(0,1).map(r=>r.id),primary:grade?.id||''};dirty=true;}
     if(!a.seeded){a.seeded=Date.now();seedClubs(a);seedClassMeta(a);dirty=true;}
     a.version=1;
@@ -85,8 +87,8 @@
   function teacherColor(){const value=paro()?.schoolApp?.colors?.teacher;return HEX.test(value||'')?value:'#b8935a';}
   function avatarColor(char){const c=paro()?.schoolApp?.colors||{};if(!char)return '#b8935a';if(roleOf(char)==='teacher')return c.teacherBg==='unified'?teacherColor():themeColor(char);return c.studentBg==='grade'&&val(char,'grade')?gradeColor(val(char,'grade')):themeColor(char);}
   function gradeOrder(char){const index=grades().indexOf(val(char,'grade'));return index<0?99:index;}
-  function profile(id){return app()?.profiles?.[id]||{};}
-  function editProfile(id){const a=app();return a.profiles[id]||(a.profiles[id]={});}
+  function profile(id){return app()?.dossiers?.[id]||{};}
+  function editProfile(id){const a=app();return a.dossiers[id]||(a.dossiers[id]={});}
   function themeColor(char){const value=char?.themeColor?.primary;return /^#[0-9a-f]{6}$/i.test(value||'')?value:'#b8935a';}
   function rankList(){return (typeof rankings!=='undefined'&&Array.isArray(rankings)?rankings:[]).filter(r=>r&&r.mode!=='quadrant');}
   function seatingClasses(){const p=paro();if(!p)return [];p.layouts=p.layouts||{};p.layouts.seating=p.layouts.seating||{enabled:true,classes:[]};if(!Array.isArray(p.layouts.seating.classes))p.layouts.seating.classes=[];return p.layouts.seating.classes;}
@@ -151,7 +153,7 @@
 
   /* ---------- small renderers ---------- */
   function icon(value,extra=''){const v=clean(value);if(/^fa-/.test(v))return `<i class="fa-solid ${esc(v)} ${extra}" aria-hidden="true"></i>`;return `<span class="ps-emoji ${extra}" aria-hidden="true">${esc(v||'✦')}</span>`;}
-  function schoolPic(char){const pic=char?app()?.profiles?.[char.id]?.avatar:null;return pic?.src?pic:null;}
+  function schoolPic(char){const pic=char?app()?.dossiers?.[char.id]?.avatar:null;return pic?.src?pic:null;}
   function cropImg(src,crop){if(!crop||!(crop.s>0)||!(crop.r>0))return `<img src="${esc(src)}" alt="" loading="lazy" draggable="false" onerror="this.remove()">`;return `<img class="ps-crop-img" src="${esc(src)}" alt="" loading="lazy" draggable="false" onerror="this.remove()" style="width:${(100/crop.s).toFixed(3)}%;left:${(-crop.x/crop.s*100).toFixed(3)}%;top:${(-crop.y*crop.r/crop.s*100).toFixed(3)}%">`;}
   function avatar(char,cls='',school=false){const name=nameOf(char),pic=school?schoolPic(char):null;return `<span class="ps-av ${cls}" style="--c:${avatarColor(char)}"><b>${esc(name.slice(0,1))}</b>${pic?cropImg(pic.src,pic.crop):char?.avatar?cropImg(char.avatar,null):''}</span>`;}
   function familyText(p){if(typeof p?.familyText==='string')return p.familyText;return (p?.family||[]).filter(f=>f.relation||f.name||f.charId).map(f=>`${f.relation||'家人'}：${f.charId?nameOf(person(f.charId)):f.name||''}${f.note?`（${f.note}）`:''}`).join('\n');}
@@ -169,8 +171,8 @@
   function studentNo(char){const p=profile(char.id);return p.studentNo||p.autoNo||`PHS-${String(gradeOrder(char)+1).padStart(2,'0')}${String(Math.max(members().indexOf(char),0)+1).padStart(3,'0')}`;}
   // Numbers are issued once and stored, so reordering characters, cloud merges or grade changes never renumber anyone.
   function ensureStudentNos(){const p=paro();if(!p?.schoolApp)return;const a=p.schoolApp,list=members();let changed=false;
-    if(!a.noFrozen){list.forEach((c,i)=>{const pr=a.profiles[c.id]||(a.profiles[c.id]={});if(!pr.autoNo&&!pr.studentNo)pr.autoNo=`PHS-${String(gradeOrder(c)+1).padStart(2,'0')}${String(i+1).padStart(3,'0')}`;});a.noSeq=Math.max(a.noSeq||0,list.length);a.noFrozen=true;changed=true;}
-    for(const c of list){const pr=a.profiles[c.id];if(pr?.autoNo||pr?.studentNo)continue;a.noSeq=(a.noSeq||0)+1;(a.profiles[c.id]||(a.profiles[c.id]={})).autoNo=`PHS-${String(gradeOrder(c)+1).padStart(2,'0')}${String(a.noSeq).padStart(3,'0')}`;changed=true;}
+    if(!a.noFrozen){list.forEach((c,i)=>{const pr=a.dossiers[c.id]||(a.dossiers[c.id]={});if(!pr.autoNo&&!pr.studentNo)pr.autoNo=`PHS-${String(gradeOrder(c)+1).padStart(2,'0')}${String(i+1).padStart(3,'0')}`;});a.noSeq=Math.max(a.noSeq||0,list.length);a.noFrozen=true;changed=true;}
+    for(const c of list){const pr=a.dossiers[c.id];if(pr?.autoNo||pr?.studentNo)continue;a.noSeq=(a.noSeq||0)+1;(a.dossiers[c.id]||(a.dossiers[c.id]={})).autoNo=`PHS-${String(gradeOrder(c)+1).padStart(2,'0')}${String(a.noSeq).padStart(3,'0')}`;changed=true;}
     if(changed)save();}
 
   /* ---------- shell ---------- */
@@ -208,7 +210,7 @@
     <div class="ps-layer" data-ps-layer></div>`;
     document.body.appendChild(root);
     root.addEventListener('click',onClick);root.addEventListener('change',onChange);root.addEventListener('input',onInput);root.addEventListener('submit',onSubmit);
-    root.addEventListener('keydown',event=>{if(event.key==='Escape'&&layer){closeLayer();event.stopPropagation();}});
+    root.addEventListener('keydown',event=>{if(event.key==='Escape'&&layer){if(!layer.parent)discardStaged();closeLayer();event.stopPropagation();}});
     root.addEventListener('toggle',event=>{if(event.target.matches?.('.ps-uniform'))uniformOpen=event.target.open;},true);
     window.addEventListener('deviceorientation',onGyro);
     root.addEventListener('dragstart',onDragStart);root.addEventListener('dragover',onDragOver);root.addEventListener('drop',onDrop);root.addEventListener('dragend',()=>root.querySelectorAll('.is-drop').forEach(n=>n.classList.remove('is-drop')));
@@ -229,12 +231,13 @@
     const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches,dur=reduce?250:1750,start=performance.now(),steps=['INITIALIZING CAMPUS ARCHIVE','VERIFYING STUDENT IDENTIFICATION','LOADING FACULTY RECORDS','SYNCING CLUB REGISTRY','RENDERING CAMPUS VIEW','WELCOME BACK'];
     const ring=node.querySelector('[data-splash-ring]'),bar=node.querySelector('[data-splash-bar]'),pct=node.querySelector('[data-splash-pct]'),text=node.querySelector('[data-splash-text]'),len=2*Math.PI*66;ring.style.strokeDasharray=len;
     const tick=now=>{if(!node.isConnected)return;const t=Math.min(1,(now-start)/dur),e=1-Math.pow(1-t,3);ring.style.strokeDashoffset=len*(1-e);bar.style.width=`${e*100}%`;pct.textContent=String(Math.round(e*100)).padStart(3,'0');text.textContent=steps[Math.min(steps.length-1,Math.floor(e*(steps.length-1)+.0001))];if(t<1){requestAnimationFrame(tick);return;}
-      node.classList.add('is-done');root.classList.add('is-entering');setTimeout(()=>{node.remove();root.classList.remove('is-entering');},1000);};
-    requestAnimationFrame(tick);
+      finish();};
+    const finish=()=>{if(node.classList.contains('is-done'))return;node.classList.add('is-done');root.classList.add('is-entering');setTimeout(()=>{node.remove();root.classList.remove('is-entering');},1000);};
+    requestAnimationFrame(tick);setTimeout(()=>{if(node.isConnected)finish();},dur+2200);
   }
   function close(fromBack=false){const root=$(ROOT);if(!root||root.hidden)return;closeLayer(true);pano?.destroy();pano=null;root.hidden=true;document.body.classList.remove('ps-open');if(!fromBack)window.OCApps?.openDrawer?.();}
   function isOpen(){return !!$(ROOT)&&!$(ROOT).hidden;}
-  function handleBack(){if(!isOpen())return false;if(document.querySelector('.modal-backdrop.active'))return false;if(layer){closeLayer();return true;}if(back())return true;close(true);window.OCApps?.openDrawer?.();return true;}
+  function handleBack(){if(!isOpen())return false;if(document.querySelector('.modal-backdrop.active'))return false;if(layer){if(!layer.parent)discardStaged();closeLayer();return true;}if(back())return true;close(true);window.OCApps?.openDrawer?.();return true;}
   function go(view,id='',push=true){if(view==='more'){openMore();return;}if(view==='export'&&!paro())return;if(push&&(route.view!==view||route.id!==id))stack.push({...route,scroll:scroller()?.scrollTop||0});if(stack.length>40)stack.shift();route={view,id};seatPick=null;closeLayer(true);render(true);}
   function back(){if(!stack.length){if(route.view!=='home'){route={view:'home',id:''};render(true);return true;}return false;}const prev=stack.pop();route={view:prev.view,id:prev.id};render(true,prev.scroll);return true;}
   function scroller(){return document.querySelector(`#${ROOT} [data-ps-scroll]`);}
@@ -462,9 +465,19 @@
     },
     export(){
       const opts=exportOptions();
-      return `${head('09','Export','文字輸出',`${btn('<i class="fa-regular fa-copy"></i> 複製','export-copy','','ps-btn')}${btn('<i class="fa-solid fa-download"></i> 下載 .txt','export-download','','ps-btn ps-btn-primary')}`,'輸出內容會標明【原設定】（設定表本篇資料）與【校園paro】（紙校學生檔案），方便分辨。')}
+      return `${head('10','Export','文字輸出',`${btn('<i class="fa-regular fa-copy"></i> 複製','export-copy','','ps-btn')}${btn('<i class="fa-solid fa-download"></i> 下載 .txt','export-download','','ps-btn ps-btn-primary')}`,'輸出內容會標明【原設定】（設定表本篇資料）與【校園paro】（紙校學生檔案），方便分辨。')}
       <div class="ps-export"><div class="ps-export-opts">${EXPORT_SECTIONS.map(([k,n])=>`<label class="ps-check"><input type="checkbox" data-ps-export="${k}" ${opts[k]?'checked':''}><span>${n}</span></label>`).join('')}</div>
       <textarea class="ps-export-text" data-ps-export-text readonly>${esc(exportText(opts))}</textarea></div>`;
+    },
+    library(){
+      const all=libraryItems(),counts={all:all.length,school:all.filter(x=>x.type==='school').length,album:all.filter(x=>x.type==='album').length,unused:all.filter(x=>!x.uses.length).length};
+      const list=all.filter(x=>libFilter==='all'||(libFilter==='unused'?!x.uses.length:x.type===libFilter));
+      libSelect=new Set([...libSelect].filter(id=>all.some(x=>x.row.id===id)));
+      const size=list.reduce((n,x)=>n+(Number(x.row.size)||0),0);
+      return `${head('09','Library','紙校圖庫',`${libSelect.size?btn(`<i class="fa-solid fa-trash"></i> 刪除所選（${libSelect.size}）`,'lib-delete-selected','','ps-btn ps-btn-danger'):''}${btn(libSelect.size?'取消選取':'<i class="fa-regular fa-square-check"></i> 全選目前清單','lib-select-all')}`,'在紙校中上傳的圖片與活動相簿照片。可刪除誤上傳的圖片；使用中的圖片刪除時會一併清除引用。')}
+      <div class="ps-chips">${[['all','全部'],['school','紙校素材'],['album','活動相簿'],['unused','未使用']].map(([k,n])=>chip(`${n} <small>${counts[k]}</small>`,`data-act="lib-filter" data-f="${k}"`,libFilter===k)).join('')}<span class="ps-lib-size">${list.length} 張 · ${size?(size/1048576).toFixed(1)+' MB':'—'}</span></div>
+      ${libraryHealth()}
+      ${list.length?`<div class="ps-lib-grid">${list.map((x,i)=>{const on=libSelect.has(x.row.id);return `<div class="ps-lib-item${on?' is-selected':''}${x.uses.length?'':' is-unused'}" style="--i:${Math.min(i,30)}"><button type="button" class="ps-lib-thumb" data-act="lib-toggle" data-id="${esc(x.row.id)}" aria-pressed="${on}">${img(imgSrc(x.row))}<span class="ps-lib-check"><i class="fa-solid fa-check"></i></span>${x.row.localOnly&&!x.row.url?'<span class="ps-lib-flag">未備份</span>':''}</button><div class="ps-lib-meta"><b>${esc(x.row.title||x.row.caption||(x.type==='album'?'活動照片':'紙校素材'))}</b><small>${x.type==='album'?'活動相簿':'紙校素材'}${x.row.size?` · ${Math.max(1,Math.round(x.row.size/1024))} KB`:''}</small><span class="ps-lib-uses">${x.uses.length?x.uses.slice(0,3).map(u=>`<em>${esc(u)}</em>`).join('')+(x.uses.length>3?`<em>+${x.uses.length-3}</em>`:''):'<em class="is-free">未使用</em>'}</span></div><div class="ps-lib-tools">${btn('<i class="fa-solid fa-expand"></i>','lightbox',`data-src="${esc(imgSrc(x.row))}" title="檢視"`,'ps-icon-btn')}${btn('<i class="fa-solid fa-trash"></i>','lib-delete',`data-id="${esc(x.row.id)}" title="刪除"`,'ps-icon-btn ps-lib-del')}</div></div>`;}).join('')}</div>`:empty(libFilter==='unused'?'沒有未使用的圖片。':'這裡還沒有圖片。')}`;
     },
     search(){
       const q=searchText.trim().toLowerCase();if(!q)return empty('輸入關鍵字開始搜尋。');const a=app();
@@ -574,6 +587,12 @@
   function select(name,options,value){return `<select name="${name}">${options.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select>`;}
   function imageInput(name,value,label='圖片'){return `<div class="ps-field ps-image-field"><span>${label}</span><div class="ps-image-row"><span class="ps-image-preview" data-preview="${name}">${value?img(value):'<i class="fa-regular fa-image"></i>'}</span><div><input name="${name}" value="${esc(value||'')}" placeholder="貼上圖片網址，或上傳" data-ps-image-url="${name}"><div class="ps-row"><label class="ps-btn ps-btn-small"><i class="fa-solid fa-upload"></i> 上傳<input type="file" accept="image/*" hidden data-ps-upload="${name}"></label><button type="button" class="ps-btn ps-btn-small" data-act="image-library" data-name="${name}"><i class="fa-solid fa-photo-film"></i> 素材庫</button><button type="button" class="ps-btn ps-btn-small ps-btn-ghost" data-act="image-clear" data-name="${name}">清除</button></div></div></div></div>`;}
   function formData(form){const data={};for(const el of form.elements){if(!el.name)continue;if(el.type==='checkbox'){if(!data[el.name])data[el.name]=[];if(el.checked)data[el.name].push(el.value);}else if(el.type==='radio'){if(el.checked)data[el.name]=el.value;}else data[el.name]=el.value;}return data;}
+  const staged=new Map();
+  function stageImage(file){if(!/^image\/(png|jpeg|webp|gif|avif)$/i.test(file.type))throw new Error('請選擇 PNG、JPEG、WebP、GIF 或 AVIF 圖片。');if(file.size>20*1024*1024)throw new Error('圖片不可超過 20 MB。');const id=uid('school'),ref=`asset:${id}`;staged.set(ref,{id,file,url:URL.createObjectURL(file)});return ref;}
+  function shownSrc(ref){return staged.get(ref)?.url||ref;}
+  async function commitStaged(values){const refs=new Set(),walk=v=>{if(typeof v==='string'){for(const ref of staged.keys())if(v.includes(ref))refs.add(ref);}else if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==='object')Object.values(v).forEach(walk);};walk(values);
+    for(const ref of refs){const item=staged.get(ref);await window.OCFeatures.storeFile(item.id,item.file);mediaLibrary.push({id:item.id,kind:'school-asset',title:item.file.name,type:item.file.type,size:item.file.size,createdAt:Date.now(),localOnly:true});staged.delete(ref);URL.revokeObjectURL(item.url);}if(refs.size)save();}
+  function discardStaged(){for(const item of staged.values())URL.revokeObjectURL(item.url);staged.clear();}
   async function uploadImage(file){if(!/^image\/(png|jpeg|webp|gif|avif)$/i.test(file.type))throw new Error('請選擇 PNG、JPEG、WebP、GIF 或 AVIF 圖片。');if(file.size>20*1024*1024)throw new Error('圖片不可超過 20 MB。');const id=uid('school');await window.OCFeatures.storeFile(id,file);mediaLibrary.push({id,kind:'school-asset',title:file.name,type:file.type,size:file.size,createdAt:Date.now(),localOnly:true});save();return `asset:${id}`;}
   function toast(message){const root=$(ROOT);if(!root)return;let node=root.querySelector('.ps-toast');if(!node){node=document.createElement('div');node.className='ps-toast';root.appendChild(node);}node.textContent=message;node.classList.remove('is-on');void node.offsetWidth;node.classList.add('is-on');clearTimeout(node._t);node._t=setTimeout(()=>node.classList.remove('is-on'),2400);}
   function lightbox(src){if(!src)return;openLayer(`<button type="button" class="ps-lightbox" data-act="layer-close">${img(src)}</button>`,{cls:'is-lightbox'});}
@@ -620,12 +639,12 @@
     dialog(title,`${groups.length?`<div class="ps-chips ps-chips-tight">${groups.map(g=>chip(`${g[1]} <small>${g[2].length}</small>`,`data-asset-tab="${g[0]}"`,g[0]===active)).join('')}</div>`:''}${upload?`<div class="ps-row"><label class="ps-btn ps-btn-small"><i class="fa-solid fa-upload"></i> 上傳圖片<input type="file" accept="image/*" hidden data-ps-asset-upload></label><input class="ps-inline-url" data-asset-url placeholder="或貼上圖片網址"><button type="button" class="ps-btn ps-btn-small" data-act="asset-url">使用網址</button></div>`:''}<div class="ps-asset-grid" data-asset-grid>${grid()}</div>`,{en:'LIBRARY',submit:'',wide:true,nested});
     layer.onPick=src=>{if(layer?.parent)closeLayer();else closeLayer(true);onPick(src);};
     const sheet=layerRoot().querySelector('.ps-sheet');sheet.addEventListener('click',event=>{const tab=event.target.closest('[data-asset-tab]');if(!tab)return;active=tab.dataset.assetTab;sheet.querySelectorAll('[data-asset-tab]').forEach(b=>b.classList.toggle('is-on',b===tab));sheet.querySelector('[data-asset-grid]').innerHTML=grid();});}
-  function pickAvatar(id){const char=person(id);if(!char)return;assetPicker({title:`${esc(nameOf(char))} · 校園頭像`,charId:id,upload:true,nested:false},src=>{const cur=schoolPic(char);openCropper(src,cur?.src===src?cur.crop:null,crop=>{editProfile(id).avatar={src,crop};save();render();toast('校園頭像已更新');});});}
-  function openCropper(src,crop,onDone){const st={x:0,y:0,s:0,r:0};
-    dialog('裁切成方形',`<div class="ps-cropper"><div class="ps-crop-stage" data-crop-stage><img src="${esc(src)}" data-crop-img alt="" draggable="false"><div class="ps-crop-box" data-crop-box><i></i><i></i><i></i><i></i></div></div></div><div class="ps-crop-tools"><i class="fa-solid fa-magnifying-glass-minus"></i><input type="range" min="8" max="100" step="1" value="80" data-crop-size aria-label="裁切大小"><i class="fa-solid fa-magnifying-glass-plus"></i></div><div class="ps-crop-previews"><span class="ps-av ps-av-xl" data-crop-prev></span><span class="ps-crop-square" data-crop-prev></span><small>拖曳方框移動，拉桿調整大小。</small></div>`,{en:'CROP',submit:'套用',wide:true,onSubmit:()=>{if(!st.r){toast('圖片尚未載入');return false;}onDone({x:+st.x.toFixed(4),y:+st.y.toFixed(4),s:+st.s.toFixed(4),r:+st.r.toFixed(4)});return true;}});
+  function pickAvatar(id){const char=person(id);if(!char)return;assetPicker({title:`${esc(nameOf(char))} · 校園頭像`,charId:id,upload:true,nested:false},src=>{const cur=schoolPic(char);openCropper(src,cur?.src===src?cur.crop:null,async crop=>{try{await commitStaged([src]);}catch(error){toast(error.message);return;}editProfile(id).avatar={src,crop};save();render();toast('校園頭像已更新');});});}
+  function openCropper(src,crop,onDone){const st={x:0,y:0,s:0,r:0},view=shownSrc(src);
+    dialog('裁切成方形',`<div class="ps-cropper"><div class="ps-crop-stage" data-crop-stage><img src="${esc(view)}" data-crop-img alt="" draggable="false"><div class="ps-crop-box" data-crop-box><i></i><i></i><i></i><i></i></div></div></div><div class="ps-crop-tools"><i class="fa-solid fa-magnifying-glass-minus"></i><input type="range" min="8" max="100" step="1" value="80" data-crop-size aria-label="裁切大小"><i class="fa-solid fa-magnifying-glass-plus"></i></div><div class="ps-crop-previews"><span class="ps-av ps-av-xl" data-crop-prev></span><span class="ps-crop-square" data-crop-prev></span><small>拖曳方框移動，拉桿調整大小。</small></div>`,{en:'CROP',submit:'套用',wide:true,onSubmit:()=>{if(!st.r){toast('圖片尚未載入');return false;}onDone({x:+st.x.toFixed(4),y:+st.y.toFixed(4),s:+st.s.toFixed(4),r:+st.r.toFixed(4)});return true;}});
     const sheet=layerRoot().querySelector('.ps-sheet'),stage=sheet.querySelector('[data-crop-stage]'),im=sheet.querySelector('[data-crop-img]'),box=sheet.querySelector('[data-crop-box]'),range=sheet.querySelector('[data-crop-size]');
     const max=()=>Math.min(1,st.r),clampSt=()=>{st.s=Math.max(.04,Math.min(max(),st.s));st.x=Math.max(0,Math.min(1-st.s,st.x));st.y=Math.max(0,Math.min(1-st.s/st.r,st.y));};
-    const paint=()=>{box.style.left=`${st.x*100}%`;box.style.top=`${st.y*100}%`;box.style.width=`${st.s*100}%`;box.style.height=`${st.s/st.r*100}%`;range.value=Math.round(st.s/max()*100);sheet.querySelectorAll('[data-crop-prev]').forEach(n=>n.innerHTML=cropImg(src,st));};
+    const paint=()=>{box.style.left=`${st.x*100}%`;box.style.top=`${st.y*100}%`;box.style.width=`${st.s*100}%`;box.style.height=`${st.s/st.r*100}%`;range.value=Math.round(st.s/max()*100);sheet.querySelectorAll('[data-crop-prev]').forEach(n=>n.innerHTML=cropImg(view,st));};
     const init=()=>{if(!im.naturalWidth)return;st.r=im.naturalHeight/im.naturalWidth;if(crop?.s){st.x=crop.x;st.y=crop.y;st.s=crop.s;}else{st.s=max()*.8;st.x=(1-st.s)/2;st.y=Math.max(0,(1-st.s/st.r)*.25);}clampSt();paint();stage.classList.add('is-ready');};
     if(im.complete&&im.naturalWidth)init();else im.addEventListener('load',init);
     let drag=null;box.addEventListener('pointerdown',event=>{drag={x:event.clientX,y:event.clientY,sx:st.x,sy:st.y};box.setPointerCapture(event.pointerId);event.preventDefault();});
@@ -744,6 +763,7 @@
   function settings(){const a=app(),p=paro();const rankRowsHtml=rankList().map(r=>`<label class="ps-check"><input type="checkbox" name="ranks" value="${esc(r.id)}" ${(a?.rankings.ids||[]).includes(r.id)?'checked':''}><span>${esc(r.subject||r.id)}</span></label>`).join('')||'<p class="ps-muted">設定表中沒有排名。</p>';
     dialog('校務設定',`${field('紙校資料來源 Paro',select('paroId',allParos().map(x=>[x.id,x.name]),p?.id||''),'學生的身分、年級、幹部、社團讀自這個 Paro 的欄位；座位表使用它的座位配置。')}
       ${p?`<div class="ps-field"><span>欄位對應</span><div class="ps-grid-2">${Object.entries({role:'身分（定位）',grade:'年級',post:'幹部職位',club:'社團'}).map(([k,n])=>field(n,select(`map_${k}`,[['','（自動偵測）'],...(p.fields||[]).map(f=>[f.id,f.name])],a.fieldMap?.[k]||''))).join('')}</div></div>`:''}
+      <div class="ps-field"><span>圖片管理</span><button type="button" class="ps-btn ps-btn-small" data-go="library"><i class="fa-solid fa-photo-film"></i> 開啟紙校圖庫（刪除誤上傳的圖片）</button></div>
       <div class="ps-field"><span>代表色</span><div class="ps-color-grid">${grades().map((g,i)=>`<label class="ps-color"><input type="color" name="gc_${i}" value="${gradeColor(g)}"><span>${esc(g)}</span></label>`).join('')}<label class="ps-color"><input type="color" name="teacherColor" value="${teacherColor()}"><span>教師</span></label></div><small>年級色用於領帶、學生證條紋與名冊標記；教師色用於教師證與座位。</small></div>
       <div class="ps-grid-2">${field('學生頭像底色（透明 PNG 時）',select('studentBg',[['theme','人物代表色'],['grade','年級顏色']],a?.colors?.studentBg||'theme'))}${field('教師頭像底色',select('teacherBg',[['theme','人物代表色'],['unified','教師統一顏色']],a?.colors?.teacherBg||'theme'))}</div>
       <div class="ps-field"><span>成績排行榜顯示的排名</span><div class="ps-check-grid">${rankRowsHtml}</div>${field('預設榜單',select('primary',[['','—'],...rankList().map(r=>[r.id,r.subject||r.id])],a?.rankings.primary||''))}</div>`,{en:'SETTINGS',wide:true,onSubmit:data=>{
@@ -794,6 +814,39 @@
     dialog('隨機配對',`<div class="ps-grid-2">${field(`${esc(ev.pairRoles.a)} 名單`,select('poolA',pools,grades().at(-1)?'g:'+grades().at(-1):'participants'))}${field(`${esc(ev.pairRoles.b)} 名單`,select('poolB',pools,grades()[0]?'g:'+grades()[0]:'participants'))}</div><label class="ps-check"><input type="checkbox" name="keep" value="1" checked><span>保留現有配對，只為尚未配對的人抽籤</span></label><p class="ps-muted">兩份名單人數不同時，多出來的人會列在「尚未配對」。</p>`,{en:'SHUFFLE',submit:'開始抽籤',onSubmit:data=>{const pick=key=>key==='participants'?participants(ev):key==='students'?students():key==='teachers'?teachers():students().filter(c=>val(c,'grade')===key.slice(2));const keep=(data.keep||[]).length>0;if(!keep)ev.pairs=[];const used=new Set(ev.pairs.flatMap(p=>[String(p.a),String(p.b)]));const shuffle=list=>{const out=[...list];for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]];}return out;};const A=shuffle(pick(data.poolA).filter(c=>!used.has(String(c.id)))),B=shuffle(pick(data.poolB).filter(c=>!used.has(String(c.id))&&!A.includes(c)));const n=Math.min(A.length,B.length);for(let i=0;i<n;i++)ev.pairs.push({id:uid('pair'),a:String(A[i].id),b:String(B[i].id),label:'',note:''});save();render();toast(n?`抽出 ${n} 組配對`:'沒有可以配對的人');return true;}});}
   function chooseEventTemplate(){openLayer(`<header class="ps-sheet-head"><div><small>NEW EVENT</small><h3>選擇活動模板</h3></div><button type="button" class="ps-icon-btn" data-act="layer-close"><i class="fa-solid fa-xmark"></i></button></header><div class="ps-sheet-body"><div class="ps-templates">${Object.entries(EVENT_KINDS).map(([k,v],i)=>`<button type="button" class="ps-template is-${k}" data-act="event-template" data-kind="${k}" style="--i:${i}"><span class="ps-template-art"><i class="fa-solid ${v.icon}"></i></span><small>${v.en}</small><b>${v.name}</b><span>${v.desc}</span></button>`).join('')}</div></div>`,{cls:'is-wide'});}
 
+  /* 紙校圖庫: images uploaded in this app (school-asset) and activity album photos, with where each is used */
+  function libraryItems(){const a=app();if(!a)return [];const albumIds=new Set(a.events.flatMap(e=>e.album||[]));
+    const rows=(mediaLibrary||[]).filter(r=>r&&(r.kind==='school-asset'||albumIds.has(r.id)||(r.eventId&&(!r.kind||r.kind==='gallery'))));
+    return rows.map(row=>({row,type:row.kind==='school-asset'?'school':'album',uses:imageUses(row)})).sort((x,y)=>(y.row.createdAt||0)-(x.row.createdAt||0));}
+  function imageUses(row){const a=app(),ref=`asset:${row.id}`,src=imgSrc(row),is=v=>v===ref||(row.url&&v===row.url),uses=[];
+    if(is(a.campus.image))uses.push('校園全景圖');if(is(a.meta.crest))uses.push('校徽');if(is(a.meta.uniformImage))uses.push('制服設計圖');
+    for(const f of a.campus.facilities)if(is(f.image))uses.push(`設施「${f.name}」`);
+    for(const c of a.clubs)if(is(c.image))uses.push(`社團「${c.name}」場景`);
+    for(const ev of a.events){if(is(ev.cover))uses.push(`活動「${ev.title}」封面`);if((ev.album||[]).includes(row.id))uses.push(`活動「${ev.title}」相簿`);if(String(ev.body||'').includes(ref))uses.push(`活動「${ev.title}」報告插圖`);}
+    for(const [id,p] of Object.entries(a.dossiers||{}))if(p?.avatar&&is(p.avatar.src))uses.push(`${nameOf(person(id)||characters.find(c=>String(c.id)===String(id)))}的校園頭像`);
+    const tagged=charNamesOf(row.charIds||[]);if(tagged.length)uses.push(`人物圖庫：${tagged.slice(0,3).join('、')}${tagged.length>3?'…':''}`);
+    void src;return uses;}
+  function libraryHealth(){if(libBroken===null){if(!libScanning)setTimeout(scanBroken,0);return '<section class="ps-lib-health is-scanning"><i class="fa-solid fa-spinner fa-spin"></i> 正在檢查本機圖片檔案…</section>';}
+    if(!libBroken.length)return '<section class="ps-lib-health is-ok"><i class="fa-solid fa-circle-check"></i> 所有待上傳的本機圖片都找得到檔案，雲端存檔不會因圖片而失敗。'+btn('重新檢查','lib-rescan','','ps-btn ps-btn-small ps-btn-ghost')+'</section>';
+    return `<section class="ps-lib-health is-bad"><div><b><i class="fa-solid fa-triangle-exclamation"></i> ${libBroken.length} 張本機圖片找不到檔案</b><p>這些圖片只存在紀錄中、檔案已不在這台裝置（例如選了圖片後取消、清除過瀏覽器資料，或在其他裝置上傳）。它們會讓雲端存檔失敗。</p><ul>${libBroken.slice(0,12).map(r=>`<li>${esc(r.title||r.caption||r.id)} <small>${esc(r.kind==='school-asset'?'紙校素材':r.kind?r.kind:'人物圖庫')}</small></li>`).join('')}${libBroken.length>12?`<li>…還有 ${libBroken.length-12} 張</li>`:''}</ul></div>${btn('<i class="fa-solid fa-broom"></i> 全部移除','lib-clean-broken','','ps-btn ps-btn-danger')}</section>`;}
+  async function scanBroken(){if(libScanning)return;libScanning=true;const rows=(mediaLibrary||[]).filter(r=>r&&r.localOnly&&!r.url&&!['settings','media-tombstone'].includes(r.kind));const missing=[];for(const row of rows){let blob=null;try{blob=await window.OCFeatures?.readFile?.(row.id);}catch{}if(!blob)missing.push(row);}libBroken=missing;libScanning=false;if(route.view==='library')render();}
+  function forgetImages(ids){const a=app();if(!a)return;for(const id of ids){const row=mediaLibrary.find(r=>r.id===id)||{id};clearImageRefs(row);}}
+  function removeBroken(){const rows=libBroken||[];if(!rows.length)return;if(!confirm(`從存檔移除這 ${rows.length} 張找不到檔案的圖片？用到它們的地方會一併清除。`))return;const gone=new Set(rows.map(r=>r.id));forgetImages([...gone]);mediaLibrary=mediaLibrary.filter(r=>!gone.has(r.id));libBroken=[];save();render();toast(`已移除 ${rows.length} 張，現在可以重新雲端存檔`);}
+  function clearImageRefs(row){const a=app(),ref=`asset:${row.id}`,is=v=>v===ref||(row.url&&v===row.url);
+    if(is(a.campus.image))a.campus.image=DEFAULT_CAMPUS;if(is(a.meta.crest))a.meta.crest='';if(is(a.meta.uniformImage))a.meta.uniformImage='';
+    a.campus.facilities.forEach(f=>{if(is(f.image))f.image='';});a.clubs.forEach(c=>{if(is(c.image))c.image='';});
+    a.events.forEach(ev=>{if(is(ev.cover))ev.cover='';ev.album=(ev.album||[]).filter(id=>id!==row.id);if(String(ev.body||'').includes(ref))ev.body=String(ev.body).split(String.fromCharCode(10)).filter(line=>!line.includes(ref)).join(String.fromCharCode(10));});
+    for(const p of Object.values(a.dossiers||{}))if(p?.avatar&&is(p.avatar.src))delete p.avatar;}
+  async function deleteImages(ids){const rows=ids.map(id=>mediaLibrary.find(r=>r.id===id)).filter(Boolean);if(!rows.length)return;
+    const used=rows.filter(r=>imageUses(r).length),gallery=rows.filter(r=>(r.charIds||[]).length);
+    const lines=[`刪除 ${rows.length} 張圖片？此動作無法復原。`];if(used.length)lines.push(`其中 ${used.length} 張正在使用，引用會一併清除（校園全景圖會改回預設圖）。`);if(gallery.length)lines.push(`其中 ${gallery.length} 張已標記人物，也會從人物圖庫中刪除。`);if(rows.some(r=>!r.localOnly&&!r.url))lines.push('已備份到雲端（R2）的檔案也會一併刪除。');
+    if(!confirm(lines.join('\n\n')))return;
+    let remoteFailed=0;for(const row of rows){if(!row.localOnly&&!row.url){try{await window.OCFeatures?.deleteRemoteFile?.(row.id);}catch(error){remoteFailed++;console.warn('R2 刪除失敗',row.id,error);}}}
+    if(remoteFailed&&!confirm(`有 ${remoteFailed} 張無法從雲端（R2）刪除，可能尚未登入。\n仍要從本機與存檔中移除嗎？（雲端檔案會留著，但不再被引用）`))return;
+    for(const row of rows){clearImageRefs(row);if(!row.url){try{await window.OCFeatures?.removeFile?.(row.id);}catch{}}}
+    const gone=new Set(rows.map(r=>r.id));mediaLibrary=mediaLibrary.filter(r=>!gone.has(r.id));libSelect=new Set([...libSelect].filter(id=>!gone.has(id)));
+    save();try{window.OCFeatures?.renderAll?.();if(typeof renderCharacterCards==='function')renderCharacterCards();}catch{}render();toast(`已刪除 ${rows.length} 張圖片`);}
+
   /* ---------- export ---------- */
   const EXPORT_SECTIONS=[['school','學校介紹'],['facilities','校園設施'],['clubs','社團組織'],['faculty','師資介紹'],['students','學生檔案'],['origin','附加原設定（外貌、性格等）'],['originRel','附加原設定的人際關係'],['classes','班級座位'],['rankings','成績排行'],['events','活動與報告'],['archive','校園檔案庫']];
   function exportOptions(){let saved={};try{saved=JSON.parse(localStorage.getItem('oc_paper_school_export')||'{}');}catch{}return Object.fromEntries(EXPORT_SECTIONS.map(([k])=>[k,saved[k]??k!=='originRel']));}
@@ -826,10 +879,10 @@
   /* ---------- events ---------- */
   async function onChange(event){
     const t=event.target;
-    if(t.matches('[data-ps-upload]')){const file=t.files?.[0];if(!file)return;const name=t.dataset.psUpload,form=t.closest('form');try{toast('上傳中…');const ref=await uploadImage(file);form.elements[name].value=ref;form.querySelector(`[data-preview="${name}"]`).innerHTML=img(ref);toast('圖片已儲存到本機');}catch(error){toast(error.message);}t.value='';return;}
+    if(t.matches('[data-ps-upload]')){const file=t.files?.[0];if(!file)return;const name=t.dataset.psUpload,form=t.closest('form');try{const ref=stageImage(file);form.elements[name].value=ref;form.querySelector(`[data-preview="${name}"]`).innerHTML=img(shownSrc(ref));toast('已選取圖片，按「儲存」後才會保存');}catch(error){toast(error.message);}t.value='';return;}
     if(t.matches('[data-ps-album-upload]')){const files=[...(t.files||[])];const evId=t.dataset.psAlbumUpload;t.value='';if(files.length){toast('上傳中…');await addAlbumFiles(evId,files);}return;}
     if(t.matches('[data-photo-caption]')){const row=mediaLibrary.find(r=>r.id===t.dataset.photoCaption);if(row){row.caption=t.value.trim();save();}return;}
-    if(t.matches('[data-ps-asset-upload]')){const file=t.files?.[0];if(!file)return;try{toast('上傳中…');const ref=await uploadImage(file);layer?.onPick?.(ref);}catch(error){toast(error.message);}t.value='';return;}
+    if(t.matches('[data-ps-asset-upload]')){const file=t.files?.[0];if(!file)return;try{const ref=stageImage(file);layer?.onPick?.(ref);}catch(error){toast(error.message);}t.value='';return;}
     if(t.matches('[data-ps-gallery-upload]')){const files=[...(t.files||[])];const box=t.closest('form').querySelector('[data-gallery]');for(const file of files){try{const ref=await uploadImage(file);box.insertAdjacentHTML('beforeend',galleryItem(ref));}catch(error){toast(error.message);}}t.value='';return;}
     if(t.matches('[data-ps-export]')){const opts=exportOptions();opts[t.dataset.psExport]=t.checked;try{localStorage.setItem('oc_paper_school_export',JSON.stringify(opts));}catch{}const area=document.querySelector(`#${ROOT} [data-ps-export-text]`);if(area)area.value=exportText(opts);return;}
   }
@@ -840,7 +893,7 @@
     if(t.matches('[data-ps-people-q]')){peopleQuery=t.value;const box=document.querySelector(`#${ROOT} [data-ps-people]`);if(box){const q=peopleQuery.toLowerCase();box.innerHTML=peopleList(students().filter(char=>(!peopleGrade||val(char,'grade')===peopleGrade)&&(!q||[nameOf(char),char.englishName,val(char,'post'),val(char,'club'),val(char,'grade')].join(' ').toLowerCase().includes(q))).sort((x,y)=>gradeOrder(x)-gradeOrder(y)||nameOf(x).localeCompare(nameOf(y),'zh-Hant')));}return;}
     if(t.matches('[data-ps-search]')){searchText=t.value;if(!searchText.trim()){if(route.view==='search')back();return;}if(route.view!=='search')go('search');else render();return;}
   }
-  function onSubmit(event){if(!event.target.matches('[data-ps-form]'))return;event.preventDefault();if(!layer?.onSubmit){closeLayer();return;}const ok=layer.onSubmit(formData(event.target),event.target);if(ok!==false&&ok!=='handled')closeLayer();}
+  async function onSubmit(event){if(!event.target.matches('[data-ps-form]'))return;event.preventDefault();if(!layer?.onSubmit){closeLayer();return;}const data=formData(event.target),current=layer;try{await commitStaged(data);}catch(error){toast(`圖片保存失敗：${error.message}`);return;}if(layer!==current)return;const ok=layer.onSubmit(data,event.target);if(ok!==false&&ok!=='handled')closeLayer();}
   function onClick(event){
     const t=event.target;
     const goBtn=t.closest('[data-go]');if(goBtn&&!t.closest('[data-act]:not([data-act="go"])')){event.preventDefault();go(goBtn.dataset.go,goBtn.dataset.id||'');return;}
@@ -853,7 +906,7 @@
       case 'back':if(!back())close();break;
       case 'settings':settings();break;
       case 'search-mobile':{const q=prompt('搜尋人物、社團、設施、活動');if(q&&q.trim()){searchText=q.trim();const box=document.querySelector(`#${ROOT} [data-ps-search]`);if(box)box.value=searchText;go('search');}break;}
-      case 'layer-close':closeLayer();break;
+      case 'layer-close':if(!layer?.parent)discardStaged();closeLayer();break;
       case 'layer-danger':if(layer?.onAction?.()!==false)closeLayer(true);break;
       case 'use-paro':{const pid=document.querySelector(`#${ROOT} [data-ps-pick-paro]`)?.value;const next=allParos().find(x=>x.id===pid);if(next){allParos().forEach(x=>{if(x.schoolApp)x.schoolApp.pinned=false;});next.schoolApp=next.schoolApp||{};next.schoolApp.pinned=true;save();render(true);}break;}
       case 'create-paro':{const p={id:`paro_${Date.now()}`,name:'紙校',description:'大家都就讀於非常神祕又奇怪的，校方董事會／校長不明，經費無限的奇特學校『紙校』。',fields:Object.values(FIELD_RULES).map(r=>({id:uid('field'),name:r.name,type:r.type,options:r.options?[...r.options]:null,description:''})),members:[],layouts:{dorm:{enabled:false,groups:[]},seating:{enabled:true,classes:[]}},schoolApp:{pinned:true}};paros.push(p);save();syncParoPage();render(true);break;}
@@ -899,6 +952,13 @@
       case 'event-new':chooseEventTemplate();break;
       case 'event-books':{const state=layerRoot()._event;bookPicker(state.bookIds,picked=>{state.bookIds=picked;});break;}
       case 'event-ai':aiReport(id);break;
+      case 'lib-rescan':libBroken=null;render();break;
+      case 'lib-clean-broken':removeBroken();break;
+      case 'lib-filter':libFilter=el.dataset.f;render();break;
+      case 'lib-toggle':libSelect.has(id)?libSelect.delete(id):libSelect.add(id);render();break;
+      case 'lib-select-all':{if(libSelect.size){libSelect.clear();}else{const all=libraryItems().filter(x=>libFilter==='all'||(libFilter==='unused'?!x.uses.length:x.type===libFilter));all.forEach(x=>libSelect.add(x.row.id));}render();break;}
+      case 'lib-delete':deleteImages([id]);break;
+      case 'lib-delete-selected':deleteImages([...libSelect]);break;
       case 'archive-editmode':archiveEdit=!archiveEdit;render();break;
       case 'event-template':closeLayer(true);editEvent('',el.dataset.kind||'standard');break;
       case 'event-edit':editEvent(id);break;
@@ -907,7 +967,7 @@
       case 'event-docs':{const state=layerRoot()._event;docPicker(state.docIds,picked=>{state.docIds=picked;});break;}
       case 'gallery-url':{const url=prompt('圖片網址');if(url&&url.trim())el.closest('form').querySelector('[data-gallery]').insertAdjacentHTML('beforeend',galleryItem(url.trim()));break;}
       case 'gallery-remove':el.closest('[data-gallery-item]').remove();break;
-      case 'image-library':{const name=el.dataset.name;assetPicker({title:'從素材庫選擇'},src=>{const form=layerRoot().querySelector('form');if(!form)return;form.elements[name].value=src;const prev=form.querySelector(`[data-preview="${name}"]`);if(prev)prev.innerHTML=img(src);});break;}
+      case 'image-library':{const name=el.dataset.name;assetPicker({title:'從素材庫選擇'},src=>{const form=layerRoot().querySelector('form');if(!form)return;form.elements[name].value=src;const prev=form.querySelector(`[data-preview="${name}"]`);if(prev)prev.innerHTML=img(shownSrc(src));});break;}
       case 'asset-choose':layer?.onPick?.(el.dataset.src,el.dataset.assetId||'');break;
       case 'asset-url':{const url=layerRoot().querySelector('[data-asset-url]')?.value.trim();if(url)layer?.onPick?.(url);break;}
       case 'avatar-pick':pickAvatar(id);break;
@@ -958,5 +1018,5 @@
   function onDrop(event){if(!seatEdit)return;const desk=event.target.closest?.('[data-desk]');if(!desk)return;event.preventDefault();const id=event.dataTransfer.getData('text/plain');if(!id)return;const onSeat=event.target.closest('[data-drag]');if(onSeat&&onSeat.dataset.drag!==id&&desk.dataset.desk!=='pool'){seatSwapWith(id,onSeat.dataset.drag);return;}seatMove(id,desk.dataset.desk);}
 
   function iconHtml(){const custom=paro()?.schoolApp?.meta?.crest;return `<span class="app-tile-icon app-school-icon">${custom?`<img src="${esc(custom)}" alt="">`:'<svg viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="psAppGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6e7bd"/><stop offset=".5" stop-color="#d2ad69"/><stop offset="1" stop-color="#8c6a34"/></linearGradient></defs><circle cx="60" cy="60" r="58" fill="#2c2d30"/><g fill="none" stroke="url(#psAppGold)" stroke-linecap="round"><path d="M64 19a40 40 0 0 1 37 37" stroke-width="5"/><path d="M64 28a31 31 0 0 1 28 28" stroke-width="3.4"/><path d="M64 37a22 22 0 0 1 19 19" stroke-width="2.2"/></g><g fill="url(#psAppGold)"><rect x="55" y="24" width="10" height="56" rx="1.5"/><rect x="41" y="38" width="38" height="9" rx="1.5"/><path d="M60 82c-10-6-24-7-37-3v13c13-4 27-3 37 4z"/><path d="M60 82c10-6 24-7 37-3v13c-13-4-27-3-37 4z"/></g></svg>'}</span>`;}
-  window.OCPaperSchool={iconHtml,open,close,handleBack,exportText:()=>paro()?exportText():'找不到校園 Paro。請先在應用程式中開啟「紙高校」設定資料來源。',refresh:()=>isOpen()&&render()};
+  window.OCPaperSchool={forgetImages:ids=>{try{forgetImages(ids);}catch(error){console.warn(error);}},iconHtml,open,close,handleBack,exportText:()=>paro()?exportText():'找不到校園 Paro。請先在應用程式中開啟「紙高校」設定資料來源。',refresh:()=>isOpen()&&render()};
 })();
