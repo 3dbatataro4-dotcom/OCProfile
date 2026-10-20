@@ -52,3 +52,11 @@ R2 媒體位元組不屬於 PostgreSQL 交易。檔案先上傳，只有資料�
 驗證：65 項針對性自動測試與實際 PostgreSQL 搭配瀏覽器的協作整合測試通過。這不代表全專案既有測試全部通過；其餘舊測試仍有與本次修改無關的失敗。
 
 部署後正式環境安全檢查亦通過：新版 RPC 僅授權已登入帳號，匿名不可呼叫；所有協作私有表皆啟用 RLS，且前端帳號不能直接讀取。
+
+## 效能修正（2026-10-21）
+
+症狀：雲端存檔出現「未取得提交確認…canceling statement due to statement timeout」。原因是 `oc_collab_push_batch` 與 `oc_collab_audit` 對每個項目都重新掃描整個 JSON 陣列尋找同 ID 的資料，每次存檔的成本隨資料量平方成長（圖庫 500 筆以上時，只改一個欄位也要掃數十萬次），超過 Supabase 預設的 8 秒語句時限。
+
+修正：[upgrade-collaboration-v2-performance.sql](supabase/upgrade-collaboration-v2-performance.sql) 改為每個群組只建一次「ID→資料」索引，並跳過沒有變動的群組；檢查、日誌、刪除記號與錯誤訊息完全相同。以實際備份（72 人物、111 文檔、514 媒體）在 PGlite 測得：只改一個欄位的存檔由約 26 秒降至約 1.4 秒；`tests/collaboration-db.test.cjs` 15 項全部通過。
+
+部署：在 Supabase SQL Editor 執行該檔即可，可重複執行，不影響既有存檔與權限。量測工具：`node tests/collaboration-perf.cjs . <備份.json>`。
