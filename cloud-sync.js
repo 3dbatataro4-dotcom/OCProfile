@@ -58,7 +58,7 @@
   function clearExpiredCloudLogin(){localStorage.removeItem(SESSION);session=null;collab.reset();preview=null;cloudHeads.workshop=null;cloudHeads.forum=null;window.dispatchEvent(new Event('oc-cloud-auth-changed'));if(modal)render();}
   async function request(path,body,auth=true,expectedActor=null){
     if(auth)await accessToken();const requestActor=auth?(expectedActor||accountId()):null;if(auth&&requestActor!==accountId())throw new Error('登入帳號已切換，未送出原帳號的操作。');
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
+    const committing=/\/rpc\/oc_collab_(?:push_batch|commit_chunks)$/.test(path);const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),committing?75000:30000);
     try{
       const hasBody=body!==undefined&&body!==null,serialized=hasBody?JSON.stringify(body):'';
       if(hasBody&&!serialized)throw new Error('無法建立雲端同步內容。');
