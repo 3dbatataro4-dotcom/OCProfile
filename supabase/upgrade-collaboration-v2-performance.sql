@@ -66,7 +66,7 @@ begin
  end loop;return new;
 end;$$;
 
-create or replace function public.oc_collab_push_batch(p_owner uuid,p_batch_id uuid,p_entries jsonb,p_restores jsonb default '[]') returns jsonb language plpgsql security definer set search_path='' as $$
+create or replace function public.oc_collab_push_batch(p_owner uuid,p_batch_id uuid,p_entries jsonb,p_restores jsonb default '[]') returns jsonb language plpgsql security definer set search_path='' set statement_timeout='55s' as $$
 declare a jsonb;entry jsonb;h public.oc_sync_heads;expected bigint;g text;k text;v bigint;record_value jsonb;old_value jsonb;rec record;receipts jsonb:='[]';scopes text[]:='{}';allowed text[];item_expected jsonb;cached public.oc_collab_batches;fingerprint text;old_map jsonb;new_map jsonb;versions jsonb;
 begin
  a:=public.oc_collab_actor();if not public.oc_collab_allowed(p_owner,true) then raise exception 'EDIT_PERMISSION_REQUIRED';end if;
