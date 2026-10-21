@@ -119,3 +119,8 @@
 .vnl-v2 .vnl-preview.landscape{width:min(100%,calc(58dvh * var(--vnl-preview-ratio,1.7777778)));height:auto;aspect-ratio:var(--vnl-preview-ratio,1.7777778);max-height:none}.vnl-aspect-controls input[type=color]{height:38px;padding:4px}.vnp-player.vnl-designed .vnp-canvas{box-shadow:none}
 
 .vnl-v2>.vnl-head h2{color:#fff6ed!important}.vnl-v2>.vnl-head p{color:#e7e1e6!important}.vnl-preview-toolbar>button{padding:7px 10px;border:1px solid #b7a48955;border-radius:7px;background:#262229;color:#f5eee4;font:inherit;cursor:pointer}.vnl-v2 .vnl-preview.portrait{width:min(100%,calc(58dvh * var(--vnl-preview-ratio,.5625)));height:auto;aspect-ratio:var(--vnl-preview-ratio,.5625)}@media(max-width:850px){.vnl-v2 .vnl-preview.portrait{width:min(100%,calc(44dvh * var(--vnl-preview-ratio,.5625)));height:auto}}
+
+/* Copy geometry without changing the selected frame's visual treatment. */
+.vnl-v2 [data-vnl="match-main-geometry"]{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;margin:14px 0 4px;border:1px solid #cdbba7;border-radius:9px;background:linear-gradient(135deg,#fffaf4,#eee4d8);color:#604b39;font:600 12px/1.6 "Noto Sans TC",sans-serif;cursor:pointer;transition:background .18s,box-shadow .18s}
+.vnl-v2 [data-vnl="match-main-geometry"]:hover{background:#e8daca;box-shadow:0 3px 12px #604b3915}
+.vnl-v2 [data-vnl="match-main-geometry"]:focus-visible{outline:2px solid #967650;outline-offset:3px}
