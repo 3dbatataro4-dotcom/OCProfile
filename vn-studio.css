@@ -16,3 +16,17 @@
 
 /* Explicit modal colors keep global light/dark theme headings from leaking in. */
 .vns-mask .vns-sheet{color:#312a27!important}.vns-mask .vns-sheet>header h2{color:#fff6e9!important;font-weight:700;line-height:1.4}.vns-mask .vns-sheet>header p{color:#e8dccd!important;opacity:1}.vns-mask .vns-sheet>header small{color:#e6c393!important;font-size:11px}.vns-mask .vns-body :is(label,p,small,code){color:#504238!important;opacity:1}.vns-mask .vns-body :is(input,select,textarea){color:#30271f!important;background:#fffaf4!important}.vns-mask .vns-body :is(input,textarea)::placeholder{color:#776858;opacity:1}.vns-mask .vns-body button,.vns-mask .vns-sheet>footer button{color:#49382a!important;background:#efe4d5}.vns-mask .vns-sheet>footer .vns-primary{color:#fff6e7!important;background:#3b2d25}.vns-mask .vns-body input:focus-visible,.vns-mask .vns-body select:focus-visible{outline:2px solid #977349;outline-offset:2px}
+
+.vns-selected-sprite{display:flex;align-items:center;gap:18px;padding:14px;margin:14px 0;border:1px solid #d9c8ac;border-radius:14px;background:linear-gradient(135deg,#eddfc5,#fffaf4)}.vns-selected-sprite[hidden]{display:none}.vns-selected-sprite img{width:100px;height:130px;object-fit:contain;filter:drop-shadow(0 5px 6px #67472022)}.vns-selected-sprite strong,.vns-selected-sprite small{display:block;color:#65492b;margin-bottom:7px}.vns-selected-sprite small{font:12px sans-serif;letter-spacing:normal}
+#vnAssetClear[hidden]{display:none!important}
+
+#vnAssetModal .modal-header{background:linear-gradient(115deg,#3c2c20,#977543)!important;color:#fff7e7}
+#vnAssetModal .modal-header small{color:#f0d59a}
+#vnAssetModal .vn-asset-tabs{background:#f2e9d9;border-color:#dfcaab}
+#vnAssetModal .vn-asset-tabs button{color:#80663f}
+#vnAssetModal .vn-asset-tabs button.active{background:#fffcf6;color:#503b25}
+#vnAssetModal input:focus,#vnAssetModal select:focus{outline-color:#bd9659}
+#vnAssetModal .vn-asset-thumb{background:linear-gradient(135deg,#f2dfb5,#c1a170);color:#684b2b}
+#vnAssetModal .vn-asset-card{border-color:#e5d5bd}
+#vnAssetModal .vn-asset-card:hover{border-color:#bd9659;box-shadow:0 8px 24px #8e663521}
+#vnAssetModal .vn-asset-tags em{background:#f2e7d1;color:#806039}
