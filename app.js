@@ -4020,6 +4020,7 @@ function parseVisualNovelScript(scriptText) {
     if (trimmedLine === "" || trimmedLine === "@blank") return { type:"blank", sourceLineIndex };
     const stage=trimmedLine.match(/^@stage\s+(auto|center|solo|duo|trio)\s*$/i);if(stage)return {type:'sys',command:'stage',args:[stage[1].toLowerCase()],sourceLineIndex};
     const head=trimmedLine.match(/^@head_(on|off)\s*$/i);if(head)return {type:'sys',command:'head',args:[head[1].toLowerCase()],sourceLineIndex};
+    if (/^@cg_camera\s+/i.test(trimmedLine)) return {type:'sys',command:'cg_camera',args:[trimmedLine.replace(/^@cg_camera\s+/i,'')],sourceLineIndex};
     const command = trimmedLine.match(/^@(cg|bg|bgm|se)\s+(.+)$/i);
     if (command) return { type:command[1].toLowerCase(), value:command[2].trim(), sourceLineIndex };
     if (/^@shake(?:\s|$)/i.test(trimmedLine)) return { type:"shake", sourceLineIndex };
@@ -4229,6 +4230,7 @@ function preloadVisualNovelChapterMedia(doc, events, settings) {
 }
 
 function resetVisualNovelCg() {
+  window.OCVnCG?.classicReset(document.getElementById("vnCg"));
   const cg = document.getElementById("vnCg");
   if (!cg) return;
   visualNovelCgLayerIndex = 0;
@@ -4251,6 +4253,7 @@ async function transitionVisualNovelCg(source) {
   if (!ref || ref.toLowerCase() === "none") {
     cg.querySelectorAll(".vn-cg-layer").forEach(layer => layer.classList.remove("active"));
     player.classList.add("no-cg");
+    window.OCVnCG?.classicSync(cg, "");
     visualNovelActiveCgSource = "none";
     visualNovelPendingCgSource = "";
     return;
@@ -4274,6 +4277,7 @@ async function transitionVisualNovelCg(source) {
   visualNovelActiveCgSource = loaded ? ref : "";
   visualNovelPendingCgSource = "";
   player.classList.remove("no-cg");
+  window.OCVnCG?.classicSync(cg,url);
 }
 
 function ensureVisualNovelCgMatchesScript(upToIndex = currentVisualNovelIndex) {
@@ -4669,7 +4673,8 @@ function executeVisualNovelEvent(event) {
     return false;
   }
   if (event.type === "shake") { player.classList.remove("vn-shake"); void player.offsetWidth; player.classList.add("vn-shake"); return false; }
-  if (event.type === "sys") return false;
+  if (event.type === "sys") {if(event.command==='cg_camera'){const cfg=window.OCVnCG?.command(event);if(cfg){const cg=document.getElementById('vnCg');cg._cameraSignature=JSON.stringify(cfg);window.OCVnCG.classicConfigure(cg,cfg);}}return false;}
+  window.OCVnCG?.classicRestore(document.getElementById('vnCg'),currentVisualNovelEvents,currentVisualNovelIndex);
   ensureVisualNovelCgMatchesScript(currentVisualNovelIndex);
   ensureVisualNovelBgmMatchesScript(currentVisualNovelIndex);
   const rawSpeaker = stripInvisibleFormatting(event.speaker).trim();
@@ -5218,6 +5223,7 @@ function toggleVisualNovelTypeSound(event) {
 }
 
 function closeVisualNovelPlayer() {
+  window.OCVnCG?.classicReset(document.getElementById("vnCg"));
   clearTimeout(visualNovelAutoTimer); clearTimeout(visualNovelChapterTimer); clearTimeout(visualNovelOpeningTimer); visualNovelChapterTimer=null;visualNovelOpeningTimer=null;visualNovelAwaitingNextChapterId=null; stopVisualNovelFastForward(); finishVisualNovelTyping(false); visualNovelAutoPlay = false;visualNovelScriptEditMode=false;closeVnSpeakerEditor();
   document.getElementById("vnAutoPlayBtn").classList.remove("active");
   visualNovelBgmFadeToken++;
