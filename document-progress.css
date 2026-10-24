@@ -7,6 +7,5 @@
  #vnScriptText::-webkit-scrollbar-track,#docContent::-webkit-scrollbar-track{background:#f1e8db;border-radius:8px}
 }
 
-.oc-vertical-scroll-host{position:relative}.oc-vertical-scroll[hidden]{display:none!important}
-@media(min-width:769px){.oc-vertical-scroll-host>.oc-vertical-scroll{position:absolute;z-index:4;right:2px;width:12px;min-width:12px;max-width:12px;margin:0;padding:0!important;border:0!important;border-radius:8px;appearance:none;-webkit-appearance:none;writing-mode:vertical-lr;direction:ltr;background:linear-gradient(90deg,#f1e8db 0 35%,#e0c9a5 35% 65%,#f1e8db 65%);cursor:pointer;outline-offset:3px;accent-color:#af864e;box-shadow:none}.oc-vertical-scroll::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:10px;height:var(--oc-scroll-thumb,35px);border:1px solid #b58c52;border-radius:8px;background:linear-gradient(90deg,#cea969,#a47b46);box-shadow:0 1px 3px #78552e33}.oc-vertical-scroll::-moz-range-thumb{width:10px;height:var(--oc-scroll-thumb,35px);border:1px solid #b58c52;border-radius:8px;background:#b68a4e}.oc-vertical-scroll:focus-visible{outline:2px solid #bc8c40}}
-@media(max-width:768px){.oc-vertical-scroll{display:none!important}}
+/* Textareas must fill their form column without an auxiliary scroll wrapper. */
+#docContent{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;resize:vertical}
