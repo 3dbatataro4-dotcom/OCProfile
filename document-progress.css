@@ -9,3 +9,13 @@
 
 /* Textareas must fill their form column without an auxiliary scroll wrapper. */
 #docContent{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;resize:vertical}
+
+/* One visible vertical control for the settings/NPC page, without a wrapper. */
+#vnPageModal .vnp-shell{position:relative}
+#vnPageModal .vnp-body{overflow-y:auto;scrollbar-width:none!important;-ms-overflow-style:none!important}
+#vnPageModal .vnp-body::-webkit-scrollbar{display:none!important;width:0!important}
+#vnPageModal .vns-page-scroll{position:absolute;z-index:4;right:4px;width:12px;min-width:12px;max-width:12px;margin:0;padding:0!important;border:0!important;border-radius:8px;appearance:none;-webkit-appearance:none;writing-mode:vertical-lr;direction:ltr;background:linear-gradient(90deg,#f1e8db 0 35%,#d9bb8b 35% 65%,#f1e8db 65%);cursor:pointer;box-shadow:none}
+#vnPageModal .vns-page-scroll[hidden]{display:none!important}
+#vnPageModal .vns-page-scroll::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:10px;height:var(--vns-thumb,32px);border:1px solid #b18b59;border-radius:8px;background:linear-gradient(90deg,#cba467,#a47b46)}
+#vnPageModal .vns-page-scroll::-moz-range-thumb{width:10px;height:var(--vns-thumb,32px);border:1px solid #b18b59;border-radius:8px;background:#b18b59}
+#vnPageModal .vns-page-scroll:focus-visible{outline:2px solid #be8a3e;outline-offset:2px}
