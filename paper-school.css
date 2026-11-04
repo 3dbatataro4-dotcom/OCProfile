@@ -1102,3 +1102,7 @@ body.ps-open{overflow:hidden}
 
 /* Only the sheet body scrolls; focus must not scroll the full-screen app or sheet. */
 .ps-app{overflow:clip}.ps-sheet{overflow:clip}.ps-sheet-body{overscroll-behavior:contain}
+
+/* auto grouping */
+.ps-roster-tools{display:flex;justify-content:flex-end;margin:0 0 .6rem}
+.ps-lib-item.is-editing .ps-lib-tools{opacity:1}.ps-lib-item.is-editing .ps-lib-tools .ps-icon-btn{cursor:pointer}.ps-lib-item:not(.is-editing) .ps-lib-thumb{cursor:zoom-in}
