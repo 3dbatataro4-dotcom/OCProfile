@@ -3182,6 +3182,7 @@ function renderDocumentsModule() {
           <div class="book-inline-actions" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
             <button class="btn btn-xs btn-outline" onclick="openBookModal('${book.id}')"><i class="fa-solid fa-pen"></i> 編輯書籍</button>
             <button class="btn btn-xs btn-primary" onclick="openDocumentModal(null, '${book.id}')"><i class="fa-solid fa-plus"></i> 新增章節</button>
+            <button class="btn btn-xs btn-outline" onclick="OCVnPreload.open('${book.id}')" title="預先載入這本書視覺小說用到的素材"><i class="fa-solid fa-cloud-arrow-down"></i> 預加載</button>
             <button class="btn btn-xs btn-danger" onclick="deleteBook('${book.id}')">&times;</button>
           </div>
         </div>
