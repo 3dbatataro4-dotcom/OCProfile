@@ -491,6 +491,7 @@ function switchTab(tabId, fromBack = false) {
 
 // ========== 4. 人物卡片 ==========
 function renderCharacterCards() {
+  const continuity=window.OCAssetUI?.capture(document.getElementById('characterGrid')?.parentElement);
   const activeGrid = document.getElementById("characterGrid");
   const hiddenGrid = document.getElementById("hiddenCharacterGrid");
   
@@ -520,6 +521,7 @@ function renderCharacterCards() {
   renderDraftCps();
   updateCharacterDetailsToggle();
   updateBadges();
+  window.OCAssetUI?.restore(continuity);
 }
 
 function createCharacterCardHtml(char, isHidden = false, expanded = false) {
@@ -542,6 +544,7 @@ function createCharacterCardHtml(char, isHidden = false, expanded = false) {
             ${char.gender ? `<span class="char-meta-item"><i class="fa-solid fa-venus-mars"></i> ${char.gender}</span>` : ''}
             ${char.height ? `<span class="char-meta-item"><i class="fa-solid fa-ruler-vertical"></i> ${char.height}</span>` : ''}
             ${char.zodiac ? `<span class="char-meta-item"><i class="fa-solid fa-star"></i> ${char.zodiac}</span>` : ''}
+            ${OCBirthday.format(char.birthday) ? `<span class="char-meta-item char-birthday"><i class="fa-solid fa-cake-candles" aria-label="生日"></i> ${escapeHtml(OCBirthday.format(char.birthday))}</span>` : ''}
             ${char.orientation ? `<span class="char-meta-item"><i class="fa-solid fa-arrows-left-right"></i> ${char.orientation}</span>` : ''}
           </div>
           ${char.occupation ? `<div class="char-meta-row" style="margin-top:0.2rem;"><span class="char-meta-item"><i class="fa-solid fa-briefcase"></i> ${char.occupation}</span></div>` : ''}
@@ -1157,6 +1160,7 @@ function openCharacterModal(charId = null) {
     document.getElementById("charGender").value = char.gender || '';
     document.getElementById("charHeight").value = char.height || '';
     document.getElementById("charZodiac").value = char.zodiac || '';
+    OCBirthday.set("charBirthday",char.birthday);
     document.getElementById("charOrientation").value = char.orientation || '';
     document.getElementById("charOccupation").value = char.occupation || '';
     document.getElementById("charFixedCp").value = char.fixedCp || '';
@@ -1199,6 +1203,7 @@ function openNewCharacterWizard() {
   document.getElementById("wizGender").value = "";
   document.getElementById("wizHeight").value = "";
   document.getElementById("wizZodiac").value = "";
+  OCBirthday.set("wizBirthday", "");
   document.getElementById("wizOrientation").value = "";
   document.getElementById("wizAvatarUrl").value = defaultAvatar;
   updateWizAvatarPreview(defaultAvatar);
@@ -1298,8 +1303,9 @@ async function parseAiCharacterText() {
     if(!String(char.name||'').trim())throw new Error("AI 沒有辨識出人物姓名。");
     const selfNote=parsed.selfRelationship&&typeof parsed.selfRelationship==='object'?[parsed.selfRelationship.callName&&`自稱：${parsed.selfRelationship.callName}`,parsed.selfRelationship.opinion].filter(Boolean).join('；'):'';
     const extraNotes=[char.extraNotes,selfNote].filter(Boolean).join('\n');
-    const fields={wizName:char.name,wizEnglishName:char.englishName,wizGender:char.gender,wizHeight:char.height,wizZodiac:char.zodiac,wizOrientation:char.orientation,wizOccupation:char.occupation,wizFixedCp:char.fixedCp,wizAppearance:char.appearance,wizPersonality:char.personality,wizExtraNotes:extraNotes,wizTags:Array.isArray(char.tags)?char.tags.join(', '):char.tags};
+    const fields={wizName:char.name,wizEnglishName:char.englishName,wizGender:char.gender,wizHeight:char.height,wizZodiac:char.zodiac,wizBirthday:char.birthday,wizOrientation:char.orientation,wizOccupation:char.occupation,wizFixedCp:char.fixedCp,wizAppearance:char.appearance,wizPersonality:char.personality,wizExtraNotes:extraNotes,wizTags:Array.isArray(char.tags)?char.tags.join(', '):char.tags};
     for(const [id,value] of Object.entries(fields))if(value!==undefined&&value!==null)document.getElementById(id).value=String(value).trim();
+    OCBirthday.set('wizBirthday',document.getElementById('wizBirthday').value);
     const sourceMatch=findExistingCharacterMatch(char.name,char.matchedExistingName);wizardAiMatchedCharacterId=sourceMatch?.id||'';if(sourceMatch)document.getElementById('wizName').value=sourceMatch.name;
     wizardAiRelations=(Array.isArray(parsed.relationships)?parsed.relationships:[]).filter(row=>row&&String(row.targetName||'').trim()).map(row=>{const match=findExistingCharacterMatch(row.targetName,row.targetMatchedExistingName);return {targetName:match?.name||String(row.targetName).trim(),callName:String(row.callName||'').trim(),opinion:String(row.opinion||'').trim(),isMainline:row.isMainline!==false};});
     const cpRaw=parsed.cp&&typeof parsed.cp==='object'?parsed.cp:null,cpMatch=findExistingCharacterMatch(cpRaw?.partnerName||char.fixedCp,cpRaw?.partnerMatchedExistingName);
@@ -1471,7 +1477,7 @@ function renderWizFinalCardPreview() {
       <div style="padding: 0 1rem 1rem; position: relative; margin-top: -30px;">
         <img src="${avatar}" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--bg-card, #ffffff); box-shadow: 0 4px 10px rgba(0,0,0,0.2);" onerror="this.src='https://file.garden/aWe99vhwaGcNwkok/%E7%A0%B4%E9%A0%AD/%E7%81%AB%E5%B1%B1%E7%81%B0.png'">
         <h4 style="margin: 0.5rem 0 0.2rem; font-size: 1.1rem; color:var(--text-main, #292524);">${escapeHtml(name)} <small style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(englishName)}</small></h4>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">${escapeHtml(occupation)} ｜ ${[gender, height, zodiac, orientation ? '偏好:' + orientation : ''].filter(Boolean).map(escapeHtml).join(' ｜ ')}</p>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">${escapeHtml(occupation)} ｜ ${[gender, height, zodiac, OCBirthday.format(OCBirthday.read('wizBirthday'))?OCBirthday.format(OCBirthday.read('wizBirthday')):'', orientation ? '偏好:' + orientation : ''].filter(Boolean).map(escapeHtml).join(' ｜ ')}</p>
         <div style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.6rem;">
           ${tagsList.map(t => `<span class="tag-badge" style="background:color-mix(in srgb, ${primary} 20%, transparent); color:var(--text-main); font-size:11px; padding:2px 6px; border-radius:4px;"># ${escapeHtml(t)}</span>`).join('')}
         </div>
@@ -1483,6 +1489,7 @@ function renderWizFinalCardPreview() {
 }
 
 function finishWizard() {
+  if(!OCBirthday.valid("wizBirthday")){alert("生日請選擇月份與日期，或按清除留空。");return;}
   const name = document.getElementById("wizName").value.trim();
   if (!name) {
     alert("請輸入角色姓名！");
@@ -1503,6 +1510,7 @@ function finishWizard() {
     gender: document.getElementById("wizGender").value.trim(),
     height: document.getElementById("wizHeight").value.trim(),
     zodiac: document.getElementById("wizZodiac").value.trim(),
+    birthday: OCBirthday.read("wizBirthday"),
     orientation: document.getElementById("wizOrientation").value.trim(),
     occupation: document.getElementById("wizOccupation").value.trim(),
     fixedCp: preparedPartner?.name || document.getElementById("wizFixedCp").value.trim(),
@@ -1524,7 +1532,7 @@ function finishWizard() {
 
   if(matchedRecord){
     const placeholder=!!matchedRecord.isAiPlaceholder;
-    Object.assign(charData,{name:matchedRecord.name||charData.name,englishName:placeholder?(charData.englishName||matchedRecord.englishName):(matchedRecord.englishName||charData.englishName),avatar:placeholder?charData.avatar:(matchedRecord.avatar||charData.avatar),gender:matchedRecord.gender||charData.gender,height:matchedRecord.height||charData.height,zodiac:matchedRecord.zodiac||charData.zodiac,orientation:matchedRecord.orientation||charData.orientation,occupation:placeholder?(charData.occupation||matchedRecord.occupation):(matchedRecord.occupation||charData.occupation),fixedCp:matchedRecord.fixedCp||charData.fixedCp,isHidden:placeholder?false:!!matchedRecord.isHidden,isAiPlaceholder:false,appearance:mergeUniqueText(placeholder?'':matchedRecord.appearance,charData.appearance),personality:mergeUniqueText(placeholder?'':matchedRecord.personality,charData.personality),extraNotes:mergeUniqueText(placeholder?'':matchedRecord.extraNotes,charData.extraNotes),tags:[...new Set([...(matchedRecord.tags||[]),...charData.tags].filter(tag=>tag!=='AI待補完'))],customFields:Array.isArray(matchedRecord.customFields)?matchedRecord.customFields:[],relationships:mergeRelationshipRows(matchedRecord.relationships,relationshipRows),paroValues:matchedRecord.paroValues||{},themeColor:placeholder?charData.themeColor:(matchedRecord.themeColor||charData.themeColor)});
+    Object.assign(charData,{name:matchedRecord.name||charData.name,englishName:placeholder?(charData.englishName||matchedRecord.englishName):(matchedRecord.englishName||charData.englishName),avatar:placeholder?charData.avatar:(matchedRecord.avatar||charData.avatar),gender:matchedRecord.gender||charData.gender,height:matchedRecord.height||charData.height,zodiac:matchedRecord.zodiac||charData.zodiac,birthday:matchedRecord.birthday||charData.birthday,orientation:matchedRecord.orientation||charData.orientation,occupation:placeholder?(charData.occupation||matchedRecord.occupation):(matchedRecord.occupation||charData.occupation),fixedCp:matchedRecord.fixedCp||charData.fixedCp,isHidden:placeholder?false:!!matchedRecord.isHidden,isAiPlaceholder:false,appearance:mergeUniqueText(placeholder?'':matchedRecord.appearance,charData.appearance),personality:mergeUniqueText(placeholder?'':matchedRecord.personality,charData.personality),extraNotes:mergeUniqueText(placeholder?'':matchedRecord.extraNotes,charData.extraNotes),tags:[...new Set([...(matchedRecord.tags||[]),...charData.tags].filter(tag=>tag!=='AI待補完'))],customFields:Array.isArray(matchedRecord.customFields)?matchedRecord.customFields:[],relationships:mergeRelationshipRows(matchedRecord.relationships,relationshipRows),paroValues:matchedRecord.paroValues||{},themeColor:placeholder?charData.themeColor:(matchedRecord.themeColor||charData.themeColor)});
     characters[characters.indexOf(matchedRecord)]=charData;
   }else characters.push(charData);
   perspectiveTargets[charData.id]=charData.relationships.map(row=>row.targetName);
@@ -1582,6 +1590,7 @@ function updateColorPreview() {
 }
 
 function saveCharacterForm() {
+  if(!OCBirthday.valid("charBirthday")){alert("生日請選擇月份與日期，或按清除留空。");return;}
   const id = document.getElementById("charId").value;
   const name = document.getElementById("charName").value.trim();
   if (!name) { alert("請輸入角色姓名！"); return; }
@@ -1594,6 +1603,7 @@ function saveCharacterForm() {
     gender: document.getElementById("charGender").value.trim(),
     height: document.getElementById("charHeight").value.trim(),
     zodiac: document.getElementById("charZodiac").value.trim(),
+    birthday: OCBirthday.read("charBirthday"),
     orientation: document.getElementById("charOrientation").value.trim(),
     occupation: document.getElementById("charOccupation").value.trim(),
     fixedCp: document.getElementById("charFixedCp").value.trim(),
@@ -5471,6 +5481,7 @@ async function generateExportText() {
     targetChars.forEach((c, idx) => {
       text += `===================================\n`;
       text += `### [${idx + 1}] ${c.name} (${c.englishName || 'OC'})\n`;
+      if(OCBirthday.format(c.birthday))text += `- 生日：${OCBirthday.format(c.birthday)}\n`;
       text += `- 基本：${c.gender || ''}｜${c.height || ''}｜${c.zodiac || ''}｜${c.orientation || ''}｜${c.occupation || ''}\n`;
       text += `- 固定 CP：${c.fixedCp || '無'}\n`;
       if (incTheme && c.themeColor) {
@@ -5825,7 +5836,7 @@ function importRecordsDiffer(a, b) {
 
 const importFieldLabels = {
   name: "名稱", englishName: "英文名", avatar: "頭像", gender: "性別", height: "身高",
-  zodiac: "星座", occupation: "身分／職業", orientation: "左右位", fixedCp: "固定 CP",
+  birthday: "生日日期", zodiac: "星座", occupation: "身分／職業", orientation: "左右位", fixedCp: "固定 CP",
   personality: "性格", appearance: "外貌", extraNotes: "補充設定", tags: "標籤",
   themeColor: "主題色", primary: "主色", secondary: "副色", mode: "配色模式",
   hogwartsHouse: "學院", isHidden: "草稿／隱藏狀態", relationships: "人物關係",
