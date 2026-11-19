@@ -363,8 +363,10 @@
   renderSpriteEditor=function(){const box=$('vnpSpriteEditor');if(box)box.innerHTML='<p class="vnp-help">人物表情、立繪與頭像裁切請在共用素材庫管理；這裡只選擇要關聯的立繪庫。</p>';};
   const baseRenderSettings=renderSettings;
   renderSettings=function(){
-    const selected=$('vnpLayoutTemplate')?.value,inheritDraft=$('vnpInheritBook')?.checked,castDraft=$('vnsPOV')?window.OCVnStudio?.collectSettings():{};
-    baseRenderSettings();
+    const scopeKey=context?.type+':'+scopeRecord()?.id,sameScope=modal?.classList.contains('active')&&modal.dataset.uiScope===scopeKey;
+    const continuity=sameScope?window.OCAssetUI?.capture(modal,{fields:true}):null;
+    const selected=sameScope?$('vnpLayoutTemplate')?.value:undefined,inheritDraft=sameScope?$('vnpInheritBook')?.checked:undefined,castDraft=sameScope&&$('vnsPOV')?window.OCVnStudio?.collectSettings():{};
+    baseRenderSettings();modal.dataset.uiScope=scopeKey;
     const record=scopeRecord();
     window.OCVnLayout?.injectSettings(modal,record,context?.type==='doc'?configFor(record):{...defaultConfig(),...(record?.visualNovelPage||{})});
     window.OCVnStudio?.settings(modal,record,context?.type,{...(context?.type==='doc'?configFor(record):{...defaultConfig(),...record.visualNovelPage}),...castDraft});
@@ -392,6 +394,7 @@
     }
     const notes=[...modal.querySelectorAll('.vnp-body>section')].find(s=>s.querySelector('small')?.textContent==='MANUAL NOTES')?.querySelector('p');
     if(notes)notes.textContent='可用一鍵判斷說話人、場景、人物情緒、音樂及人物退場，也可分別執行。場景、音樂和退場時機直接寫入劇本指令；情緒與站位仍保存為逐句設定。劇本台詞保持原文。';
+    window.OCAssetUI?.restore(continuity);
   };
   const baseSave=save;
   save=function(){
