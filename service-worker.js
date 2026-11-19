@@ -1,4 +1,4 @@
-const CACHE_NAME = "oc-profile-app-v118-vn-preload";
+const CACHE_NAME = "oc-profile-app-v125-birthday-bg-tune";
 const APP_SHELL = ["./", "./index.html", "./style.css", "./app-drawer.css", "./app-drawer-enhancements.css", "./app-drawer.js", "./lottery.css", "./lottery.js", "./hogwarts-dorm.css", "./hogwarts-dorm-refine.css", "./hogwarts-dorm.js", "./paro-layouts.css", "./paro-layouts.js", "./character-archive.css", "./character-archive.js", "./scoreboard.css", "./scoreboard.js", "./music.css", "./music-player-refresh.css", "./music.js", "./features.css", "./features-timeline.css", "./timeline-books.css", "./data.js", "./app.js", "./features.js", "./vn-assets.js", "./vn-page.js", "./vn-page.css", "./vn-page-responsive.css", "./vn-layout.js", "./vn-layout.css", "./vn-library.js", "./vn-library.css", "./forum.css", "./forum-chat.css", "./forum-chat-core.js", "./forum-core.js", "./forum-chat.js", "./forum.js", "./cloud-sync-core.js", "./cloud-sync.js", "./cloud-sync.css", "./manifest.webmanifest", "./app-icon-192.png", "./app-icon-512.png"];
 
 APP_SHELL.push('./collab-protocol.js','./collab-service.js','./sync-upload-policy.js','./sync-collaboration.js','./record-identity.js');
@@ -28,3 +28,7 @@ self.addEventListener("fetch", event => {
     return response;
   }).catch(() => caches.match(event.request, { ignoreSearch:true }).then(hit => hit || (event.request.mode === "navigate" ? caches.match("./index.html") : Response.error()))));
 });
+
+APP_SHELL.push('./asset-ui-state.js','./asset-ui-state.css');
+
+APP_SHELL.push('./birthday-fields.js','./workshop-refinements.css');
